@@ -245,7 +245,7 @@ class TestSubAgentExecutorIntegration:
 
         assert "01-SETUP" in prompt
         assert "Project Setup" in prompt
-        assert "Checklist" in prompt
+        assert "检查清单" in prompt or "Checklist" in prompt
 
     def test_executor_with_custom_executor(self) -> None:
         """Test executor with custom task executor."""

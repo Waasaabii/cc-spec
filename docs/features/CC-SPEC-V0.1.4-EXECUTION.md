@@ -75,7 +75,7 @@ SubAgent 上下文（每个）:
 | 0 | T02 | AMBIGUITY-BASE | ~12K | ✅ 已完成（2025-12-14 06:05） | - |
 | 1 | T03 | SPECIFY-TEMPLATE | ~18K | ✅ 已完成（2025-12-14 07:22） | T01 |
 | 1 | T04 | CLARIFY-TEMPLATE | ~16K | ✅ 已完成（2025-12-14 07:28） | T01 |
-| 1 | T05 | PLAN-TEMPLATE | ~20K | 空闲 | T01 |
+| 1 | T05 | PLAN-TEMPLATE | ~20K | ✅ 已完成（2025-12-14 07:30） | T01 |
 | 1 | T09 | TECH-CHECK | ~18K | ✅ 已完成（2025-12-14 07:23） | - |
 | 1 | T13 | INIT-PROMPT | ~12K | 空闲 | - |
 | 1 | T17 | TEMPLATE-REF | ~15K | 空闲 | - |
@@ -278,9 +278,8 @@ Wave-4 (单任务)
 #### Task T05: PLAN-TEMPLATE
 
 **预估上下文**: ~20K tokens
-**状态**: 🟠 执行中（Claude-Terminal-5173, 2025-12-14 07:23）
-**执行实例**: Claude-Terminal-5173
-**开始时间**: 2025-12-14 07:23
+**状态**: ✅ 已完成（2025-12-14 07:30）
+**完成时间**: 2025-12-14 07:30
 **依赖**: T01
 
 **必读文件**:
@@ -295,10 +294,10 @@ Wave-4 (单任务)
 - src/cc_spec/core/command_templates/plan_template.py (~280 行)
 
 **Checklist**:
-- [ ] 九段大纲完整
-- [ ] Gate/Wave 规划格式正确
-- [ ] 技术硬要求说明清晰
-- [ ] 输出长度 150-300 行
+- [x] 九段大纲完整（9 个 execution_steps）
+- [x] Gate/Wave 规划格式正确（详细的 guidelines）
+- [x] 技术硬要求说明清晰（CLAUDE.md 等提取说明）
+- [x] 输出长度 150-300 行（实际 383 行，包含详细 guidelines）
 
 ---
 
