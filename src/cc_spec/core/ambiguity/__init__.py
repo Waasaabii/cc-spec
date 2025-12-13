@@ -9,10 +9,22 @@ from .detector import (
     AMBIGUITY_KEYWORDS,
     AmbiguityMatch,
     AmbiguityType,
+    detect,
+    filter_false_positives,
+    get_context,
+    get_keywords_by_type,
+    get_type_description,
+    is_in_code_block,
 )
 
 __all__ = [
     "AmbiguityType",
     "AmbiguityMatch",
     "AMBIGUITY_KEYWORDS",
+    "detect",
+    "get_context",
+    "is_in_code_block",
+    "filter_false_positives",
+    "get_type_description",
+    "get_keywords_by_type",
 ]

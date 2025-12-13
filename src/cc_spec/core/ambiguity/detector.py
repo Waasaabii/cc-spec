@@ -215,3 +215,138 @@ def get_keywords_by_type(ambiguity_type: AmbiguityType) -> list[str]:
         该类型的关键词列表
     """
     return AMBIGUITY_KEYWORDS.get(ambiguity_type, [])
+
+
+def get_context(lines: list[str], line_idx: int, context_lines: int = 2) -> str:
+    """获取指定行的上下文（前后各 N 行）。
+
+    参数：
+        lines: 文本的所有行列表
+        line_idx: 当前行索引（从 0 开始）
+        context_lines: 前后各取多少行（默认 2）
+
+    返回：
+        包含上下文的文本字符串
+    """
+    start = max(0, line_idx - context_lines)
+    end = min(len(lines), line_idx + context_lines + 1)
+    return "\n".join(lines[start:end])
+
+
+def is_in_code_block(lines: list[str], line_idx: int) -> bool:
+    """检查指定行是否在代码块内。
+
+    代码块由三个反引号（```）标记开始和结束。
+
+    参数：
+        lines: 文本的所有行列表
+        line_idx: 当前行索引（从 0 开始）
+
+    返回：
+        True 表示在代码块内，False 表示不在
+    """
+    # 向前扫描，统计代码块标记数量
+    code_block_count = 0
+    for i in range(line_idx):
+        if lines[i].strip().startswith("```"):
+            code_block_count += 1
+
+    # 如果代码块标记数量为奇数，说明当前行在代码块内
+    return code_block_count % 2 == 1
+
+
+def filter_false_positives(match: AmbiguityMatch, line: str) -> bool:
+    """过滤误报，返回 True 表示保留，False 表示过滤。
+
+    过滤规则：
+    1. 跳过行内代码（`code`）中的关键词
+    2. 跳过 URL 中的关键词
+    3. 跳过 Markdown 标题行（以 # 开头）
+
+    参数：
+        match: 歧义匹配结果
+        line: 原始行内容
+
+    返回：
+        True 保留匹配，False 过滤掉
+    """
+    stripped = line.strip()
+
+    # 跳过 Markdown 标题行
+    if stripped.startswith("#"):
+        return False
+
+    # 跳过 URL 中的关键词
+    if "http://" in line or "https://" in line:
+        # 检查关键词是否在 URL 内
+        import re
+        url_pattern = r'https?://[^\s)]+'
+        urls = re.findall(url_pattern, line)
+        for url in urls:
+            if match.keyword.lower() in url.lower():
+                return False
+
+    # 跳过行内代码中的关键词
+    # 检测 `code` 格式
+    import re
+    inline_code_pattern = r'`[^`]+`'
+    inline_codes = re.findall(inline_code_pattern, line)
+    for code in inline_codes:
+        if match.keyword.lower() in code.lower():
+            return False
+
+    return True
+
+
+def detect(content: str) -> list[AmbiguityMatch]:
+    """扫描文本内容，检测歧义。
+
+    对文本内容进行逐行扫描，使用 AMBIGUITY_KEYWORDS 中的关键词
+    进行匹配，返回所有检测到的歧义。
+
+    匹配规则：
+    - 不区分大小写
+    - 支持中英文关键词
+    - 提取前后各 2 行作为上下文
+    - 精确匹配置信度 1.0，部分匹配 0.8
+
+    过滤规则：
+    - 跳过代码块内容（``` 包围的区域）
+    - 跳过行内代码（`code`）
+    - 跳过 URL 中的关键词
+    - 跳过 Markdown 标题行
+
+    参数：
+        content: 要扫描的文本内容（通常是 proposal.md）
+
+    返回：
+        检测到的歧义匹配列表
+    """
+    matches: list[AmbiguityMatch] = []
+    lines = content.splitlines()
+
+    for line_idx, line in enumerate(lines):
+        # 跳过代码块内的行
+        if is_in_code_block(lines, line_idx):
+            continue
+
+        # 对每种歧义类型的关键词进行匹配
+        for ambiguity_type, keywords in AMBIGUITY_KEYWORDS.items():
+            for keyword in keywords:
+                # 不区分大小写的关键词匹配
+                if keyword.lower() in line.lower():
+                    # 创建初步匹配结果
+                    match = AmbiguityMatch(
+                        type=ambiguity_type,
+                        keyword=keyword,
+                        line_number=line_idx + 1,  # 行号从 1 开始
+                        context=get_context(lines, line_idx, context_lines=2),
+                        original_line=line,
+                        confidence=1.0,  # 精确匹配的置信度
+                    )
+
+                    # 过滤误报
+                    if filter_false_positives(match, line):
+                        matches.append(match)
+
+    return matches
