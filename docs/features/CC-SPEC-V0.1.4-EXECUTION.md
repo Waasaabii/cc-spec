@@ -71,7 +71,7 @@ SubAgent 上下文（每个）:
 
 | Wave | Task-ID | 任务名称 | 预估上下文 | 状态 | 依赖 |
 |------|---------|---------|-----------|------|------|
-| 0 | T01 | TEMPLATE-BASE | ~15K | 🟠 执行中（Claude-Terminal-8472, 2025-12-14 16:30） | - |
+| 0 | T01 | TEMPLATE-BASE | ~15K | ✅ 已完成（2025-12-14 16:45） | - |
 | 0 | T02 | AMBIGUITY-BASE | ~12K | 空闲 | - |
 | 1 | T03 | SPECIFY-TEMPLATE | ~18K | 空闲 | T01 |
 | 1 | T04 | CLARIFY-TEMPLATE | ~16K | 空闲 | T01 |

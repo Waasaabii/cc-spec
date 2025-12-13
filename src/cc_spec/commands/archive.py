@@ -183,12 +183,12 @@ def archive_command(
 
                 # 校验 Delta spec
                 is_valid, errors = validate_delta(delta)
-                    if not is_valid:
-                        console.print(
-                            f"[red]错误：[/red] Delta spec 校验失败："
-                            f"{spec_file.relative_to(change_specs_dir)}：",
-                            style="red",
-                        )
+                if not is_valid:
+                    console.print(
+                        f"[red]错误：[/red] Delta spec 校验失败："
+                        f"{spec_file.relative_to(change_specs_dir)}：",
+                        style="red",
+                    )
                     for error in errors:
                         console.print(f"  - {error}", style="red")
                     raise typer.Exit(1)
