@@ -3,11 +3,21 @@
 该模块为不同 AI 工具生成对应的命令文件。
 
 v1.2：新增 8 个命令生成器（总计 17+）。
+v0.1.4：集成命令模板系统，主要命令使用结构化模板生成内容。
 """
 
 from abc import ABC, abstractmethod
 from pathlib import Path
-from typing import Any
+
+from cc_spec.core.command_templates import (
+    ApplyTemplate,
+    ChecklistTemplate,
+    ClarifyTemplate,
+    CommandTemplate,
+    CommandTemplateContext,
+    PlanTemplate,
+    SpecifyTemplate,
+)
 
 # 受管理区块标记
 MANAGED_START = "<!-- CC-SPEC:START -->"
@@ -27,6 +37,15 @@ CC_SPEC_COMMANDS = [
     ("update", "更新配置与模板"),
 ]
 
+# 命令到模板的映射（主要命令使用结构化模板）
+COMMAND_TEMPLATES: dict[str, type[CommandTemplate]] = {
+    "specify": SpecifyTemplate,
+    "clarify": ClarifyTemplate,
+    "plan": PlanTemplate,
+    "apply": ApplyTemplate,
+    "checklist": ChecklistTemplate,
+}
+
 
 class CommandGenerator(ABC):
     """命令生成器的抽象基类。
@@ -37,6 +56,9 @@ class CommandGenerator(ABC):
     file_format: str = "markdown"
     folder: str = "commands"
     namespace: str = "speckit"
+
+    # v0.1.4: 跟踪当前项目根目录，用于模板上下文
+    _current_project_root: Path | None = None
 
     @abstractmethod
     def get_command_dir(self, project_root: Path) -> Path:
@@ -66,6 +88,9 @@ class CommandGenerator(ABC):
         返回：
             创建的文件路径；失败则返回 None
         """
+        # v0.1.4: 保存当前项目根目录，供模板使用
+        self._current_project_root = project_root
+
         cmd_dir = self.get_command_dir(project_root)
         cmd_dir.mkdir(parents=True, exist_ok=True)
 
@@ -106,6 +131,9 @@ class CommandGenerator(ABC):
         返回：
             更新后的文件路径；未更新则返回 None
         """
+        # v0.1.4: 保存当前项目根目录，供模板使用
+        self._current_project_root = project_root
+
         cmd_dir = self.get_command_dir(project_root)
 
         if self.file_format == "toml":
@@ -158,7 +186,34 @@ class CommandGenerator(ABC):
         return file_path
 
     def _get_md_content(self, cmd_name: str, description: str) -> str:
-        """获取 Markdown 命令内容。"""
+        """获取 Markdown 命令内容。
+
+        v0.1.4: 主要命令（specify/clarify/plan/apply/checklist）
+        使用结构化模板生成详细内容，简单命令保持原有简洁格式。
+        """
+        # 检查是否有对应的结构化模板
+        template_cls = COMMAND_TEMPLATES.get(cmd_name)
+        if template_cls:
+            # 使用模板生成详细内容
+            ctx = CommandTemplateContext(
+                command_name=cmd_name,
+                namespace=self.namespace,
+                project_root=self._current_project_root,
+            )
+            template = template_cls()
+            template_content = template.render(ctx)
+
+            return f"""---
+description: {description}
+allowed-tools: Bash, Read, Write, Edit, Glob, Grep
+---
+
+{MANAGED_START}
+{template_content}
+{MANAGED_END}
+"""
+
+        # 简单命令保持原有简洁格式
         return f"""---
 description: {description}
 allowed-tools: Bash, Read, Write, Edit, Glob, Grep
@@ -182,7 +237,32 @@ cc-spec {cmd_name} --help
 """
 
     def _get_toml_content(self, cmd_name: str, description: str) -> str:
-        """获取 TOML 命令内容。"""
+        """获取 TOML 命令内容。
+
+        v0.1.4: 主要命令使用结构化模板生成详细内容。
+        """
+        # 检查是否有对应的结构化模板
+        template_cls = COMMAND_TEMPLATES.get(cmd_name)
+        if template_cls:
+            # 使用模板生成详细内容
+            from cc_spec.core.command_templates.base import RenderFormat
+
+            ctx = CommandTemplateContext(
+                command_name=cmd_name,
+                namespace=self.namespace,
+                project_root=self._current_project_root,
+            )
+            template = template_cls()
+            template_content = template.render(ctx, fmt=RenderFormat.TOML)
+
+            return f'''description = "{description}"
+
+{MANAGED_START}
+{template_content}
+{MANAGED_END}
+'''
+
+        # 简单命令保持原有简洁格式
         return f'''description = "{description}"
 
 [prompt]
