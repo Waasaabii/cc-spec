@@ -166,7 +166,7 @@ def test_init_displays_success_message(tmp_path, monkeypatch):
 
     assert result.exit_code == 0
     # Check for Chinese success message
-    assert "成功初始化" in result.stdout or "Successfully initialized" in result.stdout
+    assert "初始化完成" in result.stdout or "成功初始化" in result.stdout
     assert "test-project" in result.stdout
     assert "cc-spec specify" in result.stdout
 
