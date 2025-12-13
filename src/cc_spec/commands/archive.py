@@ -50,13 +50,13 @@ console = Console()
 def archive_command(
     change_or_id: Optional[str] = typer.Argument(
         None,
-        help="Change name or ID (e.g., add-oauth or C-001)",
+        help="变更名称或 ID（例如 add-oauth 或 C-001）",
     ),
     force: bool = typer.Option(
         False,
         "--force",
         "-f",
-        help="Skip confirmation prompts",
+        help="跳过确认提示",
     ),
 ) -> None:
     """归档一个已完成的变更。
@@ -80,7 +80,7 @@ def archive_command(
     project_root = find_project_root()
     if project_root is None:
         console.print(
-            "[red]Error:[/red] Not a cc-spec project. Run 'cc-spec init' first.",
+            "[red]错误：[/red] 当前目录不是 cc-spec 项目，请先运行 'cc-spec init'。",
             style="red",
         )
         raise typer.Exit(1)
@@ -97,7 +97,7 @@ def archive_command(
             # ID 模式：解析为名称
             entry = id_manager.get_change_entry(change_or_id)
             if not entry:
-                console.print(f"[red]Error:[/red] Change not found: {change_or_id}")
+                console.print(f"[red]错误：[/red] 未找到变更：{change_or_id}")
                 raise typer.Exit(1)
             change = entry.name
         else:
@@ -109,8 +109,8 @@ def archive_command(
         current_state = get_current_change(cc_spec_root)
         if not current_state:
             console.print(
-                "[red]Error:[/red] No active change found. "
-                "Please specify a change name.",
+                "[red]错误：[/red] 未找到当前激活的变更。"
+                "请指定变更名称。",
                 style="red",
             )
             raise typer.Exit(1)
@@ -120,12 +120,12 @@ def archive_command(
 
     if not change_dir.exists():
         console.print(
-            f"[red]Error:[/red] Change '{change}' not found.",
+            f"[red]错误：[/red] 未找到变更 '{change}'。",
             style="red",
         )
         raise typer.Exit(1)
 
-    console.print(f"[cyan]Archiving change:[/cyan] [bold]{change}[/bold]\n")
+    console.print(f"[cyan]正在归档变更：[/cyan] [bold]{change}[/bold]\n")
 
     # 加载并校验状态
     status_path = change_dir / "status.yaml"
@@ -133,7 +133,7 @@ def archive_command(
         state = load_state(status_path)
     except Exception as e:
         console.print(
-            f"[red]Error:[/red] Failed to load state: {e}",
+            f"[red]错误：[/red] 加载状态失败：{e}",
             style="red",
         )
         raise typer.Exit(1)
@@ -142,23 +142,21 @@ def archive_command(
     checklist_stage = state.stages.get(Stage.CHECKLIST)
     if not checklist_stage or checklist_stage.status != TaskStatus.COMPLETED:
         console.print(
-            "[red]Error:[/red] Checklist stage must be completed before archiving.",
+            "[red]错误：[/red] 必须先完成 checklist 阶段才能归档。",
             style="red",
         )
         console.print(
-            "\n[yellow]Hint:[/yellow] Run [cyan]cc-spec checklist[/cyan] "
-            "to complete the checklist validation."
+            "\n[yellow]提示：[/yellow] 运行 [cyan]cc-spec checklist[/cyan] 完成验收。"
         )
         raise typer.Exit(1)
 
-    console.print("[green]✓[/green] Checklist stage is completed\n")
+    console.print("[green]√[/green] checklist 阶段已完成\n")
 
     # 在 change/specs/ 目录中查找所有 Delta spec
     change_specs_dir = change_dir / "specs"
     if not change_specs_dir.exists():
         console.print(
-            "[yellow]Warning:[/yellow] No specs/ directory found in change. "
-            "Nothing to merge.",
+            "[yellow]警告：[/yellow] 变更中未找到 specs/ 目录，无需合并。",
             style="yellow",
         )
         # 即使没有 specs 也允许归档
@@ -168,14 +166,13 @@ def archive_command(
 
         if not delta_specs:
             console.print(
-                "[yellow]Warning:[/yellow] No Delta spec files found. "
-                "Nothing to merge.",
+                "[yellow]警告：[/yellow] 未找到 Delta spec 文件，无需合并。",
                 style="yellow",
             )
 
     # 展示合并预览
     if delta_specs:
-        console.print("[bold cyan]Merge Preview:[/bold cyan]\n")
+        console.print("[bold cyan]合并预览：[/bold cyan]\n")
 
         specs_dir = get_specs_dir(project_root)
 
@@ -186,12 +183,12 @@ def archive_command(
 
                 # 校验 Delta spec
                 is_valid, errors = validate_delta(delta)
-                if not is_valid:
-                    console.print(
-                        f"[red]Error:[/red] Delta spec validation failed for "
-                        f"{spec_file.relative_to(change_specs_dir)}:",
-                        style="red",
-                    )
+                    if not is_valid:
+                        console.print(
+                            f"[red]错误：[/red] Delta spec 校验失败："
+                            f"{spec_file.relative_to(change_specs_dir)}：",
+                            style="red",
+                        )
                     for error in errors:
                         console.print(f"  - {error}", style="red")
                     raise typer.Exit(1)
@@ -218,31 +215,31 @@ def archive_command(
 
             except Exception as e:
                 console.print(
-                    f"[red]Error:[/red] Failed to parse Delta spec "
-                    f"{spec_file.relative_to(change_specs_dir)}: {e}",
+                    f"[red]错误：[/red] 解析 Delta spec 失败："
+                    f"{spec_file.relative_to(change_specs_dir)}：{e}",
                     style="red",
                 )
                 raise typer.Exit(1)
 
     # 请求确认
     if not force:
-        console.print("[bold]The following actions will be performed:[/bold]")
+        console.print("[bold]将执行以下操作：[/bold]")
         if delta_specs:
             console.print(
-                f"  1. Merge {len(delta_specs)} Delta spec(s) into main specs/"
+                f"  1. 合并 {len(delta_specs)} 个 Delta spec 到主 specs/ 目录"
             )
         console.print(
-            f"  2. Move change directory to archive/{datetime.now().strftime('%Y-%m-%d')}-{change}/"
+            f"  2. 将变更目录移动到 archive/{datetime.now().strftime('%Y-%m-%d')}-{change}/"
         )
         console.print()
 
-        if not Confirm.ask("[bold]Do you want to continue?[/bold]", default=False):
-            console.print("[yellow]Archive cancelled.[/yellow]")
+        if not Confirm.ask("[bold]是否继续？[/bold]", default=False):
+            console.print("[yellow]已取消归档。[/yellow]")
             raise typer.Exit(0)
 
     # 执行合并操作
     if delta_specs:
-        console.print("\n[cyan]Merging Delta specs...[/cyan]")
+        console.print("\n[cyan]正在合并 Delta specs...[/cyan]")
 
         specs_dir = get_specs_dir(project_root)
         ensure_dir(specs_dir)
@@ -269,19 +266,19 @@ def archive_command(
                 base_spec_file.write_text(merged_content, encoding="utf-8")
 
                 console.print(
-                    f"[green]✓[/green] Merged {relative_path}",
+                    f"[green]√[/green] 已合并 {relative_path}",
                 )
 
             except Exception as e:
                 console.print(
-                    f"[red]Error:[/red] Failed to merge "
-                    f"{spec_file.relative_to(change_specs_dir)}: {e}",
+                    f"[red]错误：[/red] 合并失败："
+                    f"{spec_file.relative_to(change_specs_dir)}：{e}",
                     style="red",
                 )
                 raise typer.Exit(1)
 
     # 将变更目录移动到 archive
-    console.print("\n[cyan]Moving change to archive...[/cyan]")
+    console.print("\n[cyan]正在将变更移动到归档...[/cyan]")
 
     archive_dir = changes_dir / "archive"
     ensure_dir(archive_dir)
@@ -298,34 +295,34 @@ def archive_command(
         archive_name = f"{timestamp}-{change}-{time_suffix}"
         archive_path = archive_dir / archive_name
         console.print(
-            f"[yellow]Warning:[/yellow] Archive already exists, using {archive_name}"
+            f"[yellow]警告：[/yellow] 归档已存在，将使用 {archive_name}"
         )
 
     try:
         # 移动目录
         shutil.move(str(change_dir), str(archive_path))
         console.print(
-            f"[green]✓[/green] Moved to archive/{archive_name}/",
+            f"[green]√[/green] 已移动到 archive/{archive_name}/",
         )
     except Exception as e:
         console.print(
-            f"[red]Error:[/red] Failed to move change to archive: {e}",
+            f"[red]错误：[/red] 移动变更到归档失败：{e}",
             style="red",
         )
         raise typer.Exit(1)
 
     # 成功提示
     console.print(
-        "\n[bold green]Archive completed successfully![/bold green]",
+        "\n[bold green]归档完成！[/bold green]",
         style="green",
     )
 
     if delta_specs:
         console.print(
-            f"\n[dim]Merged {len(delta_specs)} spec(s) to {specs_dir.relative_to(project_root)}[/dim]"
+            f"\n[dim]已合并 {len(delta_specs)} 个 spec 到 {specs_dir.relative_to(project_root)}[/dim]"
         )
     console.print(
-        f"[dim]Archived to {archive_path.relative_to(project_root)}[/dim]"
+        f"[dim]已归档到 {archive_path.relative_to(project_root)}[/dim]"
     )
 
 
@@ -351,7 +348,7 @@ def _find_delta_specs(specs_dir: Path) -> list[tuple[Path, str]]:
 
         except Exception as e:
             console.print(
-                f"[yellow]Warning:[/yellow] Failed to read {spec_file}: {e}",
+                f"[yellow]警告：[/yellow] 读取 {spec_file} 失败：{e}",
                 style="yellow",
             )
             continue

@@ -24,7 +24,7 @@ class ProgressTracker:
     def __init__(self, console: Console | None = None):
         """初始化进度跟踪器。
 
-        Args:
+        参数：
             console: Rich 控制台实例（未提供则新建）
         """
         self.console = console or Console()
@@ -56,7 +56,7 @@ class ProgressTracker:
     ) -> None:
         """添加一个需要跟踪的新任务。
 
-        Args:
+        参数：
             task_id: 任务唯一标识
             description: 展示的任务描述
             total: 总步数（不确定则为 None）
@@ -76,7 +76,7 @@ class ProgressTracker:
     ) -> None:
         """更新任务进度。
 
-        Args:
+        参数：
             task_id: 任务标识
             advance: 增量推进的步数
             completed: 已完成步数（绝对值）
@@ -96,7 +96,7 @@ class ProgressTracker:
     def complete_task(self, task_id: str) -> None:
         """将任务标记为完成。
 
-        Args:
+        参数：
             task_id: 任务标识
         """
         if task_id not in self._tasks:
@@ -110,7 +110,7 @@ class ProgressTracker:
     def remove_task(self, task_id: str) -> None:
         """从展示中移除一个任务。
 
-        Args:
+        参数：
             task_id: 任务标识
         """
         if task_id not in self._tasks:
@@ -131,7 +131,7 @@ def show_progress(
 ) -> None:
     """显示一个简单的进度条。
 
-    Args:
+    参数：
         console: Rich 控制台实例
         description: 进度描述
         total: 总步数
@@ -147,7 +147,7 @@ def show_progress(
     # 构建进度展示
     bar_width = 40
     filled_width = int((completed / total) * bar_width) if total > 0 else 0
-    bar = "█" * filled_width + "░" * (bar_width - filled_width)
+    bar = "#" * filled_width + "-" * (bar_width - filled_width)
 
     display_parts = [f"[cyan]{description}[/cyan]"]
     display_parts.append(f"[green]{bar}[/green]")
@@ -171,7 +171,7 @@ class WaveProgressTracker:
     ):
         """初始化 Wave 进度跟踪器。
 
-        Args:
+        参数：
             console: Rich 控制台实例
             total_waves: Wave 总数
             total_tasks: 任务总数
@@ -188,7 +188,7 @@ class WaveProgressTracker:
     def start_wave(self, wave_num: int, tasks: list[str]) -> None:
         """开始一个新的 wave。
 
-        Args:
+        参数：
             wave_num: Wave 编号
             tasks: 本 wave 中的任务 ID 列表
         """
@@ -198,7 +198,7 @@ class WaveProgressTracker:
     def update_task(self, wave_num: int, task_id: str, status: str) -> None:
         """更新任务状态。
 
-        Args:
+        参数：
             wave_num: Wave 编号
             task_id: 任务标识
             status: 新状态（in_progress/completed/failed）
@@ -214,7 +214,7 @@ class WaveProgressTracker:
     def complete_wave(self, wave_num: int) -> None:
         """将 wave 标记为完成。
 
-        Args:
+        参数：
             wave_num: Wave 编号
         """
         self.completed_waves += 1
@@ -224,43 +224,48 @@ class WaveProgressTracker:
     def render(self) -> Table:
         """将当前进度渲染为表格。
 
-        Returns:
+        返回：
             包含进度信息的 Rich Table
         """
-        table = Table(title="Wave Execution Progress", border_style="cyan", show_header=False)
-        table.add_column("Label", style="cyan", width=20)
-        table.add_column("Value", style="white")
+        table = Table(title="波次执行进度", border_style="cyan", show_header=False)
+        table.add_column("项目", style="cyan", width=20)
+        table.add_column("数值", style="white")
 
         # 总体进度
         wave_progress = f"{self.completed_waves}/{self.total_waves}"
         task_progress = f"{self.completed_tasks}/{self.total_tasks}"
 
-        table.add_row("Waves Completed", wave_progress)
-        table.add_row("Tasks Completed", task_progress)
+        table.add_row("已完成波次", wave_progress)
+        table.add_row("已完成任务", task_progress)
 
         # 当前 wave
         if self.current_wave is not None:
-            table.add_row("Current Wave", f"Wave {self.current_wave}")
+            table.add_row("当前波次", f"波次 {self.current_wave}")
 
             # 展示当前 wave 中的任务
             if self.current_wave in self.wave_tasks:
                 tasks = self.wave_tasks[self.current_wave]
                 for task_id, status in tasks.items():
-                    icon = "🟩" if status == "completed" else "🟨"
-                    table.add_row(f"  {task_id}", f"{icon} {status}")
+                    status_name = {
+                        "in_progress": "进行中",
+                        "completed": "已完成",
+                        "failed": "失败",
+                    }.get(status, status)
+                    icon = "√" if status == "completed" else ("×" if status == "failed" else "…")
+                    table.add_row(f"  {task_id}", f"{icon} {status_name}")
 
         # 已耗时
         elapsed = time.time() - self.start_time
-        elapsed_str = f"{int(elapsed // 60)}m {int(elapsed % 60)}s"
-        table.add_row("Elapsed Time", elapsed_str)
+        elapsed_str = f"{int(elapsed // 60)}分 {int(elapsed % 60)}秒"
+        table.add_row("已耗时", elapsed_str)
 
         # 预计剩余时间
         if self.completed_tasks > 0 and self.total_tasks > 0:
             avg_time_per_task = elapsed / self.completed_tasks
             remaining_tasks = self.total_tasks - self.completed_tasks
             estimated_remaining = avg_time_per_task * remaining_tasks
-            remaining_str = f"{int(estimated_remaining // 60)}m {int(estimated_remaining % 60)}s"
-            table.add_row("Estimated Remaining", remaining_str)
+            remaining_str = f"{int(estimated_remaining // 60)}分 {int(estimated_remaining % 60)}秒"
+            table.add_row("预计剩余", remaining_str)
 
         return table
 

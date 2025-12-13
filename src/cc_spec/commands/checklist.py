@@ -47,20 +47,20 @@ DEFAULT_THRESHOLD = 80
 def checklist_command(
     change_or_id: Optional[str] = typer.Argument(
         None,
-        help="Change name or ID (e.g., add-oauth or C-001)",
+        help="变更名称或 ID（例如 add-oauth 或 C-001）",
     ),
     threshold: int = typer.Option(
         DEFAULT_THRESHOLD,
         "--threshold",
         "-t",
-        help="Minimum percentage required to pass (0-100)",
+        help="通过所需的最低百分比（0-100）",
         min=0,
         max=100,
     ),
     use_v13: bool = typer.Option(
         True,
         "--v13/--no-v13",
-        help="Use v1.3 four-dimension scoring (default: enabled)",
+        help="使用 v1.3 四维度打分（默认开启）",
     ),
 ) -> None:
     """使用 checklist 评分验证任务完成情况。
@@ -85,7 +85,7 @@ def checklist_command(
     project_root = find_project_root()
     if project_root is None:
         console.print(
-            "[red]Error:[/red] Not a cc-spec project. Run 'cc-spec init' first.",
+            "[red]错误：[/red] 当前目录不是 cc-spec 项目，请先运行 'cc-spec init'。",
             style="red",
         )
         raise typer.Exit(1)
@@ -101,7 +101,7 @@ def checklist_command(
             # ID 模式：解析为名称
             entry = id_manager.get_change_entry(change_or_id)
             if not entry:
-                console.print(f"[red]Error:[/red] Change not found: {change_or_id}")
+                console.print(f"[red]错误：[/red] 未找到变更：{change_or_id}")
                 raise typer.Exit(1)
             change = entry.name
         else:
@@ -115,8 +115,8 @@ def checklist_command(
         current_state = get_current_change(cc_spec_root)
         if not current_state:
             console.print(
-                "[red]Error:[/red] No active change found. "
-                "Please specify a change name or run 'cc-spec specify' first.",
+                "[red]错误：[/red] 未找到当前激活的变更。"
+                "请指定变更名称，或先运行 'cc-spec specify'。",
                 style="red",
             )
             raise typer.Exit(1)
@@ -125,28 +125,28 @@ def checklist_command(
         change_dir = cc_spec_root / "changes" / change
 
     if not change_dir.exists():
-        console.print(f"[red]Error:[/red] Change '{change}' not found.", style="red")
+        console.print(f"[red]错误：[/red] 未找到变更 '{change}'。", style="red")
         raise typer.Exit(1)
 
     # 检查 tasks.md 是否存在
     tasks_path = change_dir / "tasks.md"
     if not tasks_path.exists():
         console.print(
-            f"[red]Error:[/red] tasks.md not found in {change_dir}. "
-            "Run 'cc-spec plan' first.",
+            f"[red]错误：[/red] 在 {change_dir} 中未找到 tasks.md。"
+            "请先运行 'cc-spec plan'。",
             style="red",
         )
         raise typer.Exit(1)
 
-    console.print(f"[cyan]Validating checklist for:[/cyan] [bold]{change}[/bold]")
-    console.print(f"[dim]Threshold: {threshold}%[/dim]")
+    console.print(f"[cyan]正在验收检查清单：[/cyan] [bold]{change}[/bold]")
+    console.print(f"[dim]阈值：{threshold}%[/dim]")
     if use_v13:
-        console.print("[dim]Mode: v1.3 四维度打分[/dim]\n")
+        console.print("[dim]模式：v1.3 四维度打分[/dim]\n")
     else:
-        console.print("[dim]Mode: 简单打分[/dim]\n")
+        console.print("[dim]模式：简单打分[/dim]\n")
 
     # 读取 tasks.md 并提取 checklist
-    console.print("[cyan]Reading tasks.md...[/cyan]")
+    console.print("[cyan]正在读取 tasks.md...[/cyan]")
     tasks_content = tasks_path.read_text(encoding="utf-8")
 
     # 从 tasks.md 中提取所有 checklist
@@ -154,14 +154,14 @@ def checklist_command(
 
     if not task_checklists:
         console.print(
-            "[yellow]Warning:[/yellow] No checklist items found in tasks.md",
+            "[yellow]警告：[/yellow] tasks.md 中未找到检查清单项",
             style="yellow",
         )
-        console.print("Please add checklist items to tasks.md before validation.\n")
+        console.print("请先在 tasks.md 中补充检查清单项后再进行验收。\n")
         raise typer.Exit(1)
 
     console.print(
-        f"[green]✓[/green] Found {len(task_checklists)} tasks with checklists\n"
+        f"[green]√[/green] 共找到 {len(task_checklists)} 个带检查清单的任务\n"
     )
 
     # 加载配置获取打分设置
@@ -175,7 +175,7 @@ def checklist_command(
             if threshold == DEFAULT_THRESHOLD:
                 threshold = config.get_pass_threshold()
         except Exception as e:
-            console.print(f"[yellow]Warning:[/yellow] Could not load config: {e}")
+            console.print(f"[yellow]警告：[/yellow] 无法加载配置：{e}")
 
     status_path = change_dir / "status.yaml"
 
@@ -238,33 +238,33 @@ def _display_task_results(
         results：(task_id, ScoreResult) 列表
         threshold：通过阈值百分比
     """
-    console.print("[bold cyan]Task Checklist Results:[/bold cyan]\n")
+    console.print("[bold cyan]任务检查清单结果：[/bold cyan]\n")
 
     for task_id, result in results:
         # 确定状态颜色
         status_color = "green" if result.passed else "red"
-        status_text = "PASSED" if result.passed else "FAILED"
+        status_text = "通过" if result.passed else "未通过"
 
         # 创建任务面板
         content_lines = []
         content_lines.append(
-            f"[cyan]Score:[/cyan] {result.total_score}/{result.max_score} "
+            f"[cyan]得分：[/cyan] {result.total_score}/{result.max_score} "
             f"({result.percentage:.1f}%)"
         )
         content_lines.append(
-            f"[cyan]Status:[/cyan] [{status_color}]{status_text}[/{status_color}]"
+            f"[cyan]状态：[/cyan] [{status_color}]{status_text}[/{status_color}]"
         )
 
         # 如有失败项则展示
         if result.failed_items:
             content_lines.append(
-                f"\n[yellow]Failed items ({len(result.failed_items)}):[/yellow]"
+                f"\n[yellow]未通过项（{len(result.failed_items)}）：[/yellow]"
             )
             for item in result.failed_items[:3]:  # 仅显示前 3 项
-                content_lines.append(f"  • {item.description}")
+                content_lines.append(f"  - {item.description}")
             if len(result.failed_items) > 3:
                 content_lines.append(
-                    f"  [dim]... and {len(result.failed_items) - 3} more[/dim]"
+                    f"  [dim]... 还有 {len(result.failed_items) - 3} 项[/dim]"
                 )
 
         panel = Panel(
@@ -293,21 +293,21 @@ def _display_overall_result(
         passed：是否通过验证
     """
     status_color = "green" if passed else "red"
-    status_icon = "✓" if passed else "✗"
-    status_text = "PASSED" if passed else "FAILED"
+    status_icon = "√" if passed else "×"
+    status_text = "通过" if passed else "未通过"
 
     content_lines = [
-        f"[cyan]Total Score:[/cyan] [bold]{total_score}/{max_score}[/bold]",
-        f"[cyan]Percentage:[/cyan] [bold]{percentage:.1f}%[/bold]",
-        f"[cyan]Threshold:[/cyan] {threshold}%",
+        f"[cyan]总分：[/cyan] [bold]{total_score}/{max_score}[/bold]",
+        f"[cyan]百分比：[/cyan] [bold]{percentage:.1f}%[/bold]",
+        f"[cyan]阈值：[/cyan] {threshold}%",
         "",
-        f"[{status_color}]Status:[/{status_color}] "
+        f"[{status_color}]状态：[/{status_color}] "
         f"[bold {status_color}]{status_icon} {status_text}[/bold {status_color}]",
     ]
 
     panel = Panel(
         "\n".join(content_lines),
-        title="[bold]Overall Validation Result[/bold]",
+        title="[bold]总体验收结果[/bold]",
         border_style=status_color,
         padding=(1, 2),
     )
@@ -325,7 +325,7 @@ def _handle_pass(
         change_name：变更名称
         percentage：验证得分百分比
     """
-    console.print("\n[bold green]Validation passed![/bold green]", style="green")
+    console.print("\n[bold green]验收通过！[/bold green]", style="green")
 
     # 更新状态为 checklist 阶段（完成）
     try:
@@ -340,21 +340,21 @@ def _handle_pass(
         )
 
         update_state(status_path, state)
-        console.print("[green]✓[/green] Updated state to checklist stage (completed)")
+        console.print("[green]√[/green] 已将状态更新为 checklist 阶段（完成）")
 
     except Exception as e:
         console.print(
-            f"[yellow]Warning:[/yellow] Could not update state: {e}",
+            f"[yellow]警告：[/yellow] 无法更新状态：{e}",
             style="yellow",
         )
 
     # 展示下一步
-    console.print("\n[bold]Next steps:[/bold]")
-    console.print("1. Review the validation results")
-    console.print("2. Run [cyan]cc-spec archive[/cyan] to archive the change")
+    console.print("\n[bold]下一步：[/bold]")
+    console.print("1. 查看验收结果")
+    console.print("2. 运行 [cyan]cc-spec archive[/cyan] 归档该变更")
 
-    console.print(f"\n[dim]Change: {change_name}[/dim]")
-    console.print(f"[dim]Validation score: {percentage:.1f}%[/dim]")
+    console.print(f"\n[dim]变更：{change_name}[/dim]")
+    console.print(f"[dim]验收得分：{percentage:.1f}%[/dim]")
 
 
 def _handle_fail(
@@ -374,7 +374,7 @@ def _handle_fail(
         threshold：通过阈值百分比
     """
     console.print(
-        "\n[bold red]Validation failed![/bold red]",
+        "\n[bold red]验收未通过！[/bold red]",
         style="red",
     )
 
@@ -413,7 +413,7 @@ def _handle_fail(
     report_path = change_dir / "checklist-result.md"
     report_path.write_text(report_content, encoding="utf-8")
     console.print(
-        f"[green]✓[/green] Generated failure report: {report_path.relative_to(Path.cwd())}"
+        f"[green]√[/green] 已生成失败报告：{report_path.relative_to(Path.cwd())}"
     )
 
     # 将状态更新回 apply 阶段
@@ -429,24 +429,24 @@ def _handle_fail(
         )
 
         update_state(status_path, state)
-        console.print("[yellow]⚠[/yellow] Reverted state to apply stage (rework needed)")
+        console.print("[yellow]![/yellow] 已将状态回退到 apply 阶段（需要返工）")
 
     except Exception as e:
         console.print(
-            f"[yellow]Warning:[/yellow] Could not update state: {e}",
+            f"[yellow]警告：[/yellow] 无法更新状态：{e}",
             style="yellow",
         )
 
     # 展示下一步
-    console.print("\n[bold]Next steps:[/bold]")
-    console.print("1. Review the failure report in checklist-result.md")
-    console.print("2. Complete the failed checklist items")
-    console.print("3. Run [cyan]cc-spec clarify <task-id>[/cyan] to rework specific tasks")
-    console.print("4. Re-run [cyan]cc-spec checklist[/cyan] after fixing issues")
+    console.print("\n[bold]下一步：[/bold]")
+    console.print("1. 查看 checklist-result.md 中的失败报告")
+    console.print("2. 完成未通过的检查清单项")
+    console.print("3. 运行 [cyan]cc-spec clarify <task-id>[/cyan] 标记指定任务返工")
+    console.print("4. 修复后重新运行 [cyan]cc-spec checklist[/cyan] 进行验收")
 
-    console.print(f"\n[dim]Change: {change_name}[/dim]")
+    console.print(f"\n[dim]变更：{change_name}[/dim]")
     console.print(
-        f"[dim]Failed items: {len(all_failed_items)} / {len([item for _, result in results for item in result.items])}[/dim]"
+        f"[dim]未通过项：{len(all_failed_items)} / {len([item for _, result in results for item in result.items])}[/dim]"
     )
 
 
@@ -467,7 +467,7 @@ def _display_v13_results(result: ChecklistResult, threshold: int) -> None:
 
     # 创建任务得分表格
     table = Table(title="任务得分", border_style="cyan")
-    table.add_column("Task-ID", style="white")
+    table.add_column("任务 ID", style="white")
     table.add_column("总分", justify="center")
     table.add_column("功能", justify="center")
     table.add_column("质量", justify="center")
@@ -486,7 +486,7 @@ def _display_v13_results(result: ChecklistResult, threshold: int) -> None:
         test_str = f"{test.percentage:.0f}%" if test and test.max_score > 0 else "-"
         doc_str = f"{doc.percentage:.0f}%" if doc and doc.max_score > 0 else "-"
 
-        status = "[green]✓ PASS[/green]" if task_score.passed else "[red]✗ FAIL[/red]"
+        status = "[green]√ 通过[/green]" if task_score.passed else "[red]× 未通过[/red]"
 
         table.add_row(
             task_score.task_id,
@@ -514,7 +514,7 @@ def _display_v13_results(result: ChecklistResult, threshold: int) -> None:
         summary = result.dimension_summary.get(dim)
         if summary and summary.max_score > 0:
             name = dim_names.get(dim, dim.value)
-            status = "[green]✓[/green]" if summary.percentage >= threshold else "[red]✗[/red]"
+            status = "[green]√[/green]" if summary.percentage >= threshold else "[red]×[/red]"
             console.print(
                 f"  {status} {name}: {summary.percentage:.1f}% (权重: {summary.weight}%)"
             )
@@ -522,7 +522,7 @@ def _display_v13_results(result: ChecklistResult, threshold: int) -> None:
     # 展示整体结果
     console.print()
     status_color = "green" if result.overall_passed else "red"
-    status_text = "✓ PASSED" if result.overall_passed else "✗ FAILED"
+    status_text = "√ 通过" if result.overall_passed else "× 未通过"
 
     panel = Panel(
         f"[cyan]整体得分:[/cyan] [bold]{result.overall_score:.1f}%[/bold]\n"
@@ -538,7 +538,7 @@ def _display_v13_results(result: ChecklistResult, threshold: int) -> None:
     if result.recommendations:
         console.print("\n[bold yellow]改进建议:[/bold yellow]")
         for rec in result.recommendations:
-            console.print(f"  • {rec}")
+            console.print(f"  - {rec}")
 
 
 def _handle_pass_v13(
@@ -562,7 +562,7 @@ def _handle_pass_v13(
     report_path = change_dir / "checklist-result.md"
     report_path.write_text(report_content, encoding="utf-8")
     console.print(
-        f"[green]✓[/green] 生成打分报告: {report_path.relative_to(Path.cwd())}"
+        f"[green]√[/green] 生成打分报告: {report_path.relative_to(Path.cwd())}"
     )
 
     # 更新状态为 checklist 阶段（完成）
@@ -577,11 +577,11 @@ def _handle_pass_v13(
         )
 
         update_state(status_path, state)
-        console.print("[green]✓[/green] 状态已更新到 checklist 阶段 (完成)")
+        console.print("[green]√[/green] 状态已更新到 checklist 阶段（完成）")
 
     except Exception as e:
         console.print(
-            f"[yellow]Warning:[/yellow] Could not update state: {e}",
+            f"[yellow]警告：[/yellow] 无法更新状态：{e}",
             style="yellow",
         )
 
@@ -590,7 +590,7 @@ def _handle_pass_v13(
     console.print("1. 查看 checklist-result.md 中的打分报告")
     console.print("2. 运行 [cyan]cc-spec archive[/cyan] 归档该变更")
 
-    console.print(f"\n[dim]Change: {change_name}[/dim]")
+    console.print(f"\n[dim]变更：{change_name}[/dim]")
     console.print(f"[dim]验证得分: {result.overall_score:.1f}%[/dim]")
 
 
@@ -622,7 +622,7 @@ def _handle_fail_v13(
     report_path = change_dir / "checklist-result.md"
     report_path.write_text(report_content, encoding="utf-8")
     console.print(
-        f"[green]✓[/green] 生成失败报告: {report_path.relative_to(Path.cwd())}"
+        f"[green]√[/green] 生成失败报告: {report_path.relative_to(Path.cwd())}"
     )
 
     # 将状态更新回 apply 阶段
@@ -637,11 +637,11 @@ def _handle_fail_v13(
         )
 
         update_state(status_path, state)
-        console.print("[yellow]⚠[/yellow] 状态已回退到 apply 阶段 (需要返工)")
+        console.print("[yellow]![/yellow] 状态已回退到 apply 阶段（需要返工）")
 
     except Exception as e:
         console.print(
-            f"[yellow]Warning:[/yellow] Could not update state: {e}",
+            f"[yellow]警告：[/yellow] 无法更新状态：{e}",
             style="yellow",
         )
 
@@ -652,5 +652,5 @@ def _handle_fail_v13(
     console.print("3. 运行 [cyan]cc-spec clarify <task-id>[/cyan] 标记任务返工")
     console.print("4. 修复后重新运行 [cyan]cc-spec checklist[/cyan]")
 
-    console.print(f"\n[dim]Change: {change_name}[/dim]")
+    console.print(f"\n[dim]变更：{change_name}[/dim]")
     console.print(f"[dim]未通过任务: {len(result.failed_tasks)}[/dim]")

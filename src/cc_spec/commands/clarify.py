@@ -69,7 +69,7 @@ def show_task_list(state: ChangeState) -> None:
         state：当前变更状态
     """
     if not state.tasks:
-        console.print("[yellow]No tasks found in current change[/yellow]")
+        console.print("[yellow]当前变更中未找到任务[/yellow]")
         return
 
     # 构建用于展示的任务列表
@@ -97,7 +97,7 @@ def show_task_list(state: ChangeState) -> None:
     # 显示使用说明
     console.print()
     console.print(
-        "[dim]Run [cyan]cc-spec clarify <task-id>[/cyan] to mark a task for rework[/dim]"
+        "[dim]运行 [cyan]cc-spec clarify <task-id>[/cyan] 将任务标记为返工[/dim]"
     )
 
 
@@ -120,17 +120,17 @@ def rework_task(
             break
 
     if task is None:
-        console.print(f"[red]Error:[/red] Task '{task_id}' not found")
+        console.print(f"[red]错误：[/red] 未找到任务 '{task_id}'")
         raise typer.Exit(1)
 
     # 展示当前任务状态
     console.print()
     console.print(
         Panel(
-            f"[cyan]Task ID:[/cyan] {task.id}\n"
-            f"[cyan]Status:[/cyan] {task.status.value}\n"
-            f"[cyan]Wave:[/cyan] {task.wave}",
-            title="[bold]Task Details[/bold]",
+            f"[cyan]任务 ID：[/cyan] {task.id}\n"
+            f"[cyan]状态：[/cyan] {task.status.value}\n"
+            f"[cyan]波次：[/cyan] {task.wave}",
+            title="[bold]任务详情[/bold]",
             border_style="cyan",
         )
     )
@@ -139,26 +139,26 @@ def rework_task(
     # 若 tasks.md 中有记录则展示执行历史
     tasks_md = change_dir / "tasks.md"
     if tasks_md.exists():
-        console.print("[dim]Checking tasks.md for execution history...[/dim]")
+        console.print("[dim]正在检查 tasks.md 中的执行历史...[/dim]")
         console.print()
 
     # 确认返工
     if task.status == TaskStatus.PENDING:
         console.print(
-            "[yellow]Note:[/yellow] This task is already pending (not started yet)"
+            "[yellow]提示：[/yellow] 该任务已经是待执行状态（尚未开始）"
         )
         console.print()
 
     confirmed = confirm_action(
         console,
-        f"Mark task '{task_id}' for rework?\n\n"
-        "This will reset the task status to 'pending' and allow it to be re-planned.",
+        f"将任务 '{task_id}' 标记为返工吗？\n\n"
+        "这会把任务状态重置为 'pending'，并允许重新规划该任务。",
         default=False,
         warning=False,
     )
 
     if not confirmed:
-        console.print("[dim]Operation cancelled[/dim]")
+        console.print("[dim]已取消操作[/dim]")
         raise typer.Exit(0)
 
     # 将任务状态更新为 pending
@@ -171,18 +171,26 @@ def rework_task(
     update_state(state_path, state)
 
     console.print()
-    console.print(f"[green]✓[/green] Task '{task_id}' marked for rework")
+    console.print(f"[green]✓[/green] 已将任务 '{task_id}' 标记为返工")
     console.print()
     console.print(
-        "[dim]You can now update the task details in [cyan]tasks.md[/cyan] "
-        "and re-run [cyan]cc-spec apply[/cyan][/dim]"
+        "[dim]你现在可以在 [cyan]tasks.md[/cyan] 中更新任务详情，并重新运行 "
+        "[cyan]cc-spec apply[/cyan][/dim]"
     )
 
 
 @app.command()
 def clarify(
-    id_or_task: str = typer.Argument(None, help="Change/Task ID (C-001, C-001:task-id) or task ID"),
-    change: str = typer.Option(None, "--change", "-c", help="Change name or ID (deprecated, use positional arg)"),
+    id_or_task: str = typer.Argument(
+        None,
+        help="变更/任务 ID（C-001、C-001:task-id）或任务 ID",
+    ),
+    change: str = typer.Option(
+        None,
+        "--change",
+        "-c",
+        help="变更名称或 ID（已弃用，建议使用位置参数）",
+    ),
 ) -> None:
     """审查任务并将其标记为返工。
 
@@ -205,8 +213,8 @@ def clarify(
     project_root = find_project_root()
     if project_root is None:
         console.print(
-            "[red]Error:[/red] Not in a cc-spec project. "
-            "Run [cyan]cc-spec init[/cyan] first."
+            "[red]错误：[/red] 当前目录不是 cc-spec 项目。"
+            "请先运行 [cyan]cc-spec init[/cyan]。"
         )
         raise typer.Exit(1)
 
@@ -236,7 +244,7 @@ def clarify(
     if change_id:
         entry = id_manager.get_change_entry(change_id)
         if not entry:
-            console.print(f"[red]Error:[/red] Change not found: {change_id}")
+            console.print(f"[red]错误：[/red] 未找到变更：{change_id}")
             raise typer.Exit(1)
         change_name = entry.name
 
@@ -244,13 +252,13 @@ def clarify(
     if change_name:
         change_dir = cc_spec_root / "changes" / change_name
         if not change_dir.exists():
-            console.print(f"[red]Error:[/red] Change '{change_name}' not found")
+            console.print(f"[red]错误：[/red] 未找到变更 '{change_name}'")
             raise typer.Exit(1)
 
         state_path = change_dir / "status.yaml"
         if not state_path.exists():
             console.print(
-                f"[red]Error:[/red] Change '{change_name}' has no status.yaml file"
+                f"[red]错误：[/red] 变更 '{change_name}' 缺少 status.yaml 文件"
             )
             raise typer.Exit(1)
 
@@ -260,8 +268,8 @@ def clarify(
         state = get_current_change(cc_spec_root)
         if state is None:
             console.print(
-                "[yellow]No active change found.[/yellow]\n"
-                "Run [cyan]cc-spec specify <name>[/cyan] to create a new change."
+                "[yellow]未找到激活的变更。[/yellow]\n"
+                "运行 [cyan]cc-spec specify <name>[/cyan] 创建新的变更。"
             )
             raise typer.Exit(1)
 

@@ -25,7 +25,7 @@ class CheckStatus(Enum):
 class CheckItem:
     """单个检查项数据类。
 
-    Attributes:
+    属性：
         description: 检查项描述文本
         status: 当前状态 (PASSED/FAILED/SKIPPED)
         score: 该项获得的分数 (0-10)
@@ -46,7 +46,7 @@ class CheckItem:
 class ScoreResult:
     """打分结果数据类 (v1.2 兼容)。
 
-    Attributes:
+    属性：
         items: 所有检查项列表
         total_score: 获得的总分
         max_score: 满分值
@@ -73,7 +73,7 @@ class ScoreResult:
 class DimensionScore:
     """单个维度的得分 (v1.3 新增)。
 
-    Attributes:
+    属性：
         dimension: 维度类型
         earned: 获得的分数
         max_score: 该维度的满分值
@@ -94,7 +94,7 @@ class DimensionScore:
 class TaskScore:
     """单个任务的打分结果 (v1.3 新增)。
 
-    Attributes:
+    属性：
         task_id: 任务 ID
         dimension_scores: 各维度得分字典
         total_score: 加权总分 (0-100)
@@ -115,7 +115,7 @@ class TaskScore:
 class ChecklistResult:
     """完整的 checklist 打分结果 (v1.3 新增)。
 
-    Attributes:
+    属性：
         task_scores: 各任务的打分结果列表
         overall_score: 整体加权平均分
         overall_passed: 是否整体通过
@@ -146,10 +146,10 @@ def parse_checklist(content: str) -> list[CheckItem]:
     - [ ] 描述 -> FAILED
     - [-] 描述 -> SKIPPED
 
-    Args:
+    参数：
         content: 包含检查项的 markdown 内容
 
-    Returns:
+    返回：
         解析后的 CheckItem 列表
     """
     items: list[CheckItem] = []
@@ -198,14 +198,14 @@ def extract_checklists_from_tasks_md(tasks_content: str) -> dict[str, list[Check
     预期格式:
         ### 01-SETUP - 项目设置
         ...
-        **Checklist**:
+        **Checklist**: 或 **检查清单**:
         - [x] 创建项目结构
         - [ ] 配置依赖
 
-    Args:
+    参数：
         tasks_content: tasks.md 文件的内容
 
-    Returns:
+    返回：
         任务 ID 到检查项列表的映射字典
         示例: {"01-SETUP": [CheckItem(...), ...]}
     """
@@ -244,19 +244,19 @@ def _process_task_checklist(
 ) -> None:
     """处理任务区块并提取检查项。
 
-    Args:
+    参数：
         task_id: 任务标识符
         section_lines: 任务区块的行列表
         result: 存储结果的字典
     """
     section_content = "\n".join(section_lines)
 
-    if "**Checklist**" not in section_content:
+    if "**Checklist**" not in section_content and "**检查清单**" not in section_content:
         return
 
-    # 提取 "**Checklist**:" 后的内容
+    # 提取 "**Checklist**:" / "**检查清单**:" 后的内容
     checklist_match = re.search(
-        r"\*\*Checklist\*\*:?\s*\n((?:\s*[-*]\s+\[[ xX\-]\].+\n?)+)",
+        r"\*\*(?:Checklist|检查清单)\*\*:?\s*\n((?:\s*[-*]\s+\[[ xX\-]\].+\n?)+)",
         section_content,
         re.MULTILINE,
     )
@@ -283,11 +283,11 @@ def calculate_score(
     - 每个 FAILED 项获得 0 分
     - SKIPPED 项不计入总分和满分
 
-    Args:
+    参数：
         items: 要评分的检查项列表
         threshold: 通过所需的最低百分比 (0-100)
 
-    Returns:
+    返回：
         包含计算结果的 ScoreResult 对象
     """
     # 过滤掉跳过的项
@@ -330,11 +330,11 @@ def _classify_item(
     遍历各维度的关键词列表，找到第一个匹配的维度。
     如果没有匹配，默认归类到功能完整性维度。
 
-    Args:
+    参数：
         item: 要分类的检查项
         dimension_configs: 维度配置字典，None 使用默认配置
 
-    Returns:
+    返回：
         匹配的维度
     """
     if dimension_configs is None:
@@ -369,11 +369,11 @@ def classify_items(
 ) -> dict[Dimension, list[CheckItem]]:
     """将检查项列表分类到各维度。
 
-    Args:
+    参数：
         items: 检查项列表
         scoring_config: 打分配置，None 使用默认配置
 
-    Returns:
+    返回：
         维度到检查项列表的映射字典
     """
     # 获取维度配置
@@ -404,12 +404,12 @@ def calculate_dimension_score(
 ) -> DimensionScore:
     """计算单个维度的得分。
 
-    Args:
+    参数：
         dimension: 维度类型
         items: 该维度下的检查项列表
         weight: 维度权重
 
-    Returns:
+    返回：
         维度得分对象
     """
     # 过滤掉跳过的项
@@ -454,13 +454,13 @@ def calculate_task_score(
     3. 按权重计算加权总分
     4. 判断是否通过阈值
 
-    Args:
+    参数：
         task_id: 任务 ID
         items: 该任务的检查项列表
         scoring_config: 打分配置，None 使用默认配置
         threshold: 通过阈值
 
-    Returns:
+    返回：
         任务打分结果
     """
     # 获取配置
@@ -520,12 +520,12 @@ def calculate_checklist_result(
 ) -> ChecklistResult:
     """计算完整的 checklist 打分结果 (v1.3 核心函数)。
 
-    Args:
+    参数：
         task_checklists: 任务 ID 到检查项列表的映射
         scoring_config: 打分配置
         threshold: 通过阈值
 
-    Returns:
+    返回：
         完整的打分结果
     """
     if scoring_config is None:
@@ -574,11 +574,11 @@ def _calculate_dimension_summary(
 ) -> dict[Dimension, DimensionScore]:
     """计算各维度的汇总得分。
 
-    Args:
+    参数：
         task_scores: 任务得分列表
         scoring_config: 打分配置
 
-    Returns:
+    返回：
         维度汇总得分字典
     """
     summary: dict[Dimension, DimensionScore] = {}
@@ -616,11 +616,11 @@ def _generate_recommendations(
 ) -> list[str]:
     """根据打分结果生成改进建议。
 
-    Args:
+    参数：
         task_scores: 任务得分列表
         threshold: 通过阈值
 
-    Returns:
+    返回：
         改进建议列表
     """
     recommendations: list[str] = []
@@ -666,10 +666,10 @@ def _generate_recommendations(
 def format_result(result: ScoreResult) -> str:
     """格式化打分结果为可读字符串 (v1.2 兼容)。
 
-    Args:
+    参数：
         result: 打分结果
 
-    Returns:
+    返回：
         格式化的字符串
     """
     lines = [
@@ -678,7 +678,7 @@ def format_result(result: ScoreResult) -> str:
         f"**总分**: {result.total_score}/{result.max_score}",
         f"**百分比**: {result.percentage:.1f}%",
         f"**阈值**: {result.threshold}%",
-        f"**状态**: {'✓ 通过' if result.passed else '✗ 未通过'}",
+        f"**状态**: {'√ 通过' if result.passed else '× 未通过'}",
         "",
     ]
 
@@ -717,10 +717,10 @@ def format_result(result: ScoreResult) -> str:
 def format_dimension_report(result: ChecklistResult) -> str:
     """格式化四维度打分报告 (v1.3 新增)。
 
-    Args:
+    参数：
         result: 完整打分结果
 
-    Returns:
+    返回：
         Markdown 格式的报告
     """
     lines = [
@@ -728,11 +728,11 @@ def format_dimension_report(result: ChecklistResult) -> str:
         "",
         f"**阈值**: {result.threshold}%",
         f"**整体得分**: {result.overall_score:.1f}%",
-        f"**状态**: {'✅ 通过' if result.overall_passed else '❌ 未通过'}",
+        f"**状态**: {'√ 通过' if result.overall_passed else '× 未通过'}",
         "",
         "## 总览",
         "",
-        "| Task-ID | 总分 | 功能 | 质量 | 测试 | 文档 | 状态 |",
+        "| 任务 ID | 总分 | 功能 | 质量 | 测试 | 文档 | 状态 |",
         "|---------|------|------|------|------|------|------|",
     ]
 
@@ -748,7 +748,7 @@ def format_dimension_report(result: ChecklistResult) -> str:
         test_str = f"{test_pct.percentage:.0f}" if test_pct and test_pct.max_score > 0 else "-"
         doc_str = f"{doc_pct.percentage:.0f}" if doc_pct and doc_pct.max_score > 0 else "-"
 
-        status = "✅ PASS" if task_score.passed else "❌ FAIL"
+        status = "√ 通过" if task_score.passed else "× 未通过"
 
         lines.append(
             f"| {task_score.task_id} | {task_score.total_score:.0f} | "
@@ -775,7 +775,7 @@ def format_dimension_report(result: ChecklistResult) -> str:
         summary = result.dimension_summary.get(dim)
         if summary:
             name = dim_names.get(dim, dim.value)
-            status = "✅" if summary.percentage >= result.threshold else "❌"
+            status = "√" if summary.percentage >= result.threshold else "×"
             lines.append(
                 f"| {name} | {summary.weight}% | {summary.percentage:.1f}% | {status} |"
             )
@@ -796,10 +796,10 @@ def format_dimension_report(result: ChecklistResult) -> str:
 def generate_failure_report(result: ScoreResult) -> str:
     """生成失败报告 (v1.2 兼容)。
 
-    Args:
+    参数：
         result: 打分结果
 
-    Returns:
+    返回：
         Markdown 格式的失败报告
     """
     lines = [
@@ -842,10 +842,10 @@ def generate_failure_report_v13(result: ChecklistResult) -> str:
 
     包含四维度详细分析和针对性的改进建议。
 
-    Args:
+    参数：
         result: 完整打分结果
 
-    Returns:
+    返回：
         Markdown 格式的详细失败报告
     """
     lines = [
@@ -860,7 +860,7 @@ def generate_failure_report_v13(result: ChecklistResult) -> str:
     for task_score in result.task_scores:
         if not task_score.passed:
             lines.extend([
-                f"## {task_score.task_id} ({task_score.total_score:.0f}分) ❌",
+                f"## {task_score.task_id}（{task_score.total_score:.0f} 分）×",
                 "",
             ])
 
@@ -875,7 +875,7 @@ def generate_failure_report_v13(result: ChecklistResult) -> str:
                 dim_score = task_score.dimension_scores.get(dim)
                 if dim_score and dim_score.max_score > 0:
                     name = dim_names.get(dim, dim.value)
-                    status = "✅" if dim_score.percentage >= result.threshold else "❌"
+                    status = "√" if dim_score.percentage >= result.threshold else "×"
                     lines.append(
                         f"### {name} ({dim_score.percentage:.0f}/100) {status}"
                     )
@@ -905,7 +905,7 @@ def generate_failure_report_v13(result: ChecklistResult) -> str:
     lines.extend([
         "## 下一步",
         "",
-        "❌ 未通过阈值，需要返工",
+        "× 未达到阈值，需要返工",
         "",
         "1. 运行 `cc-spec clarify <task-id>` 标记任务返工",
         "2. 完成上述未通过的检查项",

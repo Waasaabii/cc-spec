@@ -14,7 +14,7 @@ from cc_spec.subagent.executor import ExecutionResult
 class WaveResult:
     """单个 Wave 执行的聚合结果。
 
-    Attributes:
+    属性：
         wave_num: Wave 编号
         started_at: Wave 开始执行时间戳
         completed_at: Wave 执行完成时间戳（执行中则为 None）
@@ -30,7 +30,7 @@ class WaveResult:
     def all_passed(self) -> bool:
         """检查该 Wave 中的任务是否全部通过。
 
-        Returns:
+        返回：
             全部成功则为 True；任意失败则为 False
         """
         return all(result.success for result in self.results)
@@ -39,7 +39,7 @@ class WaveResult:
     def failed_tasks(self) -> list[str]:
         """获取失败任务 ID 列表。
 
-        Returns:
+        返回：
             执行失败的任务 ID 列表
         """
         return [result.task_id for result in self.results if not result.success]
@@ -48,7 +48,7 @@ class WaveResult:
     def duration_seconds(self) -> float:
         """计算该 Wave 的总耗时。
 
-        Returns:
+        返回：
             秒数；若 Wave 未完成则为 0.0
         """
         if self.completed_at is None:
@@ -59,7 +59,7 @@ class WaveResult:
     def success_rate(self) -> float:
         """计算该 Wave 内任务的成功率。
 
-        Returns:
+        返回：
             成功率百分比（0-100）
         """
         if not self.results:
@@ -74,7 +74,7 @@ class ResultCollector:
     该类管理任务执行结果的收集与聚合，按 Wave 组织，
     并提供汇总统计与报告生成功能。
 
-    Attributes:
+    属性：
         wave_results: Wave 编号到 WaveResult 的映射
         start_time: 总体执行开始时间
         end_time: 总体执行结束时间（执行中则为 None）
@@ -97,7 +97,7 @@ class ResultCollector:
     def start_wave(self, wave_num: int) -> None:
         """记录某个 Wave 的开始执行时间。
 
-        Args:
+        参数：
             wave_num: 开始的 Wave 编号
         """
         if wave_num not in self.wave_results:
@@ -109,16 +109,16 @@ class ResultCollector:
     def add_result(self, wave_num: int, result: ExecutionResult) -> None:
         """添加一个任务执行结果。
 
-        Args:
+        参数：
             wave_num: 该结果所属的 Wave 编号
             result: 要添加的任务执行结果
 
-        Raises:
+        异常：
             ValueError: Wave 尚未开始时抛出
         """
         if wave_num not in self.wave_results:
             raise ValueError(
-                f"Wave {wave_num} has not been started. Call start_wave() first."
+                f"波次 {wave_num} 尚未开始，请先调用 start_wave()。"
             )
 
         self.wave_results[wave_num].results.append(result)
@@ -126,21 +126,21 @@ class ResultCollector:
     def end_wave(self, wave_num: int) -> None:
         """记录某个 Wave 的结束执行时间。
 
-        Args:
+        参数：
             wave_num: 结束的 Wave 编号
 
-        Raises:
+        异常：
             ValueError: Wave 尚未开始时抛出
         """
         if wave_num not in self.wave_results:
-            raise ValueError(f"Wave {wave_num} has not been started")
+            raise ValueError(f"波次 {wave_num} 尚未开始")
 
         self.wave_results[wave_num].completed_at = datetime.now()
 
     def get_summary(self) -> dict:
         """获取执行汇总信息。
 
-        Returns:
+        返回：
             包含汇总统计信息的字典，包括：
             - total_waves: 执行的 Wave 总数
             - total_tasks: 执行的任务总数
@@ -174,11 +174,11 @@ class ResultCollector:
     def generate_report(self) -> str:
         """生成 Markdown 格式的执行报告。
 
-        Returns:
+        返回：
             格式化后的 Markdown 报告字符串
         """
         lines = [
-            "# SubAgent Execution Report",
+            "# SubAgent 执行报告",
             "",
         ]
 
@@ -186,62 +186,62 @@ class ResultCollector:
         summary = self.get_summary()
 
         lines.extend([
-            "## Summary",
+            "## 汇总",
             "",
-            f"- **Total Waves**: {summary['total_waves']}",
-            f"- **Total Tasks**: {summary['total_tasks']}",
-            f"- **Successful**: {summary['successful_tasks']}",
-            f"- **Failed**: {summary['failed_tasks']}",
-            f"- **Success Rate**: {summary['success_rate']:.1f}%",
-            f"- **Total Duration**: {summary['total_duration_seconds']:.2f}s",
+            f"- **波次数**：{summary['total_waves']}",
+            f"- **任务数**：{summary['total_tasks']}",
+            f"- **成功**：{summary['successful_tasks']}",
+            f"- **失败**：{summary['failed_tasks']}",
+            f"- **成功率**：{summary['success_rate']:.1f}%",
+            f"- **总耗时**：{summary['total_duration_seconds']:.2f} 秒",
             "",
         ])
 
         # 添加执行时间线
         if self.start_time:
             lines.extend([
-                "## Timeline",
+                "## 时间线",
                 "",
-                f"- **Started**: {self.start_time.isoformat()}",
+                f"- **开始**：{self.start_time.isoformat()}",
             ])
             if self.end_time:
-                lines.append(f"- **Completed**: {self.end_time.isoformat()}")
+                lines.append(f"- **结束**：{self.end_time.isoformat()}")
             lines.append("")
 
         # Wave 详情
         lines.extend([
-            "## Wave Details",
+            "## 波次详情",
             "",
         ])
 
         for wave_num in sorted(self.wave_results.keys()):
             wave = self.wave_results[wave_num]
 
-            status_emoji = "✅" if wave.all_passed else "❌"
+            status_icon = "√" if wave.all_passed else "×"
             lines.extend([
-                f"### Wave {wave_num} {status_emoji}",
+                f"### 波次 {wave_num} {status_icon}",
                 "",
-                f"- **Started**: {wave.started_at.isoformat()}",
+                f"- **开始**：{wave.started_at.isoformat()}",
             ])
 
             if wave.completed_at:
-                lines.append(f"- **Completed**: {wave.completed_at.isoformat()}")
-                lines.append(f"- **Duration**: {wave.duration_seconds:.2f}s")
+                lines.append(f"- **结束**：{wave.completed_at.isoformat()}")
+                lines.append(f"- **耗时**：{wave.duration_seconds:.2f} 秒")
 
             lines.extend([
-                f"- **Tasks**: {len(wave.results)}",
-                f"- **Success Rate**: {wave.success_rate:.1f}%",
+                f"- **任务数**：{len(wave.results)}",
+                f"- **成功率**：{wave.success_rate:.1f}%",
                 "",
             ])
 
             # 任务结果表
             lines.extend([
-                "| Task ID | Status | Duration (s) | Error |",
-                "|---------|--------|--------------|-------|",
+                "| 任务 ID | 状态 | 耗时（秒） | 错误 |",
+                "|---------|------|-----------|------|",
             ])
 
             for result in wave.results:
-                status = "✅ Success" if result.success else "❌ Failed"
+                status = "√ 成功" if result.success else "× 失败"
                 error = result.error or "-"
                 lines.append(
                     f"| {result.task_id} | {status} | {result.duration_seconds:.2f} | {error} |"
@@ -258,17 +258,17 @@ class ResultCollector:
 
         if failed_tasks_list:
             lines.extend([
-                "## Failed Tasks",
+                "## 失败任务",
                 "",
             ])
 
             for wave_num, result in failed_tasks_list:
                 lines.extend([
-                    f"### {result.task_id} (Wave {wave_num})",
+                    f"### {result.task_id}（波次 {wave_num}）",
                     "",
-                    f"**Error**: {result.error}",
+                    f"**错误**：{result.error}",
                     "",
-                    "**Output**:",
+                    "**输出**：",
                     "```",
                     result.output,
                     "```",
@@ -280,7 +280,7 @@ class ResultCollector:
     def has_failures(self) -> bool:
         """检查执行过程中是否有任务失败。
 
-        Returns:
+        返回：
             任意任务失败则为 True，否则为 False
         """
         return any(not wave.all_passed for wave in self.wave_results.values())
@@ -288,7 +288,7 @@ class ResultCollector:
     def get_failed_waves(self) -> list[int]:
         """获取存在失败任务的 Wave 编号列表。
 
-        Returns:
+        返回：
             含失败任务的 Wave 编号列表
         """
         return [

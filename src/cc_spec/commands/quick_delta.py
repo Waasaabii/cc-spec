@@ -30,7 +30,7 @@ console = Console()
 class FileChange:
     """文件变更信息 (v1.3 新增)。
 
-    Attributes:
+    属性：
         path: 文件路径
         operation: 变更类型 (ADDED/MODIFIED/REMOVED/RENAMED)
         old_path: 原文件路径 (仅用于 RENAMED)
@@ -49,7 +49,7 @@ class FileChange:
 class DiffStats:
     """Git diff 统计信息 (v1.3 新增)。
 
-    Attributes:
+    属性：
         changes: 文件变更列表
         total_additions: 总新增行数
         total_deletions: 总删除行数
@@ -69,7 +69,7 @@ def _parse_git_diff() -> DiffStats | None:
 
     优先解析 staged 变更，如果没有则解析最近一次 commit 的变更。
 
-    Returns:
+    返回：
         DiffStats 对象，包含变更列表和统计信息；如果失败则返回 None
     """
     # 首先尝试获取 staged 变更
@@ -114,10 +114,10 @@ def _parse_git_diff() -> DiffStats | None:
 def _parse_name_status(output: str) -> list[FileChange]:
     """解析 git diff --name-status 输出。
 
-    Args:
+    参数：
         output: git diff --name-status 的输出
 
-    Returns:
+    返回：
         FileChange 列表
     """
     changes: list[FileChange] = []
@@ -164,10 +164,10 @@ def _parse_name_status(output: str) -> list[FileChange]:
 def _get_diff_stats(diff_target: str) -> dict[str, tuple[int, int]]:
     """获取每个文件的行数统计。
 
-    Args:
+    参数：
         diff_target: diff 目标 (如 "--staged" 或 "HEAD~1")
 
-    Returns:
+    返回：
         文件路径到 (additions, deletions) 的映射
     """
     stats: dict[str, tuple[int, int]] = {}
@@ -232,13 +232,13 @@ def quick_delta_command(
 
     if not cc_spec_root.exists():
         console.print(
-            "[red]Error:[/red] Not a cc-spec project. Run 'cc-spec init' first.",
+            "[red]错误：[/red] 当前目录不是 cc-spec 项目。请先运行 'cc-spec init'。",
             style="red",
         )
         raise typer.Exit(1)
 
     console.print(
-        "[cyan]Creating quick-delta record...[/cyan]\n",
+        "[cyan]正在创建 quick-delta 记录...[/cyan]\n",
     )
 
     # 1. 生成变更名称（格式：quick-YYYYMMDD-HHMMSS-{slug}）
@@ -249,27 +249,27 @@ def quick_delta_command(
     slug = _generate_slug(message)
     change_name = f"quick-{timestamp}-{slug}"
 
-    console.print(f"[dim]Change name:[/dim] [bold]{change_name}[/bold]")
+    console.print(f"[dim]变更名称：[/dim] [bold]{change_name}[/bold]")
 
     # 2. 获取 Git 信息（如果可用）
     git_info = _get_git_info()
 
     if git_info:
         console.print(
-            f"[dim]Git commit:[/dim] {git_info['hash'][:7]} - {git_info['message']}"
+            f"[dim]Git 提交：[/dim] {git_info['hash'][:7]} - {git_info['message']}"
         )
     else:
-        console.print("[dim]Git info:[/dim] Not available")
+        console.print("[dim]Git 信息：[/dim] 不可用")
 
     # v1.3: 解析 git diff 获取文件变更
     diff_stats = _parse_git_diff()
 
     if diff_stats and diff_stats.changes:
-        console.print(f"[dim]File changes:[/dim] {len(diff_stats.changes)} file(s)")
+        console.print(f"[dim]文件变更：[/dim] {len(diff_stats.changes)} 个文件")
         # 显示文件变更表格
         _display_file_changes_table(diff_stats)
     else:
-        console.print("[dim]File changes:[/dim] No staged changes detected")
+        console.print("[dim]文件变更：[/dim] 未检测到暂存区变更")
 
     # 3. 创建归档目录结构
     changes_dir = get_changes_dir(project_root)
@@ -292,25 +292,25 @@ def quick_delta_command(
 
     mini_proposal_path.write_text(mini_proposal_content, encoding="utf-8")
     console.print(
-        f"\n[green]✓[/green] Created mini-proposal.md",
+        f"\n[green]✓[/green] 已创建 mini-proposal.md",
     )
 
     # 5. 显示成功信息
     console.print(
-        "\n[bold green]Quick-delta record created successfully![/bold green]",
+        "\n[bold green]quick-delta 记录创建成功！[/bold green]",
         style="green",
     )
 
     # 显示归档位置
     relative_path = change_dir.relative_to(project_root)
     console.print(
-        f"\n[dim]Archived to:[/dim] [cyan]{relative_path}[/cyan]"
+        f"\n[dim]已归档到：[/dim] [cyan]{relative_path}[/cyan]"
     )
 
     # 显示内容预览 (v1.3：包含文件变更)
     preview_panel = Panel(
         _format_preview(message, git_info, diff_stats),
-        title="[bold]Quick-Delta Summary[/bold]",
+        title="[bold]quick-delta 摘要[/bold]",
         border_style="green",
         padding=(1, 2),
     )
@@ -318,13 +318,12 @@ def quick_delta_command(
 
     # 提示后续操作
     console.print(
-        "\n[dim]Tip: This change has been directly archived. "
-        "For complex changes, use 'cc-spec specify' instead.[/dim]"
+        "\n[dim]提示：该变更已被直接归档。复杂变更请改用 'cc-spec specify'。[/dim]"
     )
 
 
 def _generate_slug(message: str, max_length: int = 30) -> str:
-    """从 message 生成 URL-safe 的 slug。
+    """从 message 生成 URL 友好的 slug。
 
     参数：
         message：原始消息
@@ -412,9 +411,9 @@ def _display_file_changes_table(diff_stats: DiffStats) -> None:
     参数：
         diff_stats：Git diff 统计信息
     """
-    table = Table(title="File Changes", border_style="cyan", show_lines=False)
-    table.add_column("Type", style="cyan", justify="center", width=10)
-    table.add_column("File", style="white")
+    table = Table(title="文件变更", border_style="cyan", show_lines=False)
+    table.add_column("类型", style="cyan", justify="center", width=10)
+    table.add_column("文件", style="white")
     table.add_column("+/-", style="dim", justify="right", width=10)
 
     # 操作类型的显示样式
@@ -488,7 +487,7 @@ def _generate_mini_proposal(
         mini-proposal 的 markdown 内容
     """
     lines = [
-        f"# Quick Delta: {message}",
+        f"# 快速变更：{message}",
         "",
         "## 变更信息",
         "",
@@ -504,9 +503,9 @@ def _generate_mini_proposal(
         lines.extend([
             "## Git 信息",
             "",
-            f"- **Commit**: `{git_info['hash']}`",
-            f"- **Author**: {git_info['author']}",
-            f"- **Message**: {git_info['message']}",
+            f"- **提交**: `{git_info['hash']}`",
+            f"- **作者**: {git_info['author']}",
+            f"- **消息**: {git_info['message']}",
             "",
         ])
 
@@ -608,12 +607,12 @@ def _format_preview(
         格式化的预览文本
     """
     lines = [
-        f"[bold]Description:[/bold] {message}",
+        f"[bold]描述：[/bold] {message}",
     ]
 
     if git_info:
         lines.append(
-            f"[bold]Git Commit:[/bold] {git_info['hash'][:7]} - {git_info['message']}"
+            f"[bold]Git 提交：[/bold] {git_info['hash'][:7]} - {git_info['message']}"
         )
 
     # v1.3: 添加文件变更摘要
@@ -634,8 +633,8 @@ def _format_preview(
             parts.append(f"[blue]→{renamed_count}[/blue]")
 
         lines.append(
-            f"[bold]Files Changed:[/bold] {' '.join(parts)} "
-            f"(+{diff_stats.total_additions} -{diff_stats.total_deletions} lines)"
+            f"[bold]变更文件：[/bold] {' '.join(parts)} "
+            f"（+{diff_stats.total_additions} -{diff_stats.total_deletions} 行）"
         )
 
     return "\n".join(lines)

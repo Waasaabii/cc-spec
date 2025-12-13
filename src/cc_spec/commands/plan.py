@@ -31,7 +31,7 @@ console = Console()
 def plan_command(
     change_or_id: Optional[str] = typer.Argument(
         None,
-        help="Change name or ID (e.g., add-oauth or C-001)",
+        help="变更名称或 ID（例如 add-oauth 或 C-001）",
     ),
 ) -> None:
     """生成执行计划（tasks.md）与技术设计（design.md）。
@@ -51,7 +51,7 @@ def plan_command(
     project_root = find_project_root()
     if project_root is None:
         console.print(
-            "[red]Error:[/red] Not a cc-spec project. Run 'cc-spec init' first.",
+            "[red]错误：[/red] 当前目录不是 cc-spec 项目，请先运行 'cc-spec init'。",
             style="red",
         )
         raise typer.Exit(1)
@@ -67,7 +67,7 @@ def plan_command(
             # ID 模式：解析为名称
             entry = id_manager.get_change_entry(change_or_id)
             if not entry:
-                console.print(f"[red]Error:[/red] Change not found: {change_or_id}")
+                console.print(f"[red]错误：[/red] 未找到变更：{change_or_id}")
                 raise typer.Exit(1)
             change = entry.name
         else:
@@ -81,8 +81,8 @@ def plan_command(
         current_state = get_current_change(cc_spec_root)
         if not current_state:
             console.print(
-                "[red]Error:[/red] No active change found. "
-                "Please specify a change name or run 'cc-spec specify' first.",
+                "[red]错误：[/red] 未找到当前激活的变更。"
+                "请指定变更名称，或先运行 'cc-spec specify'。",
                 style="red",
             )
             raise typer.Exit(1)
@@ -91,29 +91,29 @@ def plan_command(
         change_dir = cc_spec_root / "changes" / change
 
     if not change_dir.exists():
-        console.print(f"[red]Error:[/red] Change '{change}' not found.", style="red")
+        console.print(f"[red]错误：[/red] 未找到变更 '{change}'。", style="red")
         raise typer.Exit(1)
 
     # 检查 proposal.md 是否存在
     proposal_path = change_dir / "proposal.md"
     if not proposal_path.exists():
         console.print(
-            f"[red]Error:[/red] proposal.md not found in {change_dir}",
+            f"[red]错误：[/red] 在 {change_dir} 中未找到 proposal.md",
             style="red",
         )
         raise typer.Exit(1)
 
-    console.print(f"[cyan]Planning change:[/cyan] [bold]{change}[/bold]")
+    console.print(f"[cyan]正在规划变更：[/cyan] [bold]{change}[/bold]")
 
     # 读取提案内容
     proposal_content = proposal_path.read_text(encoding="utf-8")
-    console.print(f"[dim]Read proposal ({len(proposal_content)} characters)[/dim]")
+    console.print(f"[dim]已读取 proposal（{len(proposal_content)} 个字符）[/dim]")
 
     # 基于模板生成 tasks.md
     tasks_path = change_dir / "tasks.md"
     design_path = change_dir / "design.md"
 
-    console.print("\n[cyan]Generating execution plan...[/cyan]")
+    console.print("\n[cyan]正在生成执行计划...[/cyan]")
 
     # 准备模板变量
     template_vars = {
@@ -130,14 +130,14 @@ def plan_command(
             tasks_path,
             variables=template_vars,
         )
-        console.print(f"[green]✓[/green] Generated tasks.md")
+        console.print("[green]√[/green] 已生成 tasks.md")
     except Exception as e:
         # 若模板不存在，则创建基础结构
         console.print(
-            f"[yellow]Warning:[/yellow] Template not found, creating basic structure"
+            "[yellow]警告：[/yellow] 未找到模板，正在创建基础结构"
         )
         _create_basic_tasks_md(tasks_path, change, proposal_content)
-        console.print(f"[green]✓[/green] Created basic tasks.md")
+        console.print("[green]√[/green] 已创建基础 tasks.md")
 
     # 生成 design.md
     try:
@@ -146,23 +146,23 @@ def plan_command(
             design_path,
             variables=template_vars,
         )
-        console.print(f"[green]✓[/green] Generated design.md")
+        console.print("[green]√[/green] 已生成 design.md")
     except Exception as e:
         # 创建基础结构
         console.print(
-            f"[yellow]Warning:[/yellow] Template not found, creating basic structure"
+            "[yellow]警告：[/yellow] 未找到模板，正在创建基础结构"
         )
         _create_basic_design_md(design_path, change, proposal_content)
-        console.print(f"[green]✓[/green] Created basic design.md")
+        console.print("[green]√[/green] 已创建基础 design.md")
 
     # 校验依赖关系（目前为基础校验）
-    console.print("\n[cyan]Validating task dependencies...[/cyan]")
+    console.print("\n[cyan]正在校验任务依赖...[/cyan]")
     validation_result = _validate_tasks_dependencies(tasks_path)
     if validation_result["valid"]:
-        console.print("[green]✓[/green] Dependencies are valid")
+        console.print("[green]√[/green] 依赖关系校验通过")
     else:
         console.print(
-            f"[yellow]Warning:[/yellow] {validation_result['message']}",
+            f"[yellow]警告：[/yellow] {validation_result['message']}",
             style="yellow",
         )
 
@@ -180,32 +180,32 @@ def plan_command(
         )
 
         update_state(status_path, state)
-        console.print("\n[green]✓[/green] Updated state to plan stage")
+        console.print("\n[green]√[/green] 已将状态更新到 plan 阶段")
 
     except Exception as e:
         console.print(
-            f"[yellow]Warning:[/yellow] Could not update state: {e}",
+            f"[yellow]警告：[/yellow] 无法更新状态：{e}",
             style="yellow",
         )
 
     # 展示任务概览
-    console.print("\n[bold cyan]Task Overview:[/bold cyan]")
+    console.print("\n[bold cyan]任务概览：[/bold cyan]")
     tasks_summary = _parse_tasks_summary(tasks_path)
     if tasks_summary:
         show_task_table(console, tasks_summary, show_wave=True, show_dependencies=True)
 
     # 展示下一步
     console.print(
-        "\n[bold green]Plan generated successfully![/bold green]",
+        "\n[bold green]计划生成成功！[/bold green]",
         style="green",
     )
-    console.print("\n[bold]Next steps:[/bold]")
-    console.print("1. Review and edit tasks.md to refine task breakdown")
-    console.print("2. Review and edit design.md for technical decisions")
-    console.print("3. Run [cyan]cc-spec apply[/cyan] to execute tasks")
+    console.print("\n[bold]下一步：[/bold]")
+    console.print("1. 查看并编辑 tasks.md，完善任务拆解")
+    console.print("2. 查看并编辑 design.md，补充技术决策")
+    console.print("3. 运行 [cyan]cc-spec apply[/cyan] 执行任务")
 
     console.print(
-        f"\n[dim]Files created:[/dim]\n"
+        f"\n[dim]已生成文件：[/dim]\n"
         f"  - {tasks_path.relative_to(Path.cwd())}\n"
         f"  - {design_path.relative_to(Path.cwd())}"
     )
@@ -215,21 +215,21 @@ def _create_basic_tasks_md(
     tasks_path: Path, change_name: str, proposal_content: str
 ) -> None:
     """当模板不可用时创建基础 tasks.md 结构。"""
-    content = f"""# Tasks - {change_name}
+    content = f"""# 任务 - {change_name}
 
-> Generated from proposal on {datetime.now().strftime("%Y-%m-%d")}
+> 根据 proposal 生成于 {datetime.now().strftime("%Y-%m-%d")}
 
 ## 概览
 
-| Wave | Task-ID | 预估 | 状态 | 依赖 |
+| 波次 | 任务 ID | 预估 | 状态 | 依赖 |
 |------|---------|------|------|------|
-| 0 | 01-SETUP | 30k | 🟦 空闲 | - |
+| 0 | 01-SETUP | 30k | ○ 待执行 | - |
 
 ## 任务详情
 
-### Task: 01-SETUP
+### 01-SETUP - 初始化与准备
 **预估上下文**: ~30k tokens
-**状态**: 🟦 空闲
+**状态**: ○ 待执行
 **依赖**: 无
 
 **必读文档**:
@@ -239,7 +239,7 @@ def _create_basic_tasks_md(
 **核心代码入口**:
 - (TODO: 根据需求填写)
 
-**Checklist**:
+**检查清单**:
 - [ ] 分析需求
 - [ ] 设计方案
 - [ ] 实现功能
@@ -254,18 +254,18 @@ _(SubAgent 执行时填写)_
 
 此文件是从模板自动生成的基础结构。请根据实际需求：
 
-1. 添加更多任务到概览表格
-2. 为每个任务编写详细的 Checklist
-3. 指定必读文档和代码入口
-4. 设置任务依赖关系和 Wave 分组
+1. 在概览表格中补充更多任务
+2. 为每个任务编写更详细的检查清单
+3. 指定必读文档与核心代码入口
+4. 设置任务依赖关系与波次分组
 5. 预估每个任务的上下文消耗
 
-## Wave 说明
+## 波次说明
 
-- Wave 表示任务的执行批次
-- 同一 Wave 内的任务可以并发执行
-- 不同 Wave 之间按顺序执行
-- 任务只能依赖前面 Wave 的任务
+- 波次（Wave）表示任务的执行批次
+- 同一波次内的任务可以并发执行
+- 不同波次之间按顺序执行
+- 任务只能依赖更早波次的任务
 """
     tasks_path.write_text(content, encoding="utf-8")
 
@@ -274,9 +274,9 @@ def _create_basic_design_md(
     design_path: Path, change_name: str, proposal_content: str
 ) -> None:
     """当模板不可用时创建基础 design.md 结构。"""
-    content = f"""# Design - {change_name}
+    content = f"""# 设计 - {change_name}
 
-> Technical design and architecture decisions
+> 技术设计与架构决策
 
 ## 概述
 
@@ -356,7 +356,7 @@ def _validate_tasks_dependencies(tasks_path: Path) -> dict:
         if not matches:
             return {
                 "valid": True,
-                "message": "No tasks found in overview table",
+                "message": "概览表中未找到任何任务",
                 "tasks": [],
             }
 
@@ -379,21 +379,21 @@ def _validate_tasks_dependencies(tasks_path: Path) -> dict:
                     invalid_deps.append((task_id, dep))
 
         if invalid_deps:
-            dep_str = ", ".join(f"{t} depends on {d}" for t, d in invalid_deps)
+            dep_str = "，".join(f"{t} 依赖 {d}" for t, d in invalid_deps)
             return {
                 "valid": False,
-                "message": f"Invalid dependencies: {dep_str}",
+                "message": f"无效依赖：{dep_str}",
                 "tasks": list(task_ids),
             }
 
         return {
             "valid": True,
-            "message": f"Found {len(task_ids)} tasks, all dependencies valid",
+            "message": f"共找到 {len(task_ids)} 个任务，依赖关系均有效",
             "tasks": list(task_ids),
         }
 
     except Exception as e:
-        return {"valid": False, "message": f"Error parsing tasks: {e}", "tasks": []}
+        return {"valid": False, "message": f"解析任务失败：{e}", "tasks": []}
 
 
 def _parse_tasks_summary(tasks_path: Path) -> list[dict]:
@@ -421,6 +421,11 @@ def _parse_tasks_summary(tasks_path: Path) -> list[dict]:
                 "🟩": "completed",
                 "🟥": "failed",
                 "⏰": "timeout",
+                "○": "pending",
+                "…": "in_progress",
+                "√": "completed",
+                "×": "failed",
+                "!": "timeout",
             }
 
             # 提取状态图标（通常为首字符）
@@ -451,5 +456,5 @@ def _parse_tasks_summary(tasks_path: Path) -> list[dict]:
         return tasks
 
     except Exception as e:
-        console.print(f"[yellow]Warning:[/yellow] Could not parse tasks: {e}")
+        console.print(f"[yellow]警告：[/yellow] 无法解析任务：{e}")
         return []

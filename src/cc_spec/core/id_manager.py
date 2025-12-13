@@ -278,7 +278,7 @@ class IDManager:
             task_id = parts[1]
 
             if not change_id.startswith("C-"):
-                raise ValueError(f"Invalid task ID format: {id_str}")
+                raise ValueError(f"任务 ID 格式不合法：{id_str}")
 
             return ParsedID(
                 type=IDType.TASK,

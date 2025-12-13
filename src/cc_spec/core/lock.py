@@ -19,7 +19,7 @@ class LockInfo:
 
     存储任务锁的详细信息，包括持有者、开始时间、超时设置等。
 
-    Attributes:
+    属性：
         task_id: 被锁定的任务 ID
         agent_id: 持有锁的 SubAgent ID
         started_at: 锁创建时间
@@ -44,7 +44,7 @@ class LockInfo:
     def is_expired(self) -> bool:
         """检查锁是否已超时。
 
-        Returns:
+        返回：
             True 如果锁已超时，False 否则
         """
         elapsed = datetime.now() - self.started_at
@@ -53,7 +53,7 @@ class LockInfo:
     def remaining_seconds(self) -> float:
         """计算锁剩余有效时间 (秒)。
 
-        Returns:
+        返回：
             剩余秒数，如果已超时则返回 0
         """
         elapsed = datetime.now() - self.started_at
@@ -63,7 +63,7 @@ class LockInfo:
     def to_json(self) -> str:
         """序列化为 JSON 字符串。
 
-        Returns:
+        返回：
             JSON 格式的锁信息
         """
         return json.dumps({
@@ -77,7 +77,7 @@ class LockInfo:
     def to_dict(self) -> dict:
         """转换为字典格式。
 
-        Returns:
+        返回：
             字典格式的锁信息
         """
         return {
@@ -92,10 +92,10 @@ class LockInfo:
     def from_json(cls, data: str) -> LockInfo:
         """从 JSON 字符串反序列化。
 
-        Args:
+        参数：
             data: JSON 格式的锁信息
 
-        Returns:
+        返回：
             LockInfo 实例
         """
         obj = json.loads(data)
@@ -111,10 +111,10 @@ class LockInfo:
     def from_dict(cls, data: dict) -> LockInfo:
         """从字典创建实例。
 
-        Args:
+        参数：
             data: 字典格式的锁信息
 
-        Returns:
+        返回：
             LockInfo 实例
         """
         started_at = data["started_at"]
@@ -140,7 +140,7 @@ class LockManager:
     def __init__(self, cc_spec_root: Path, timeout_minutes: int = 30):
         """初始化锁管理器。
 
-        Args:
+        参数：
             cc_spec_root: .cc-spec 目录路径
             timeout_minutes: 默认锁超时时间 (分钟)
         """
@@ -152,10 +152,10 @@ class LockManager:
     def _get_lock_path(self, task_id: str) -> Path:
         """获取任务对应的锁文件路径。
 
-        Args:
+        参数：
             task_id: 任务 ID
 
-        Returns:
+        返回：
             锁文件路径
         """
         # 清理任务 ID 中的特殊字符
@@ -171,13 +171,13 @@ class LockManager:
     ) -> bool:
         """尝试获取任务锁。
 
-        Args:
+        参数：
             task_id: 任务 ID
             agent_id: 执行的 SubAgent ID
             timeout_minutes: 锁超时时间 (分钟)，None 使用默认值
             force: 是否强制获取 (覆盖已有锁)
 
-        Returns:
+        返回：
             是否成功获取锁
         """
         lock_path = self._get_lock_path(task_id)
@@ -211,11 +211,11 @@ class LockManager:
     def release(self, task_id: str, agent_id: str | None = None) -> bool:
         """释放任务锁。
 
-        Args:
+        参数：
             task_id: 任务 ID
             agent_id: 可选，仅当锁属于该 agent 时才释放
 
-        Returns:
+        返回：
             是否成功释放锁
         """
         lock_path = self._get_lock_path(task_id)
@@ -242,10 +242,10 @@ class LockManager:
     def get_lock_info(self, task_id: str) -> LockInfo | None:
         """获取锁信息。
 
-        Args:
+        参数：
             task_id: 任务 ID
 
-        Returns:
+        返回：
             LockInfo 实例，如果锁不存在则返回 None
         """
         lock_path = self._get_lock_path(task_id)
@@ -261,10 +261,10 @@ class LockManager:
     def is_locked(self, task_id: str) -> bool:
         """检查任务是否被锁定。
 
-        Args:
+        参数：
             task_id: 任务 ID
 
-        Returns:
+        返回：
             True 如果任务被锁定且锁未超时
         """
         lock_info = self.get_lock_info(task_id)
@@ -275,7 +275,7 @@ class LockManager:
     def cleanup_expired(self) -> list[str]:
         """清理所有过期的锁。
 
-        Returns:
+        返回：
             被清理的任务 ID 列表
         """
         cleaned: list[str] = []
@@ -303,7 +303,7 @@ class LockManager:
     def list_locks(self) -> list[LockInfo]:
         """列出所有当前有效的锁。
 
-        Returns:
+        返回：
             有效锁的列表
         """
         locks: list[LockInfo] = []
@@ -324,7 +324,7 @@ class LockManager:
     def force_release_all(self) -> int:
         """强制释放所有锁。
 
-        Returns:
+        返回：
             释放的锁数量
         """
         count = 0

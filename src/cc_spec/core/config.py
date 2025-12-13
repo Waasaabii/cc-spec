@@ -509,7 +509,7 @@ def load_config(config_path: Path) -> Config:
         yaml.YAMLError：配置文件内容不合法
     """
     if not config_path.exists():
-        raise FileNotFoundError(f"Config file not found: {config_path}")
+        raise FileNotFoundError(f"未找到配置文件：{config_path}")
 
     with open(config_path, "r", encoding="utf-8") as f:
         data = yaml.safe_load(f)

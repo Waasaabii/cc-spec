@@ -14,16 +14,16 @@ async def download_file(
     """
     从 URL 下载文件到指定目标路径。
 
-    Args:
+    参数：
         url: 要下载的 URL
         dest_path: 目标文件路径
         timeout: 请求超时时间（秒）
         follow_redirects: 是否跟随 HTTP 重定向
 
-    Returns:
+    返回：
         bool: 下载成功返回 True，否则返回 False
 
-    Raises:
+    异常：
         httpx.HTTPError: HTTP 请求失败时抛出
     """
     try:
@@ -42,7 +42,7 @@ async def download_file(
 
     except (httpx.HTTPError, OSError) as e:
         # 记录错误但不抛出异常——由调用方处理回退逻辑
-        print(f"Download failed: {e}")
+        print(f"下载失败：{e}")
         return False
 
 
@@ -50,7 +50,7 @@ def get_template_cache_dir() -> Path:
     """
     获取模板缓存目录。
 
-    Returns:
+    返回：
         Path: 缓存目录路径（~/.cc-spec/templates/）
     """
     cache_dir = Path.home() / ".cc-spec" / "templates"
@@ -62,12 +62,12 @@ def get_github_raw_url(repo: str, path: str, branch: str = "main") -> str:
     """
     构造 GitHub raw 内容的 URL。
 
-    Args:
+    参数：
         repo: 仓库，格式为 "owner/repo"
         path: 仓库内的文件路径
         branch: 分支名（默认："main"）
 
-    Returns:
+    返回：
         str: raw 内容 URL
     """
     return f"https://raw.githubusercontent.com/{repo}/{branch}/{path}"

@@ -30,7 +30,7 @@ from cc_spec.subagent.task_parser import (
 def _generate_agent_id() -> str:
     """生成唯一的 agent ID。
 
-    Returns:
+    返回：
         格式为 'agent-<8位随机字符>' 的字符串
     """
     return f"agent-{uuid.uuid4().hex[:8]}"
@@ -42,7 +42,7 @@ class ExecutionResult:
 
     v1.3 新增字段: agent_id, wave, retry_count
 
-    Attributes:
+    属性：
         task_id: 执行的任务 ID
         success: 任务是否成功完成
         output: 任务执行的标准输出
@@ -77,7 +77,7 @@ class SubAgentExecutor:
     v1.2: 添加 Profile 支持，实现任务特定的配置。
     v1.3: 添加 LockManager 集成，防止并发冲突；添加 agent_id 追踪。
 
-    Attributes:
+    属性：
         tasks_md_path: tasks.md 文件路径
         max_concurrent: 最大并发任务数
         timeout_ms: 默认任务超时时间 (毫秒)
@@ -98,7 +98,7 @@ class SubAgentExecutor:
     ):
         """初始化执行器。
 
-        Args:
+        参数：
             tasks_md_path: tasks.md 文件路径
             max_concurrent: 最大并发任务数
             timeout_ms: 默认任务超时时间 (毫秒)
@@ -106,7 +106,7 @@ class SubAgentExecutor:
             lock_manager: v1.3 - 可选的锁管理器
             cc_spec_root: v1.3 - .cc-spec 目录路径 (用于创建锁管理器)
 
-        Raises:
+        异常：
             FileNotFoundError: 如果 tasks_md_path 不存在
             ValueError: 如果 tasks.md 格式无效
         """
@@ -150,10 +150,10 @@ class SubAgentExecutor:
 
         v1.2: 使用 task.profile 指定的配置，回退到 "common"。
 
-        Args:
+        参数：
             task: 要获取配置的任务
 
-        Returns:
+        返回：
             合并后的 SubAgentProfile 配置
         """
         if self.config is None:
@@ -167,7 +167,7 @@ class SubAgentExecutor:
     def load_document(self) -> TasksDocument:
         """加载并解析 tasks.md。
 
-        Returns:
+        返回：
             解析后的 TasksDocument
         """
         self.tasks_md_content = self.tasks_md_path.read_text(encoding="utf-8")
@@ -177,7 +177,7 @@ class SubAgentExecutor:
     def set_task_executor(self, executor: Callable[[Task], ExecutionResult]) -> None:
         """设置自定义任务执行器（用于测试或真实实现）。
 
-        Args:
+        参数：
             executor: 接收 Task 并返回 ExecutionResult 的函数
         """
         self._task_executor = executor
@@ -191,26 +191,26 @@ class SubAgentExecutor:
         - 需要修改的代码入口
         - 在 tasks.md 中更新任务状态与检查清单的说明
 
-        Args:
+        参数：
             task: 需要构建提示词的任务
             change_dir: 变更目录路径
 
-        Returns:
+        返回：
             面向 SubAgent 的格式化提示词字符串
         """
         prompt_lines = [
-            f"# Task: {task.task_id} - {task.name}",
+            f"# 任务：{task.task_id} - {task.name}",
             "",
-            f"You are executing task {task.task_id} as part of the '{self.doc.change_name}' change.",
+            f"你正在执行任务 {task.task_id}，这是变更 '{self.doc.change_name}' 的一部分。",
             "",
-            "## Task Details",
+            "## 任务详情",
             "",
         ]
 
         # 添加依赖信息
         if task.dependencies:
             prompt_lines.extend([
-                "**Dependencies (already completed):**",
+                "**依赖（已完成）：**",
                 *[f"- {dep_id}" for dep_id in task.dependencies],
                 "",
             ])
@@ -218,9 +218,9 @@ class SubAgentExecutor:
         # 添加必读文档
         if task.required_docs:
             prompt_lines.extend([
-                "**Required Documents:**",
+                "**必读文档：**",
                 "",
-                "Please read these documents to understand the context and requirements:",
+                "请阅读这些文档以理解上下文与要求：",
                 *[f"- {doc}" for doc in task.required_docs],
                 "",
             ])
@@ -228,9 +228,9 @@ class SubAgentExecutor:
         # 添加代码入口
         if task.code_entry_points:
             prompt_lines.extend([
-                "**Code Entry Points:**",
+                "**代码入口：**",
                 "",
-                "Focus your implementation on these code locations:",
+                "请把实现重点放在这些代码位置：",
                 *[f"- {entry}" for entry in task.code_entry_points],
                 "",
             ])
@@ -238,9 +238,9 @@ class SubAgentExecutor:
         # 添加检查清单
         if task.checklist_items:
             prompt_lines.extend([
-                "**Checklist:**",
+                "**检查清单：**",
                 "",
-                "Complete all items in this checklist:",
+                "请完成以下检查清单中的所有条目：",
                 *[
                     f"- [{'x' if item.status.value == 'passed' else ' '}] {item.description}"
                     for item in task.checklist_items
@@ -250,21 +250,21 @@ class SubAgentExecutor:
 
         # 添加执行说明
         prompt_lines.extend([
-            "## Instructions",
+            "## 执行说明",
             "",
-            "1. Read all required documents carefully",
-            "2. Implement the required changes at the specified code entry points",
-            "3. Test your implementation thoroughly",
-            "4. Update your progress in tasks.md as you complete checklist items",
+            "1. 仔细阅读所有必读文档",
+            "2. 在指定的代码入口处实现所需改动",
+            "3. 充分测试你的实现",
+            "4. 完成检查清单项后，在 tasks.md 中更新进度",
             "",
-            "## Status Reporting",
+            "## 状态回报",
             "",
-            f"When you complete the task, update the status in {self.tasks_md_path}:",
-            f"- Change task {task.task_id} status to 🟩 COMPLETED",
-            "- Add execution log with completion time and your SubAgent ID",
-            "- Mark all checklist items as completed",
+            f"完成任务后，请在 {self.tasks_md_path} 中更新状态：",
+            f"- 将任务 {task.task_id} 状态改为 🟩 完成",
+            "- 添加执行日志，包含完成时间与 SubAgent ID",
+            "- 将所有检查清单项勾选为已完成",
             "",
-            "If you encounter errors, update the status to 🟥 FAILED and document the issue.",
+            "如果遇到错误，请将状态更新为 🟥 失败，并记录问题说明。",
         ])
 
         return "\n".join(prompt_lines)
@@ -278,11 +278,11 @@ class SubAgentExecutor:
         在实际实现中，这会启动一个 Claude Code SubAgent。
         目前是模拟执行，返回模拟结果。
 
-        Args:
+        参数：
             task: 要执行的任务
             wave_num: v1.3 - 任务所属的 Wave 编号
 
-        Returns:
+        返回：
             包含执行详情的 ExecutionResult
         """
         # v1.3: 生成唯一的 agent_id
@@ -391,12 +391,12 @@ class SubAgentExecutor:
         在执行任务前尝试获取锁，执行完成后释放锁。
         如果锁被占用，根据 skip_locked 参数决定是跳过还是返回错误。
 
-        Args:
+        参数：
             task: 要执行的任务
             wave_num: 任务所属的 Wave 编号
             skip_locked: 是否跳过被锁定的任务
 
-        Returns:
+        返回：
             ExecutionResult，包含执行结果或锁被占用的错误信息
         """
         agent_id = _generate_agent_id()
@@ -466,22 +466,22 @@ class SubAgentExecutor:
         3. 并发执行任务 (带锁保护)
         4. 收集结果并更新状态为 COMPLETED/FAILED
 
-        Args:
+        参数：
             wave_num: 要执行的 Wave 编号
             use_lock: v1.3 - 是否使用锁机制
             skip_locked: v1.3 - 是否跳过被锁定的任务
 
-        Returns:
+        返回：
             该 Wave 内所有任务的 ExecutionResult 列表
 
-        Raises:
+        异常：
             ValueError: 如果 Wave 编号无效
         """
         # 获取该 Wave 的任务
         tasks = get_tasks_by_wave(self.doc, wave_num)
 
         if not tasks:
-            raise ValueError(f"No tasks found for wave {wave_num}")
+            raise ValueError(f"未找到波次 {wave_num} 的任务")
 
         # 过滤 IDLE 任务 (只执行未开始的任务)
         idle_tasks = [t for t in tasks if t.status == TaskStatus.IDLE]
@@ -569,18 +569,18 @@ class SubAgentExecutor:
         3. 如果有失败，停止执行并返回结果
         4. 继续下一个 Wave
 
-        Args:
+        参数：
             start_wave: 开始执行的 Wave 编号 (默认: 0)
             use_lock: v1.3 - 是否使用锁机制
 
-        Returns:
+        返回：
             Wave 编号到 ExecutionResult 列表的映射字典
 
-        Raises:
+        异常：
             ValueError: 如果 start_wave 无效
         """
         if start_wave < 0:
-            raise ValueError(f"start_wave must be >= 0, got: {start_wave}")
+            raise ValueError(f"start_wave 必须 >= 0，实际为：{start_wave}")
 
         all_results: dict[int, list[ExecutionResult]] = {}
 
@@ -606,7 +606,7 @@ class SubAgentExecutor:
     def get_progress_summary(self) -> dict:
         """获取当前执行进度摘要。
 
-        Returns:
+        返回：
             包含进度信息的字典:
             - total_tasks: 任务总数
             - completed_tasks: 已完成任务数
@@ -637,7 +637,7 @@ class SubAgentExecutor:
     def _update_tasks_md(self, task_id: str, status: TaskStatus, log: dict | None = None) -> None:
         """更新 tasks.md 文件中的任务状态。
 
-        Args:
+        参数：
             task_id: 要更新的任务 ID
             status: 新状态
             log: 可选的执行日志字典，包含 completed_at, subagent_id, notes 等键
@@ -653,10 +653,10 @@ class SubAgentExecutor:
     def get_retry_count(self, task_id: str) -> int:
         """获取任务的重试次数 (v1.3 新增)。
 
-        Args:
+        参数：
             task_id: 任务 ID
 
-        Returns:
+        返回：
             重试次数
         """
         return self._retry_counts.get(task_id, 0)
@@ -664,10 +664,10 @@ class SubAgentExecutor:
     def increment_retry_count(self, task_id: str) -> int:
         """增加任务的重试次数 (v1.3 新增)。
 
-        Args:
+        参数：
             task_id: 任务 ID
 
-        Returns:
+        返回：
             新的重试次数
         """
         current = self._retry_counts.get(task_id, 0)
@@ -677,7 +677,7 @@ class SubAgentExecutor:
     def cleanup_locks(self) -> list[str]:
         """清理过期的锁 (v1.3 新增)。
 
-        Returns:
+        返回：
             被清理的任务 ID 列表
         """
         if self.lock_manager is None:
@@ -689,7 +689,7 @@ class SubAgentExecutor:
 
         警告: 这会强制释放所有锁，可能导致并发问题。
 
-        Returns:
+        返回：
             释放的锁数量
         """
         if self.lock_manager is None:

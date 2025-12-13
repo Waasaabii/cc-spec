@@ -15,16 +15,16 @@ MANAGED_END = "<!-- CC-SPEC:END -->"
 
 # 所有 cc-spec 命令
 CC_SPEC_COMMANDS = [
-    ("specify", "Create or edit a change specification"),
-    ("clarify", "Review tasks and mark for rework"),
-    ("plan", "Generate execution plan from proposal"),
-    ("apply", "Execute tasks using SubAgent"),
-    ("checklist", "Validate task completion"),
-    ("archive", "Archive a completed change"),
-    ("quick-delta", "Quick mode for simple changes"),
-    ("list", "List changes, tasks, specs or archives"),
-    ("goto", "Navigate to a change or task"),
-    ("update", "Update configuration and templates"),
+    ("specify", "创建或编辑变更规格"),
+    ("clarify", "审查任务并标记返工"),
+    ("plan", "根据提案生成执行计划"),
+    ("apply", "使用 SubAgent 执行任务"),
+    ("checklist", "验收并验证任务完成情况"),
+    ("archive", "归档已完成的变更"),
+    ("quick-delta", "快速记录简单变更"),
+    ("list", "列出变更、任务、规格或归档"),
+    ("goto", "跳转到指定变更或任务"),
+    ("update", "更新配置与模板"),
 ]
 
 

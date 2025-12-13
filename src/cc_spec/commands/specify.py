@@ -51,23 +51,25 @@ def validate_change_name(name: str) -> tuple[bool, str]:
         (is_valid, error_message)
     """
     if not name:
-        return False, "Change name cannot be empty"
+        return False, "变更名称不能为空"
 
     if not CHANGE_NAME_PATTERN.match(name):
         return False, (
-            "Change name must start with a lowercase letter and "
-            "contain only lowercase letters, numbers, and hyphens"
+            "变更名称必须以小写字母开头，并且只能包含小写字母、数字和连字符"
         )
 
     if len(name) > 64:
-        return False, "Change name must be 64 characters or less"
+        return False, "变更名称长度不能超过 64 个字符"
 
     return True, ""
 
 
 def specify(
-    name_or_id: str = typer.Argument(..., help="Change name (e.g., add-oauth) or ID (e.g., C-001)"),
-    template: str = typer.Option("default", "--template", "-t", help="Template type to use"),
+    name_or_id: str = typer.Argument(
+        ...,
+        help="变更名称（例如 add-oauth）或 ID（例如 C-001）",
+    ),
+    template: str = typer.Option("default", "--template", "-t", help="要使用的模板类型"),
 ) -> None:
     """创建新的变更规格说明，或编辑已有变更。
 
@@ -90,8 +92,8 @@ def specify(
     project_root = find_project_root()
     if project_root is None:
         console.print(
-            "[red]✗[/red] Not in a cc-spec project. "
-            "Run [bold]cc-spec init[/bold] first."
+            "[red]✗[/red] 当前目录不是 cc-spec 项目。"
+            "请先运行 [bold]cc-spec init[/bold]。"
         )
         raise typer.Exit(1)
 
@@ -125,30 +127,28 @@ def _edit_existing_change(
     """
     entry = id_manager.get_change_entry(change_id)
     if not entry:
-        console.print(f"[red]✗[/red] Change not found: {change_id}")
+        console.print(f"[red]✗[/red] 未找到变更：{change_id}")
         raise typer.Exit(1)
 
     change_path = cc_spec_root / entry.path
     proposal_path = change_path / "proposal.md"
 
     if not proposal_path.exists():
-        console.print(
-            f"[red]✗[/red] Proposal file not found: {proposal_path}"
-        )
+        console.print(f"[red]✗[/red] 未找到提案文件：{proposal_path}")
         raise typer.Exit(1)
 
     # 显示提示信息
     console.print()
-    console.print(f"[cyan]Editing change:[/cyan] [bold]{entry.name}[/bold] ({change_id})")
+    console.print(f"[cyan]正在编辑变更：[/cyan] [bold]{entry.name}[/bold] ({change_id})")
     console.print()
     console.print(Panel(
-        f"[bold]Files:[/bold]\n"
+        f"[bold]文件：[/bold]\n"
         f"  • {proposal_path.relative_to(project_root)}\n\n"
-        f"[bold]Next steps:[/bold]\n"
-        f"  1. Edit [cyan]{proposal_path.relative_to(project_root)}[/cyan]\n"
-        f"  2. Run [bold]cc-spec clarify {change_id}[/bold] to review\n"
-        f"  3. Run [bold]cc-spec plan {change_id}[/bold] to generate tasks",
-        title=f"[bold cyan]Change {change_id}[/bold cyan]",
+        f"[bold]下一步：[/bold]\n"
+        f"  1. 编辑 [cyan]{proposal_path.relative_to(project_root)}[/cyan]\n"
+        f"  2. 运行 [bold]cc-spec clarify {change_id}[/bold] 进行审查\n"
+        f"  3. 运行 [bold]cc-spec plan {change_id}[/bold] 生成任务",
+        title=f"[bold cyan]变更 {change_id}[/bold cyan]",
         border_style="cyan",
     ))
 
@@ -172,7 +172,7 @@ def _create_new_change(
     # 校验变更名称
     is_valid, error_msg = validate_change_name(name)
     if not is_valid:
-        console.print(f"[red]✗[/red] Invalid change name: {error_msg}")
+        console.print(f"[red]✗[/red] 变更名称不合法：{error_msg}")
         raise typer.Exit(1)
 
     # 获取 changes 目录
@@ -239,19 +239,19 @@ def _create_new_change(
 
     # 显示成功提示
     console.print()
-    console.print(f"[green]✓[/green] Created change: [bold]{name}[/bold] (ID: {change_id})")
+    console.print(f"[green]✓[/green] 已创建变更：[bold]{name}[/bold]（ID：{change_id}）")
     console.print()
     console.print(Panel(
-        f"[bold]Created files:[/bold]\n"
+        f"[bold]已创建文件：[/bold]\n"
         f"  • {proposal_path.relative_to(project_root)}\n"
         f"  • {status_path.relative_to(project_root)}\n\n"
-        f"[bold]Next steps:[/bold]\n"
-        f"  1. Edit [cyan]{proposal_path.relative_to(project_root)}[/cyan] to describe:\n"
-        f"     • Why: The motivation and problem\n"
-        f"     • What Changes: Specific changes to make\n"
-        f"     • Impact: Affected specs and expected code changes\n"
-        f"  2. Run [bold]cc-spec clarify {change_id}[/bold] to review and refine the proposal\n"
-        f"  3. Run [bold]cc-spec plan {change_id}[/bold] to generate execution tasks",
-        title=f"[bold green]Change {change_id} Created[/bold green]",
+        f"[bold]下一步：[/bold]\n"
+        f"  1. 编辑 [cyan]{proposal_path.relative_to(project_root)}[/cyan] 补充说明：\n"
+        f"     • 原因：动机与要解决的问题\n"
+        f"     • 改动内容：具体要做的改动\n"
+        f"     • 影响范围：影响的规格与预期代码改动\n"
+        f"  2. 运行 [bold]cc-spec clarify {change_id}[/bold] 审查并完善提案\n"
+        f"  3. 运行 [bold]cc-spec plan {change_id}[/bold] 生成执行任务",
+        title=f"[bold green]已创建变更 {change_id}[/bold green]",
         border_style="green",
     ))

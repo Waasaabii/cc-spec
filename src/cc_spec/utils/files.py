@@ -10,7 +10,7 @@ from typing import Optional
 def ensure_dir(path: Path) -> None:
     """确保目录存在（必要时创建）。
 
-    Args:
+    参数：
         path: 需要确保存在的目录路径
     """
     path.mkdir(parents=True, exist_ok=True)
@@ -19,10 +19,10 @@ def ensure_dir(path: Path) -> None:
 def find_project_root(start_path: Optional[Path] = None) -> Optional[Path]:
     """通过查找 .cc-spec 目录来定位项目根目录。
 
-    Args:
+    参数：
         start_path: 搜索起始目录（默认：当前目录）
 
-    Returns:
+    返回：
         找到则返回项目根目录路径，否则返回 None
     """
     if start_path is None:
@@ -48,10 +48,10 @@ def find_project_root(start_path: Optional[Path] = None) -> Optional[Path]:
 def get_cc_spec_dir(project_root: Path) -> Path:
     """获取 .cc-spec 目录路径。
 
-    Args:
+    参数：
         project_root: 项目根目录
 
-    Returns:
+    返回：
         .cc-spec 目录路径
     """
     return project_root / ".cc-spec"
@@ -60,10 +60,10 @@ def get_cc_spec_dir(project_root: Path) -> Path:
 def get_config_path(project_root: Path) -> Path:
     """获取 config.yaml 文件路径。
 
-    Args:
+    参数：
         project_root: 项目根目录
 
-    Returns:
+    返回：
         config.yaml 文件路径
     """
     return get_cc_spec_dir(project_root) / "config.yaml"
@@ -72,10 +72,10 @@ def get_config_path(project_root: Path) -> Path:
 def get_changes_dir(project_root: Path) -> Path:
     """获取 changes 目录路径。
 
-    Args:
+    参数：
         project_root: 项目根目录
 
-    Returns:
+    返回：
         changes 目录路径
     """
     return get_cc_spec_dir(project_root) / "changes"
@@ -84,10 +84,10 @@ def get_changes_dir(project_root: Path) -> Path:
 def get_templates_dir(project_root: Path) -> Path:
     """获取 templates 目录路径。
 
-    Args:
+    参数：
         project_root: 项目根目录
 
-    Returns:
+    返回：
         templates 目录路径
     """
     return get_cc_spec_dir(project_root) / "templates"
@@ -96,10 +96,10 @@ def get_templates_dir(project_root: Path) -> Path:
 def get_specs_dir(project_root: Path) -> Path:
     """获取 specs 目录路径。
 
-    Args:
+    参数：
         project_root: 项目根目录
 
-    Returns:
+    返回：
         specs 目录路径
     """
     return get_cc_spec_dir(project_root) / "specs"

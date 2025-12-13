@@ -14,7 +14,7 @@ from rich.table import Table
 
 from cc_spec.core.id_manager import IDManager
 from cc_spec.core.state import ChangeState, Stage, TaskStatus, load_state
-from cc_spec.ui.display import STATUS_ICONS, STAGE_NAMES, THEME
+from cc_spec.ui.display import STATUS_ICONS, STATUS_NAMES, STAGE_NAMES, THEME
 from cc_spec.utils.files import find_project_root, get_cc_spec_dir
 
 console = Console()
@@ -23,26 +23,26 @@ console = Console()
 def list_command(
     type_: str = typer.Argument(
         "changes",
-        help="Type to list: changes, tasks, specs, archive",
+        help="要列出的类型：changes、tasks、specs、archive",
         metavar="TYPE",
     ),
     change: str = typer.Option(
         None,
         "--change",
         "-c",
-        help="Change ID for listing tasks (e.g., C-001)",
+        help="用于列出任务的变更 ID（例如 C-001）",
     ),
     status: str = typer.Option(
         None,
         "--status",
         "-s",
-        help="Filter by status (pending, in_progress, completed, failed)",
+        help="按状态过滤（pending, in_progress, completed, failed）",
     ),
     format_: str = typer.Option(
         "table",
         "--format",
         "-f",
-        help="Output format: table, json, simple",
+        help="输出格式：table、json、simple",
     ),
 ) -> None:
     """列出变更、任务、规格或归档记录。
@@ -60,8 +60,7 @@ def list_command(
     project_root = find_project_root()
     if project_root is None:
         console.print(
-            "[red]Error:[/red] Not in a cc-spec project. "
-            "Run 'cc-spec init' first."
+            "[red]错误：[/red] 当前目录不是 cc-spec 项目，请先运行 'cc-spec init'。"
         )
         raise typer.Exit(1)
 
@@ -80,8 +79,8 @@ def list_command(
         _list_archive(id_manager, format_)
     else:
         console.print(
-            f"[red]Error:[/red] Unknown type '{type_}'. "
-            "Valid types: changes, tasks, specs, archive"
+            f"[red]错误：[/red] 未知类型 '{type_}'。"
+            "可选：changes、tasks、specs、archive"
         )
         raise typer.Exit(1)
 
@@ -103,7 +102,7 @@ def _list_changes(
     changes = id_manager.list_changes()
 
     if not changes:
-        console.print("[dim]No changes found.[/dim]")
+        console.print("[dim]未找到任何变更。[/dim]")
         return
 
     # 收集带状态的变更数据
@@ -142,7 +141,7 @@ def _list_changes(
         })
 
     if not change_data:
-        console.print(f"[dim]No changes with status '{status_filter}'.[/dim]")
+        console.print(f"[dim]未找到状态为 '{status_filter}' 的变更。[/dim]")
         return
 
     # 按格式输出
@@ -151,7 +150,9 @@ def _list_changes(
     elif format_ == "simple":
         for item in change_data:
             icon = STATUS_ICONS.get(item["status"], "○")
-            console.print(f"{icon} {item['id']} {item['name']} ({item['stage']})")
+            stage_name = STAGE_NAMES.get(item["stage"], item["stage"])
+            status_name = STATUS_NAMES.get(item["status"], item["status"])
+            console.print(f"{icon} {item['id']} {item['name']}（{stage_name}，{status_name}）")
     else:
         _show_changes_table(change_data)
 
@@ -163,34 +164,35 @@ def _show_changes_table(changes: list[dict[str, Any]]) -> None:
         changes：变更数据字典列表
     """
     table = Table(
-        title="Changes",
+        title="变更列表",
         border_style="cyan",
         show_header=True,
         header_style="bold cyan",
     )
 
     table.add_column("ID", style="cyan", width=8)
-    table.add_column("Name", width=25)
-    table.add_column("Stage", width=12, justify="center")
-    table.add_column("Created", width=12, justify="center")
-    table.add_column("Status", width=12, justify="center")
+    table.add_column("名称", width=25)
+    table.add_column("阶段", width=12, justify="center")
+    table.add_column("创建时间", width=12, justify="center")
+    table.add_column("状态", width=12, justify="center")
 
     for item in changes:
         status = item["status"]
         icon = STATUS_ICONS.get(status, "○")
         color = THEME.get(status, "white")
         stage_name = STAGE_NAMES.get(item["stage"], item["stage"])
+        status_name = STATUS_NAMES.get(status, status)
 
         table.add_row(
             item["id"],
             item["name"],
             stage_name,
             item["created"],
-            f"{icon} [{color}]{status}[/{color}]",
+            f"{icon} [{color}]{status_name}[/{color}]",
         )
 
     console.print(table)
-    console.print(f"\n[dim]Total: {len(changes)} change(s)[/dim]")
+    console.print(f"\n[dim]合计：{len(changes)} 个变更[/dim]")
 
 
 def _list_tasks(
@@ -214,12 +216,12 @@ def _list_tasks(
         # 解析变更 ID
         parsed = id_manager.parse_id(change_id)
         if not parsed.change_id:
-            console.print(f"[red]Error:[/red] Invalid change ID: {change_id}")
+            console.print(f"[red]错误：[/red] 变更 ID 无效：{change_id}")
             raise typer.Exit(1)
 
         entry = id_manager.get_change_entry(parsed.change_id)
         if not entry:
-            console.print(f"[red]Error:[/red] Change not found: {change_id}")
+            console.print(f"[red]错误：[/red] 未找到变更：{change_id}")
             raise typer.Exit(1)
 
         change_path = cc_spec_root / entry.path
@@ -228,7 +230,7 @@ def _list_tasks(
         # 查找当前变更
         changes = id_manager.list_changes()
         if not changes:
-            console.print("[dim]No changes found.[/dim]")
+            console.print("[dim]未找到任何变更。[/dim]")
             return
 
         # 获取最近的未归档变更
@@ -254,7 +256,7 @@ def _list_tasks(
                     continue
 
         if not latest_state or not latest_change_id:
-            console.print("[dim]No active changes found.[/dim]")
+            console.print("[dim]未找到任何激活的变更。[/dim]")
             return
 
         resolved_change_id = latest_change_id
@@ -264,14 +266,14 @@ def _list_tasks(
     status_file = change_path / "status.yaml"
     if not status_file.exists():
         console.print(
-            f"[red]Error:[/red] Status file not found for change: {resolved_change_id}"
+            f"[red]错误：[/red] 未找到变更的状态文件：{resolved_change_id}"
         )
         raise typer.Exit(1)
 
     try:
         state = load_state(status_file)
     except (ValueError, FileNotFoundError) as e:
-        console.print(f"[red]Error:[/red] Failed to load state: {e}")
+        console.print(f"[red]错误：[/red] 加载状态失败：{e}")
         raise typer.Exit(1)
 
     # 如果存在则从 tasks.md 加载任务
@@ -298,9 +300,9 @@ def _list_tasks(
 
     if not task_data:
         if status_filter:
-            console.print(f"[dim]No tasks with status '{status_filter}'.[/dim]")
+            console.print(f"[dim]未找到状态为 '{status_filter}' 的任务。[/dim]")
         else:
-            console.print("[dim]No tasks found.[/dim]")
+            console.print("[dim]未找到任何任务。[/dim]")
         return
 
     # 按格式输出
@@ -309,8 +311,9 @@ def _list_tasks(
     elif format_ == "simple":
         for task in task_data:
             icon = STATUS_ICONS.get(task["status"], "○")
+            status_name = STATUS_NAMES.get(task["status"], task["status"])
             console.print(
-                f"{icon} {task['id']} Wave:{task['wave']} {task['status']}"
+                f"{icon} {task['id']} 波次:{task['wave']} {status_name}"
             )
     else:
         _show_tasks_table(task_data, resolved_change_id, state)
@@ -338,63 +341,117 @@ def _parse_tasks_from_file(
 
     import re
 
-    # 匹配任务标题的模式
-    task_pattern = re.compile(r"^###\s+Task:\s*(.+)", re.MULTILINE)
+    # 优先从「概览」表格解析（与 apply 解析逻辑保持一致）
+    overview_pattern = re.compile(
+        r"^\|\s*(\d+)\s*\|\s*([A-Z0-9-]+)\s*\|\s*([^|]+?)\s*\|\s*([^|]+?)\s*\|\s*([^|]+?)\s*\|$",
+        re.MULTILINE,
+    )
 
-    # 查找所有任务
+    overview_matches = list(overview_pattern.finditer(content))
+    if overview_matches:
+        status_map = {
+            "🟦": "pending",
+            "🟨": "in_progress",
+            "🟩": "completed",
+            "🟥": "failed",
+            "⏰": "timeout",
+            "○": "pending",
+            "…": "in_progress",
+            "√": "completed",
+            "×": "failed",
+            "!": "timeout",
+        }
+
+        for match in overview_matches:
+            wave_str, task_id, estimate, status_str, deps_str = match.groups()
+            wave = int(wave_str)
+
+            status = "pending"
+            for icon, status_name in status_map.items():
+                if icon in status_str:
+                    status = status_name
+                    break
+            else:
+                # fallback: 根据中文关键词推断
+                if "完成" in status_str:
+                    status = "completed"
+                elif "进行中" in status_str:
+                    status = "in_progress"
+                elif "失败" in status_str:
+                    status = "failed"
+
+            deps_text = deps_str.strip()
+            dependencies = (
+                []
+                if deps_text in ("-", "无", "无依赖")
+                else [d.strip() for d in deps_text.split(",") if d.strip()]
+            )
+
+            tasks.append(
+                {
+                    "id": f"{change_id}:{task_id}",
+                    "task_id": task_id,
+                    "wave": wave,
+                    "status": status,
+                    "estimate": estimate.strip(),
+                    "dependencies": dependencies,
+                }
+            )
+
+        return tasks
+
+    # 兼容旧格式：按任务区块解析
+    task_pattern = re.compile(r"^###\s+(?:Task|任务)[:：]\s*(.+)", re.MULTILINE)
+
     for match in task_pattern.finditer(content):
         task_id = match.group(1).strip()
         task_start = match.end()
 
-        # 找到当前任务的结束位置（下一个任务标题或文件末尾）
         next_match = task_pattern.search(content, task_start)
         task_end = next_match.start() if next_match else len(content)
         task_content = content[task_start:task_end]
 
-        # 解析任务属性
         wave = 0
         status = "pending"
         estimate = "-"
         dependencies: list[str] = []
 
-        # 解析 Wave
-        wave_match = re.search(r"\*\*Wave\*\*:\s*(\d+)", task_content)
+        wave_match = re.search(r"\*\*(?:Wave|波次)\*\*[:：]\s*(\d+)", task_content)
         if wave_match:
             wave = int(wave_match.group(1))
 
-        # 解析状态
         status_match = re.search(r"\*\*状态\*\*:\s*([^\n]+)", task_content)
         if status_match:
             status_text = status_match.group(1).strip()
-            if "完成" in status_text or "🟩" in status_text:
+            if "完成" in status_text or "🟩" in status_text or "√" in status_text:
                 status = "completed"
-            elif "进行中" in status_text or "🟨" in status_text:
+            elif "进行中" in status_text or "🟨" in status_text or "…" in status_text:
                 status = "in_progress"
-            elif "失败" in status_text or "🟥" in status_text:
+            elif "失败" in status_text or "🟥" in status_text or "×" in status_text:
                 status = "failed"
-            else:
-                status = "pending"
+            elif "超时" in status_text or "⏰" in status_text or "!" in status_text:
+                status = "timeout"
 
-        # 解析预估
         estimate_match = re.search(r"\*\*预估上下文\*\*:\s*~?(\d+[kK]?)", task_content)
         if estimate_match:
             estimate = estimate_match.group(1)
 
-        # 解析依赖
         deps_match = re.search(r"\*\*依赖\*\*:\s*([^\n]+)", task_content)
         if deps_match:
             deps_text = deps_match.group(1).strip()
             if deps_text and deps_text != "-" and deps_text.lower() != "无":
                 dependencies = [d.strip() for d in deps_text.split(",")]
 
-        tasks.append({
-            "id": f"{change_id}:{task_id}",
-            "task_id": task_id,
-            "wave": wave,
-            "status": status,
-            "estimate": estimate,
-            "dependencies": dependencies,
-        })
+        tasks.append(
+            {
+                "id": f"{change_id}:{task_id}",
+                "task_id": task_id,
+                "wave": wave,
+                "status": status,
+                "estimate": estimate,
+                "dependencies": dependencies,
+            }
+        )
 
     return tasks
 
@@ -432,17 +489,17 @@ def _show_tasks_table(
 
     # 构建表格
     table = Table(
-        title=f"Tasks for {change_id}",
+        title=f"{change_id} 的任务",
         border_style="cyan",
         show_header=True,
         header_style="bold cyan",
     )
 
     table.add_column("ID", style="cyan", width=25)
-    table.add_column("Wave", width=6, justify="center")
-    table.add_column("Status", width=12, justify="center")
-    table.add_column("Estimate", width=10, justify="right")
-    table.add_column("Dependencies", width=20)
+    table.add_column("波次", width=6, justify="center")
+    table.add_column("状态", width=12, justify="center")
+    table.add_column("预估", width=10, justify="right")
+    table.add_column("依赖", width=20)
 
     # 按 wave 与任务 ID 排序
     sorted_tasks = sorted(tasks, key=lambda t: (t["wave"], t.get("task_id", "")))
@@ -451,13 +508,14 @@ def _show_tasks_table(
         status = task["status"]
         icon = STATUS_ICONS.get(status, "○")
         color = THEME.get(status, "white")
+        status_name = STATUS_NAMES.get(status, status)
 
         deps = ", ".join(task["dependencies"]) if task["dependencies"] else "-"
 
         table.add_row(
             task["id"],
             str(task["wave"]),
-            f"{icon} [{color}]{status}[/{color}]",
+            f"{icon} [{color}]{status_name}[/{color}]",
             task["estimate"],
             deps,
         )
@@ -470,13 +528,13 @@ def _show_tasks_table(
     in_progress = sum(1 for t in tasks if t["status"] == "in_progress")
 
     console.print(
-        f"\n[dim]Total: {total} task(s) "
-        f"(Wave {completed_waves} completed, Wave {current_wave} in progress)"
+        f"\n[dim]合计：{total} 个任务"
+        f"（已完成波次：{completed_waves}，进行中波次：{current_wave}）"
         f"[/dim]"
     )
     console.print(
-        f"[dim]Status: {completed} completed, {in_progress} in progress, "
-        f"{total - completed - in_progress} pending[/dim]"
+        f"[dim]状态：{completed} 已完成，{in_progress} 进行中，"
+        f"{total - completed - in_progress} 待执行[/dim]"
     )
 
 
@@ -493,7 +551,7 @@ def _list_specs(
     specs = id_manager.list_specs()
 
     if not specs:
-        console.print("[dim]No specs found.[/dim]")
+        console.print("[dim]未找到任何规格。[/dim]")
         return
 
     spec_data = [
@@ -508,20 +566,20 @@ def _list_specs(
             console.print(f"  {item['id']} → {item['path']}")
     else:
         table = Table(
-            title="Specs",
+            title="规格列表",
             border_style="cyan",
             show_header=True,
             header_style="bold cyan",
         )
 
         table.add_column("ID", style="cyan", width=20)
-        table.add_column("Path", width=40)
+        table.add_column("路径", width=40)
 
         for item in spec_data:
             table.add_row(item["id"], item["path"])
 
         console.print(table)
-        console.print(f"\n[dim]Total: {len(spec_data)} spec(s)[/dim]")
+        console.print(f"\n[dim]合计：{len(spec_data)} 个规格[/dim]")
 
 
 def _list_archive(
@@ -537,7 +595,7 @@ def _list_archive(
     archives = id_manager.list_archive()
 
     if not archives:
-        console.print("[dim]No archived changes found.[/dim]")
+        console.print("[dim]未找到任何归档变更。[/dim]")
         return
 
     archive_data = [
@@ -549,21 +607,21 @@ def _list_archive(
         console.print(json.dumps(archive_data, indent=2, ensure_ascii=False))
     elif format_ == "simple":
         for item in archive_data:
-            console.print(f"  🟩 {item['id']} {item['name']}")
+            console.print(f"  √ {item['id']} {item['name']}")
     else:
         table = Table(
-            title="Archived Changes",
+            title="归档变更",
             border_style="cyan",
             show_header=True,
             header_style="bold cyan",
         )
 
         table.add_column("ID", style="cyan", width=18)
-        table.add_column("Name", width=25)
-        table.add_column("Path", width=35)
+        table.add_column("名称", width=25)
+        table.add_column("路径", width=35)
 
         for item in archive_data:
             table.add_row(item["id"], item["name"], item["path"])
 
         console.print(table)
-        console.print(f"\n[dim]Total: {len(archive_data)} archived change(s)[/dim]")
+        console.print(f"\n[dim]合计：{len(archive_data)} 个归档变更[/dim]")

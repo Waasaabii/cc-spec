@@ -51,13 +51,13 @@ DEFAULT_TIMEOUT_MS = 300000  # 5 分钟
 def apply_command(
     change_or_id: Optional[str] = typer.Argument(
         None,
-        help="Change name or ID (e.g., add-oauth or C-001)",
+        help="变更名称或 ID（例如 add-oauth 或 C-001）",
     ),
     max_concurrent: int = typer.Option(
         DEFAULT_MAX_CONCURRENT,
         "--max-concurrent",
         "-c",
-        help="Maximum number of concurrent task executions",
+        help="最大并发任务执行数",
         min=1,
         max=50,
     ),
@@ -65,35 +65,35 @@ def apply_command(
         DEFAULT_TIMEOUT_MS,
         "--timeout",
         "-t",
-        help="Timeout for each task in milliseconds",
+        help="每个任务的超时时间（毫秒）",
         min=60000,
     ),
     resume: bool = typer.Option(
         False,
         "--resume",
         "-r",
-        help="Resume from last failed/incomplete wave",
+        help="从上次失败/未完成的 Wave 继续执行",
     ),
     dry_run: bool = typer.Option(
         False,
         "--dry-run",
-        help="Show what would be executed without running tasks",
+        help="仅显示将执行的内容，不实际运行任务",
     ),
     use_lock: bool = typer.Option(
         True,
         "--lock/--no-lock",
-        help="v1.3: Use lock mechanism to prevent concurrent execution conflicts",
+        help="v1.3：使用锁机制防止并发执行冲突",
     ),
     force_unlock: Optional[str] = typer.Option(
         None,
         "--force-unlock",
         "-f",
-        help="v1.3: Force unlock a specific task before execution (e.g., --force-unlock 01-SETUP)",
+        help="v1.3：执行前强制解锁指定任务（例如 --force-unlock 01-SETUP）",
     ),
     skip_locked: bool = typer.Option(
         False,
         "--skip-locked",
-        help="v1.3: Skip locked tasks and continue with unlocked ones",
+        help="v1.3：跳过被锁定的任务并继续执行其他任务",
     ),
 ) -> None:
     """使用 SubAgent 并行执行 tasks.md 中的任务。
@@ -121,7 +121,7 @@ def apply_command(
     project_root = find_project_root()
     if project_root is None:
         console.print(
-            "[red]Error:[/red] Not a cc-spec project. Run 'cc-spec init' first.",
+            "[red]错误：[/red] 这不是 cc-spec 项目，请先运行 'cc-spec init'。",
             style="red",
         )
         raise typer.Exit(1)
@@ -138,7 +138,7 @@ def apply_command(
             # ID 模式：解析为名称
             entry = id_manager.get_change_entry(change_or_id)
             if not entry:
-                console.print(f"[red]Error:[/red] Change not found: {change_or_id}")
+                console.print(f"[red]错误：[/red] 未找到变更：{change_or_id}")
                 raise typer.Exit(1)
             change = entry.name
         else:
@@ -150,8 +150,8 @@ def apply_command(
         current_state = get_current_change(cc_spec_root)
         if not current_state:
             console.print(
-                "[red]Error:[/red] No active change found. "
-                "Please specify a change name or run 'cc-spec specify' first.",
+                "[red]错误：[/red] 未找到当前激活的变更。"
+                "请指定变更名称，或先运行 'cc-spec specify'。",
                 style="red",
             )
             raise typer.Exit(1)
@@ -161,31 +161,31 @@ def apply_command(
 
     if not change_dir.exists():
         console.print(
-            f"[red]Error:[/red] Change '{change}' not found.",
+            f"[red]错误：[/red] 未找到变更 '{change}'。",
             style="red",
         )
         raise typer.Exit(1)
 
-    console.print(f"[cyan]Applying change:[/cyan] [bold]{change}[/bold]\n")
+    console.print(f"[cyan]正在执行变更：[/cyan] [bold]{change}[/bold]\n")
 
     # 检查 tasks.md 是否存在
     tasks_path = change_dir / "tasks.md"
     if not tasks_path.exists():
         console.print(
-            f"[red]Error:[/red] tasks.md not found in {change_dir}. "
-            "Run 'cc-spec plan' first.",
+            f"[red]错误：[/red] 在 {change_dir} 中未找到 tasks.md。"
+            "请先运行 'cc-spec plan'。",
             style="red",
         )
         raise typer.Exit(1)
 
     # 读取并解析 tasks.md
-    console.print("[cyan]Loading tasks.md...[/cyan]")
+    console.print("[cyan]正在加载 tasks.md...[/cyan]")
     try:
         tasks_content = tasks_path.read_text(encoding="utf-8")
         doc = parse_tasks_md(tasks_content)
     except ValueError as e:
         console.print(
-            f"[red]Error:[/red] Failed to parse tasks.md: {e}",
+            f"[red]错误：[/red] 解析 tasks.md 失败：{e}",
             style="red",
         )
         raise typer.Exit(1)
@@ -199,7 +199,7 @@ def apply_command(
     )
 
     console.print(
-        f"[green]✓[/green] Found {total_tasks} tasks in {total_waves} waves\n"
+        f"[green]√[/green] 在 {total_waves} 个波次中找到 {total_tasks} 个任务\n"
     )
 
     # 显示任务摘要
@@ -211,42 +211,42 @@ def apply_command(
         start_wave = _find_resume_wave(doc)
         if start_wave > 0:
             console.print(
-                f"\n[yellow]Resuming from Wave {start_wave}[/yellow]"
+                f"\n[yellow]从波次 {start_wave} 继续执行[/yellow]"
             )
 
     # 演练模式（dry-run）
     if dry_run:
-        console.print("\n[yellow]Dry run mode - no tasks will be executed[/yellow]\n")
+        console.print("\n[yellow]演练模式：不会执行任何任务[/yellow]\n")
         _display_execution_plan(doc, start_wave)
         console.print(
-            "\n[dim]Run without --dry-run to execute tasks[/dim]"
+            "\n[dim]去掉 --dry-run 才会真正执行任务[/dim]"
         )
         raise typer.Exit(0)
 
     # 检查是否有需要执行的任务
     if idle_tasks == 0:
         console.print(
-            "\n[yellow]No pending tasks to execute.[/yellow]",
+            "\n[yellow]没有待执行任务。[/yellow]",
             style="yellow",
         )
 
         if completed_tasks == total_tasks:
             console.print(
-                "\n[green]All tasks are already completed![/green]",
+                "\n[green]所有任务都已完成！[/green]",
                 style="green",
             )
             console.print(
-                "\n[bold]Next step:[/bold] Run [cyan]cc-spec checklist[/cyan] "
-                "to validate task completion."
+                "\n[bold]下一步：[/bold] 运行 [cyan]cc-spec checklist[/cyan] "
+                "验证任务完成情况。"
             )
         raise typer.Exit(0)
 
     # 确认执行
     console.print(
-        f"\n[bold]Ready to execute {idle_tasks} task(s)[/bold]"
+        f"\n[bold]准备执行 {idle_tasks} 个任务[/bold]"
     )
-    console.print(f"[dim]Max concurrent: {max_concurrent}[/dim]")
-    console.print(f"[dim]Timeout per task: {timeout / 1000:.0f}s[/dim]\n")
+    console.print(f"[dim]最大并发：{max_concurrent}[/dim]")
+    console.print(f"[dim]单任务超时：{timeout / 1000:.0f}s[/dim]\n")
 
     # 更新状态为 apply 阶段
     status_path = change_dir / "status.yaml"
@@ -259,10 +259,10 @@ def apply_command(
         try:
             config = load_config(config_path)
         except Exception as e:
-            console.print(f"[yellow]Warning:[/yellow] Could not load config: {e}")
+            console.print(f"[yellow]警告：[/yellow] 无法加载配置：{e}")
 
     # 执行任务
-    console.print("[cyan]Starting task execution...[/cyan]\n")
+    console.print("[cyan]开始执行任务...[/cyan]\n")
 
     # v1.3: 处理 force_unlock 选项
     if force_unlock and use_lock:
@@ -270,14 +270,14 @@ def apply_command(
         lock_info = lock_manager.get_lock_info(force_unlock)
         if lock_info:
             console.print(
-                f"[yellow]Force unlocking task:[/yellow] {force_unlock} "
-                f"(held by {lock_info.agent_id})"
+                f"[yellow]正在强制解锁任务：[/yellow] {force_unlock} "
+                f"（锁持有者：{lock_info.agent_id}）"
             )
             lock_manager.release(force_unlock)  # 不检查 agent_id，强制释放
-            console.print(f"[green]✓[/green] Task {force_unlock} unlocked\n")
+            console.print(f"[green]√[/green] 任务 {force_unlock} 已解锁\n")
         else:
             console.print(
-                f"[dim]Task {force_unlock} is not locked, skipping unlock[/dim]\n"
+                f"[dim]任务 {force_unlock} 未被锁定，跳过解锁[/dim]\n"
             )
 
     try:
@@ -317,7 +317,7 @@ def apply_command(
 
     except Exception as e:
         console.print(
-            f"\n[red]Error:[/red] Execution failed: {e}",
+            f"\n[red]错误：[/red] 执行失败：{e}",
             style="red",
         )
         raise typer.Exit(1)
@@ -375,8 +375,8 @@ async def _execute_with_progress(
         # 开始 wave
         task_ids = [t.task_id for t in idle_tasks]
         console.print(
-            f"\n[bold cyan]Wave {wave.wave_number}[/bold cyan] - "
-            f"Executing {len(idle_tasks)} task(s)...\n"
+            f"\n[bold cyan]波次 {wave.wave_number}[/bold cyan] - "
+            f"正在执行 {len(idle_tasks)} 个任务...\n"
         )
 
         collector.start_wave(wave.wave_number)
@@ -395,12 +395,12 @@ async def _execute_with_progress(
             tracker.update_task(wave.wave_number, result.task_id, status)
 
             # 显示任务结果 (v1.3：包含 agent_id)
-            icon = "✅" if result.success else "❌"
+            icon = "√" if result.success else "×"
             agent_info = f" [{result.agent_id}]" if result.agent_id else ""
             console.print(
                 f"  {icon} [bold]{result.task_id}[/bold]{agent_info}: "
-                f"{'completed' if result.success else 'failed'} "
-                f"({result.duration_seconds:.1f}s)"
+                f"{'已完成' if result.success else '失败'} "
+                f"（{result.duration_seconds:.1f}秒）"
             )
 
         # 结束 wave
@@ -412,13 +412,13 @@ async def _execute_with_progress(
         failed = [r for r in results if not r.success]
         if failed:
             console.print(
-                f"\n[red]Wave {wave.wave_number} had {len(failed)} failure(s)[/red]"
+                f"\n[red]波次 {wave.wave_number} 有 {len(failed)} 个失败任务[/red]"
             )
             # 遇到失败则停止执行
             break
 
         console.print(
-            f"\n[green]✓ Wave {wave.wave_number} completed successfully[/green]"
+            f"\n[green]√ 波次 {wave.wave_number} 执行完成[/green]"
         )
 
     # 结束执行
@@ -433,23 +433,23 @@ def _display_task_summary(doc: TasksDocument) -> None:
     参数：
         doc：解析后的 TasksDocument
     """
-    table = Table(title="Task Summary", border_style="cyan")
-    table.add_column("Wave", style="cyan", justify="center")
-    table.add_column("Task ID", style="white")
-    table.add_column("Status", justify="center")
-    table.add_column("Dependencies", style="dim")
+    table = Table(title="任务摘要", border_style="cyan")
+    table.add_column("波次", style="cyan", justify="center")
+    table.add_column("任务 ID", style="white")
+    table.add_column("状态", justify="center")
+    table.add_column("依赖", style="dim")
 
     for wave in doc.waves:
         for i, task in enumerate(wave.tasks):
             # 获取状态图标
             status_icons = {
-                TaskStatus.IDLE: "🟦 Idle",
-                TaskStatus.IN_PROGRESS: "🟨 In Progress",
-                TaskStatus.COMPLETED: "🟩 Completed",
-                TaskStatus.FAILED: "🟥 Failed",
-                TaskStatus.TIMEOUT: "⏱️ Timeout",
+                TaskStatus.IDLE: "○ 待执行",
+                TaskStatus.IN_PROGRESS: "… 进行中",
+                TaskStatus.COMPLETED: "√ 已完成",
+                TaskStatus.FAILED: "× 失败",
+                TaskStatus.TIMEOUT: "! 超时",
             }
-            status = status_icons.get(task.status, "❓ Unknown")
+            status = status_icons.get(task.status, "? 未知")
 
             # 格式化依赖列表
             deps = ", ".join(task.dependencies) if task.dependencies else "-"
@@ -469,23 +469,23 @@ def _display_execution_plan(doc: TasksDocument, start_wave: int) -> None:
         doc：解析后的 TasksDocument
         start_wave：开始执行的 wave 编号
     """
-    console.print("[bold]Execution Plan:[/bold]\n")
+    console.print("[bold]执行计划：[/bold]\n")
 
     for wave in doc.waves:
         if wave.wave_number < start_wave:
-            console.print(f"[dim]Wave {wave.wave_number} - Skipped (already completed)[/dim]")
+            console.print(f"[dim]波次 {wave.wave_number} - 已跳过（已完成）[/dim]")
             continue
 
         # 获取待执行任务
         idle_tasks = [t for t in wave.tasks if t.status == TaskStatus.IDLE]
 
         if not idle_tasks:
-            console.print(f"[dim]Wave {wave.wave_number} - No pending tasks[/dim]")
+            console.print(f"[dim]波次 {wave.wave_number} - 没有待执行任务[/dim]")
             continue
 
-        console.print(f"[cyan]Wave {wave.wave_number}[/cyan] - {len(idle_tasks)} task(s):")
+        console.print(f"[cyan]波次 {wave.wave_number}[/cyan] - {len(idle_tasks)} 个任务：")
         for task in idle_tasks:
-            console.print(f"  • {task.task_id}: {task.name}")
+            console.print(f"  - {task.task_id}: {task.name}")
 
         console.print()
 
@@ -530,7 +530,7 @@ def _update_apply_stage_started(status_path: Path, total_waves: int) -> None:
 
     except Exception as e:
         console.print(
-            f"[yellow]Warning:[/yellow] Could not update state: {e}",
+            f"[yellow]警告：[/yellow] 无法更新状态：{e}",
             style="yellow",
         )
 
@@ -544,23 +544,23 @@ def _display_execution_results(collector: ResultCollector) -> None:
     summary = collector.get_summary()
 
     console.print("\n" + "=" * 60)
-    console.print("[bold]Execution Summary[/bold]")
+    console.print("[bold]执行摘要[/bold]")
     console.print("=" * 60 + "\n")
 
     # 构建摘要面板
     content_lines = [
-        f"[cyan]Total Waves:[/cyan] {summary['total_waves']}",
-        f"[cyan]Total Tasks:[/cyan] {summary['total_tasks']}",
-        f"[green]Successful:[/green] {summary['successful_tasks']}",
-        f"[red]Failed:[/red] {summary['failed_tasks']}",
-        f"[cyan]Success Rate:[/cyan] {summary['success_rate']:.1f}%",
-        f"[cyan]Total Duration:[/cyan] {summary['total_duration_seconds']:.1f}s",
+        f"[cyan]波次数：[/cyan] {summary['total_waves']}",
+        f"[cyan]任务数：[/cyan] {summary['total_tasks']}",
+        f"[green]成功：[/green] {summary['successful_tasks']}",
+        f"[red]失败：[/red] {summary['failed_tasks']}",
+        f"[cyan]成功率：[/cyan] {summary['success_rate']:.1f}%",
+        f"[cyan]总耗时：[/cyan] {summary['total_duration_seconds']:.1f} 秒",
     ]
 
     status_color = "green" if not collector.has_failures() else "red"
     panel = Panel(
         "\n".join(content_lines),
-        title="[bold]Execution Results[/bold]",
+        title="[bold]执行结果[/bold]",
         border_style=status_color,
         padding=(1, 2),
     )
@@ -582,7 +582,7 @@ def _handle_execution_success(
         total_waves：wave 总数
     """
     console.print(
-        "\n[bold green]All tasks completed successfully![/bold green]",
+        "\n[bold green]所有任务已成功完成！[/bold green]",
         style="green",
     )
 
@@ -599,20 +599,20 @@ def _handle_execution_success(
         )
 
         update_state(status_path, state)
-        console.print("[green]✓[/green] Updated state to apply stage (completed)")
+        console.print("[green]√[/green] 已将状态更新为 apply 阶段（完成）")
 
     except Exception as e:
         console.print(
-            f"[yellow]Warning:[/yellow] Could not update state: {e}",
+            f"[yellow]警告：[/yellow] 无法更新状态：{e}",
             style="yellow",
         )
 
     # 展示下一步
-    console.print("\n[bold]Next steps:[/bold]")
-    console.print("1. Review the execution results")
-    console.print("2. Run [cyan]cc-spec checklist[/cyan] to validate task completion")
+    console.print("\n[bold]下一步：[/bold]")
+    console.print("1. 查看执行结果")
+    console.print("2. 运行 [cyan]cc-spec checklist[/cyan] 进行验收")
 
-    console.print(f"\n[dim]Change: {change_name}[/dim]")
+    console.print(f"\n[dim]变更：{change_name}[/dim]")
 
 
 def _handle_execution_failure(
@@ -628,14 +628,14 @@ def _handle_execution_failure(
         collector：结果收集器
     """
     console.print(
-        "\n[bold red]Execution failed![/bold red]",
+        "\n[bold red]执行失败！[/bold red]",
         style="red",
     )
 
     # 获取失败的 wave 与任务
     failed_waves = collector.get_failed_waves()
 
-    console.print(f"\n[red]Failed in wave(s): {failed_waves}[/red]")
+    console.print(f"\n[red]失败波次：{failed_waves}[/red]")
 
     # 显示详细的失败信息
     for wave_num in failed_waves:
@@ -644,7 +644,7 @@ def _handle_execution_failure(
             for result in wave_result.results:
                 if not result.success:
                     console.print(
-                        f"\n[red]Task {result.task_id}:[/red] {result.error}"
+                        f"\n[red]任务 {result.task_id}：[/red] {result.error}"
                     )
 
     # 更新状态
@@ -660,25 +660,25 @@ def _handle_execution_failure(
         )
 
         update_state(status_path, state)
-        console.print("\n[yellow]⚠[/yellow] Updated state to apply stage (failed)")
+        console.print("\n[yellow]![/yellow] 已将状态更新为 apply 阶段（失败）")
 
     except Exception as e:
         console.print(
-            f"[yellow]Warning:[/yellow] Could not update state: {e}",
+            f"[yellow]警告：[/yellow] 无法更新状态：{e}",
             style="yellow",
         )
 
     # 展示下一步
-    console.print("\n[bold]Next steps:[/bold]")
-    console.print("1. Review the failed task(s) above")
-    console.print("2. Fix the issues causing the failures")
+    console.print("\n[bold]下一步：[/bold]")
+    console.print("1. 查看上面失败的任务")
+    console.print("2. 修复导致失败的问题")
     console.print(
-        "3. Run [cyan]cc-spec clarify <task-id>[/cyan] to mark tasks for rework"
+        "3. 运行 [cyan]cc-spec clarify <task-id>[/cyan] 标记任务需要返工"
     )
     console.print(
-        "4. Re-run [cyan]cc-spec apply --resume[/cyan] to continue execution"
+        "4. 重新运行 [cyan]cc-spec apply --resume[/cyan] 继续执行"
     )
 
-    console.print(f"\n[dim]Change: {change_name}[/dim]")
+    console.print(f"\n[dim]变更：{change_name}[/dim]")
 
     raise typer.Exit(1)

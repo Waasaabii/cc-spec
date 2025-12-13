@@ -39,7 +39,7 @@ STATUS_TO_ICON = {v: k for k, v in STATUS_ICONS.items()}
 class ExecutionLog:
     """任务的执行日志条目。
 
-    Attributes:
+    属性：
         completed_at: 任务完成的 ISO 时间戳
         subagent_id: 执行该任务的 SubAgent ID
         notes: 可选的执行备注
@@ -54,7 +54,7 @@ class ExecutionLog:
 class Task:
     """工作流中的单个任务。
 
-    Attributes:
+    属性：
         task_id: 任务唯一标识（例如："01-SETUP"）
         name: 可读的任务名称
         wave: 所属 Wave 编号
@@ -85,7 +85,7 @@ class Task:
 class Wave:
     """可并行执行的一组任务（Wave）。
 
-    Attributes:
+    属性：
         wave_number: Wave 编号（0、1、2...）
         tasks: 本 Wave 内的任务列表
     """
@@ -98,7 +98,7 @@ class Wave:
 class TasksDocument:
     """解析后的完整 tasks.md 文档。
 
-    Attributes:
+    属性：
         change_name: 该任务列表所属的变更名称
         waves: 包含任务的 Wave 列表
         all_tasks: 任务 ID 到 Task 对象的映射
@@ -112,19 +112,19 @@ class TasksDocument:
 def parse_tasks_md(content: str) -> TasksDocument:
     """解析 tasks.md 内容并提取所有任务信息。
 
-    Args:
+    参数：
         content: tasks.md 的原始 Markdown 内容
 
-    Returns:
+    返回：
         包含所有解析结果的 TasksDocument 对象
 
-    Raises:
+    异常：
         ValueError: tasks.md 格式无效时抛出
     """
-    # 从标题中提取变更名称：# Tasks - {change_name}
-    title_match = re.search(r"^#\s+Tasks\s+-\s+(.+)$", content, re.MULTILINE)
+    # 从标题中提取变更名称：# Tasks - {change_name} / # 任务 - {change_name}
+    title_match = re.search(r"^#\s+(?:Tasks|任务)\s*[-:：]\s+(.+)$", content, re.MULTILINE)
     if not title_match:
-        raise ValueError("tasks.md must have a title in format: # Tasks - {change-name}")
+        raise ValueError("tasks.md 标题格式无效：需要 `# Tasks - {change-name}` 或 `# 任务 - {change-name}`")
 
     change_name = title_match.group(1).strip()
 
@@ -180,10 +180,10 @@ def parse_tasks_md(content: str) -> TasksDocument:
 def _parse_overview_table(content: str) -> list[dict]:
     """解析概览表以提取基础任务信息。
 
-    Args:
+    参数：
         content: 完整的 tasks.md 内容
 
-    Returns:
+    返回：
         包含 task_id、wave、status、dependencies、estimated_tokens 的字典列表
     """
     tasks: list[dict] = []
@@ -256,11 +256,11 @@ def _parse_overview_table(content: str) -> list[dict]:
 def _parse_task_detail(content: str, task_id: str) -> dict:
     """解析任务详情区块，提取完整的任务信息。
 
-    Args:
+    参数：
         content: 完整的 tasks.md 内容
         task_id: 要查找并解析的任务 ID
 
-    Returns:
+    返回：
         包含任务详情的字典（name、required_docs、code_entry_points、checklist_items、execution_log、profile）
     """
     result: dict = {
@@ -272,10 +272,10 @@ def _parse_task_detail(content: str, task_id: str) -> dict:
         "profile": None,  # v1.1：SubAgent Profile（配置）
     }
 
-    # 用于匹配任务标题的模式：### XX-NAME - Description 或 ### Task: XX-NAME
+    # 用于匹配任务标题的模式：### XX-NAME - Description / ### Task: XX-NAME / ### 任务：XX-NAME
     # 捕获内容直到下一个 ### 或 ---
     pattern = re.compile(
-        rf"^###\s+(?:Task:\s+)?{re.escape(task_id)}\s*-\s*(.+?)\s*\n"
+        rf"^###\s+(?:(?:Task|任务)[:：]\s+)?{re.escape(task_id)}\s*-\s*(.+?)\s*\n"
         r"(.*?)(?=^###\s+|^---|\Z)",
         re.MULTILINE | re.DOTALL,
     )
@@ -317,18 +317,18 @@ def _parse_task_detail(content: str, task_id: str) -> dict:
 
     # 解析 Profile（v1.1）
     profile_match = re.search(
-        r"\*\*Profile\*\*:?\s*(.+?)(?:\n|$)",
+        r"\*\*(?:Profile|配置)\*\*[:：]?\s*(.+?)(?:\n|$)",
         section_content,
         re.MULTILINE,
     )
     if profile_match:
         profile = profile_match.group(1).strip()
-        if profile and profile != "-" and profile.lower() != "default":
+        if profile and profile != "-" and profile.lower() not in {"default", "默认"}:
             result["profile"] = profile
 
     # 解析检查清单项
     checklist_match = re.search(
-        r"\*\*Checklist\*\*:?\s*\n((?:\s*[-*]\s+\[[ xX\-]\].+\n?)+)",
+        r"\*\*(?:Checklist|检查清单)\*\*[:：]?\s*\n((?:\s*[-*]\s+\[[ xX\-]\].+\n?)+)",
         section_content,
         re.MULTILINE,
     )
@@ -338,9 +338,9 @@ def _parse_task_detail(content: str, task_id: str) -> dict:
 
     # 解析执行日志
     log_match = re.search(
-        r"\*\*执行日志\*\*:?\s*\n"
-        r"(?:-\s+完成时间:\s*(.+?)\s*\n)?"
-        r"(?:-\s+SubAgent\s+ID:\s*(.+?)\s*\n)?",
+        r"\*\*执行日志\*\*[:：]?\s*\n"
+        r"(?:-\s+完成时间[:：]\s*(.+?)\s*\n)?"
+        r"(?:-\s+SubAgent\s+(?:ID|标识)[:：]\s*(.+?)\s*\n)?",
         section_content,
         re.MULTILINE,
     )
@@ -362,11 +362,11 @@ def _parse_task_detail(content: str, task_id: str) -> dict:
 def get_tasks_by_wave(doc: TasksDocument, wave_num: int) -> list[Task]:
     """获取指定 wave 中的所有任务。
 
-    Args:
+    参数：
         doc: 要查询的 TasksDocument
         wave_num: 要获取的 wave 编号
 
-    Returns:
+    返回：
         指定 wave 的任务列表（若不存在则返回空列表）
     """
     for wave in doc.waves:
@@ -378,10 +378,10 @@ def get_tasks_by_wave(doc: TasksDocument, wave_num: int) -> list[Task]:
 def get_pending_tasks(doc: TasksDocument) -> list[Task]:
     """获取所有待执行任务（status=IDLE）。
 
-    Args:
+    参数：
         doc: 要查询的 TasksDocument
 
-    Returns:
+    返回：
         状态为 IDLE 的任务列表
     """
     return [task for task in doc.all_tasks.values() if task.status == TaskStatus.IDLE]
@@ -390,11 +390,11 @@ def get_pending_tasks(doc: TasksDocument) -> list[Task]:
 def get_task_by_id(doc: TasksDocument, task_id: str) -> Task | None:
     """按任务 ID 获取任务。
 
-    Args:
+    参数：
         doc: 要查询的 TasksDocument
         task_id: 要获取的任务 ID
 
-    Returns:
+    返回：
         找到则返回 Task 对象，否则返回 None
     """
     return doc.all_tasks.get(task_id)
@@ -408,10 +408,10 @@ def validate_dependencies(doc: TasksDocument) -> tuple[bool, list[str]]:
     - 无循环依赖
     - 依赖位于更早或相同 wave
 
-    Args:
+    参数：
         doc: 要校验的 TasksDocument
 
-    Returns:
+    返回：
         (is_valid, error_messages) 元组：
         - is_valid: 所有校验通过则为 True
         - error_messages: 校验错误信息列表（有效时为空）
@@ -423,7 +423,7 @@ def validate_dependencies(doc: TasksDocument) -> tuple[bool, list[str]]:
         for dep_id in task.dependencies:
             if dep_id not in doc.all_tasks:
                 errors.append(
-                    f"Task {task.task_id} depends on non-existent task {dep_id}"
+                    f"任务 {task.task_id} 依赖了不存在的任务 {dep_id}"
                 )
 
     # 使用 DFS 检查循环依赖
@@ -447,7 +447,7 @@ def validate_dependencies(doc: TasksDocument) -> tuple[bool, list[str]]:
     for task_id in doc.all_tasks:
         if task_id not in visited:
             if has_cycle(task_id, visited, set()):
-                errors.append(f"Circular dependency detected involving task {task_id}")
+                errors.append(f"检测到循环依赖，涉及任务 {task_id}")
 
     # 检查依赖是否位于更早或相同 wave
     for task in doc.all_tasks.values():
@@ -455,8 +455,8 @@ def validate_dependencies(doc: TasksDocument) -> tuple[bool, list[str]]:
             dep_task = doc.all_tasks.get(dep_id)
             if dep_task and dep_task.wave > task.wave:
                 errors.append(
-                    f"Task {task.task_id} (wave {task.wave}) depends on "
-                    f"{dep_id} (wave {dep_task.wave}), which is in a later wave"
+                    f"任务 {task.task_id}（波次 {task.wave}）依赖 {dep_id}（波次 {dep_task.wave}），"
+                    "但依赖位于更晚的波次"
                 )
 
     is_valid = len(errors) == 0
@@ -475,16 +475,16 @@ def update_task_status(
 
     会同时更新概览表，以及（若存在）任务详情区块。
 
-    Args:
+    参数：
         content: 原始 tasks.md 内容
         task_id: 要更新的任务 ID
         new_status: 要设置的新状态
         log: 可选的执行日志字典（键：completed_at、subagent_id、notes）
 
-    Returns:
+    返回：
         更新后的 tasks.md 内容
 
-    Raises:
+    异常：
         ValueError: 内容中找不到任务时抛出
     """
     new_icon = STATUS_TO_ICON.get(new_status, "🟦")
@@ -498,7 +498,7 @@ def update_task_status(
 
     match = table_pattern.search(content)
     if not match:
-        raise ValueError(f"Task {task_id} not found in overview table")
+        raise ValueError(f"概览表中未找到任务 {task_id}")
 
     # 替换表格中的状态图标
     replacement = rf"\g<1> {new_icon} \g<3>"
@@ -508,7 +508,7 @@ def update_task_status(
     if log and new_status == TaskStatus.COMPLETED:
         # 查找任务详情区块
         detail_pattern = re.compile(
-            rf"(^###\s+(?:Task:\s+)?{re.escape(task_id)}\s*-\s*.+?$.*?)(\*\*执行日志\*\*:?\s*\n(?:.*?)(?=\n\n|^###|^---|\Z))",
+            rf"(^###\s+(?:(?:Task|任务)[:：]\s+)?{re.escape(task_id)}\s*-\s*.+?$.*?)(\*\*执行日志\*\*[:：]?\s*\n(?:.*?)(?=\n\n|^###|^---|\Z))",
             re.MULTILINE | re.DOTALL,
         )
 
@@ -518,13 +518,13 @@ def update_task_status(
             completed_at = log.get("completed_at", datetime.now().isoformat())
             subagent_id = log.get("subagent_id", "")
 
-            log_text = f"**执行日志**:\n- 完成时间: {completed_at}\n- SubAgent ID: {subagent_id}\n"
+            log_text = f"**执行日志**:\n- 完成时间: {completed_at}\n- SubAgent 标识: {subagent_id}\n"
 
             content = detail_pattern.sub(rf"\g<1>{log_text}", content, count=1)
         else:
             # 若不存在执行日志则新增
             section_pattern = re.compile(
-                rf"(^###\s+(?:Task:\s+)?{re.escape(task_id)}\s*-\s*.+?$.*?)(\n\n|^###|^---|\Z)",
+                rf"(^###\s+(?:(?:Task|任务)[:：]\s+)?{re.escape(task_id)}\s*-\s*.+?$.*?)(\n\n|^###|^---|\Z)",
                 re.MULTILINE | re.DOTALL,
             )
 
@@ -533,7 +533,7 @@ def update_task_status(
                 completed_at = log.get("completed_at", datetime.now().isoformat())
                 subagent_id = log.get("subagent_id", "")
 
-                log_text = f"\n**执行日志**:\n- 完成时间: {completed_at}\n- SubAgent ID: {subagent_id}\n\n"
+                log_text = f"\n**执行日志**:\n- 完成时间: {completed_at}\n- SubAgent 标识: {subagent_id}\n\n"
 
                 content = section_pattern.sub(rf"\g<1>{log_text}\g<2>", content, count=1)
 
@@ -548,39 +548,39 @@ def update_checklist_item(
 ) -> str:
     """更新 tasks.md 中某个检查清单项的勾选状态。
 
-    Args:
+    参数：
         content: 原始 tasks.md 内容
         task_id: 包含该检查清单的任务 ID
         item_index: 检查清单项索引（从 0 开始）
         checked: 是否勾选该项（True 勾选，False 取消勾选）
 
-    Returns:
+    返回：
         更新后的 tasks.md 内容
 
-    Raises:
+    异常：
         ValueError: 找不到任务或检查清单项时抛出
     """
     # 查找任务详情区块
     detail_pattern = re.compile(
-        rf"^###\s+(?:Task:\s+)?{re.escape(task_id)}\s*-\s*.+?$.*?(?=^###|^---|\Z)",
+        rf"^###\s+(?:(?:Task|任务)[:：]\s+)?{re.escape(task_id)}\s*-\s*.+?$.*?(?=^###|^---|\Z)",
         re.MULTILINE | re.DOTALL,
     )
 
     match = detail_pattern.search(content)
     if not match:
-        raise ValueError(f"Task {task_id} not found in content")
+        raise ValueError(f"在内容中未找到任务 {task_id}")
 
     section_content = match.group(0)
 
     # 查找 Checklist 区块
     checklist_pattern = re.compile(
-        r"(\*\*Checklist\*\*:?\s*\n)((?:\s*[-*]\s+\[[ xX\-]\].+\n?)+)",
+        r"(\*\*(?:Checklist|检查清单)\*\*[:：]?\s*\n)((?:\s*[-*]\s+\[[ xX\-]\].+\n?)+)",
         re.MULTILINE,
     )
 
     checklist_match = checklist_pattern.search(section_content)
     if not checklist_match:
-        raise ValueError(f"No checklist found for task {task_id}")
+        raise ValueError(f"未找到任务 {task_id} 的检查清单")
 
     checklist_header = checklist_match.group(1)
     checklist_content = checklist_match.group(2)
@@ -591,7 +591,7 @@ def update_checklist_item(
 
     if item_index < 0 or item_index >= len(items):
         raise ValueError(
-            f"Checklist item index {item_index} out of range (0-{len(items) - 1})"
+            f"检查清单项索引 {item_index} 超出范围（0-{len(items) - 1}）"
         )
 
     # 更新指定条目

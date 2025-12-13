@@ -100,13 +100,13 @@ def load_state(state_path: Path) -> ChangeState:
         ValueError：状态文件内容不合法
     """
     if not state_path.exists():
-        raise FileNotFoundError(f"State file not found: {state_path}")
+        raise FileNotFoundError(f"未找到状态文件：{state_path}")
 
     with open(state_path, encoding="utf-8") as f:
         data = yaml.safe_load(f)
 
     if not data:
-        raise ValueError("State file is empty")
+        raise ValueError("状态文件为空")
 
     # 解析 stages
     stages_data = data.get("stages", {})

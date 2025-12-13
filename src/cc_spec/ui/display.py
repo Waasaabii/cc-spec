@@ -24,21 +24,30 @@ THEME = {
 
 # 状态图标
 STATUS_ICONS = {
-    "pending": "🟦",
-    "in_progress": "🟨",
-    "completed": "🟩",
-    "failed": "🟥",
-    "timeout": "⏰",
+    "pending": "○",
+    "in_progress": "…",
+    "completed": "√",
+    "failed": "×",
+    "timeout": "!",
+}
+
+# 状态显示名称
+STATUS_NAMES = {
+    "pending": "待执行",
+    "in_progress": "进行中",
+    "completed": "已完成",
+    "failed": "失败",
+    "timeout": "超时",
 }
 
 # 阶段显示名称
 STAGE_NAMES = {
-    "specify": "Specify",
-    "clarify": "Clarify",
-    "plan": "Plan",
-    "apply": "Apply",
-    "checklist": "Checklist",
-    "archive": "Archive",
+    "specify": "编写规格",
+    "clarify": "澄清",
+    "plan": "计划",
+    "apply": "执行",
+    "checklist": "验收",
+    "archive": "归档",
 }
 
 
@@ -50,16 +59,16 @@ def show_status_panel(
 ) -> None:
     """显示状态面板，展示当前变更、阶段与进度。
 
-    Args:
+    参数：
         console: Rich 控制台实例
         change_name: 当前变更名称
         current_stage: 当前阶段（specify/clarify/plan/apply/checklist/archive）
         progress: 可选的进度信息（waves_completed、waves_total 等）
     """
     content_lines = []
-    content_lines.append(f"[cyan]Change:[/cyan] [bold]{change_name}[/bold]")
+    content_lines.append(f"[cyan]变更：[/cyan] [bold]{change_name}[/bold]")
     content_lines.append(
-        f"[cyan]Stage:[/cyan] [bold]{STAGE_NAMES.get(current_stage, current_stage)}[/bold]"
+        f"[cyan]阶段：[/cyan] [bold]{STAGE_NAMES.get(current_stage, current_stage)}[/bold]"
     )
 
     if progress:
@@ -68,18 +77,17 @@ def show_status_panel(
         if waves_total > 0:
             percentage = int((waves_completed / waves_total) * 100)
             content_lines.append(
-                f"[cyan]Progress:[/cyan] {waves_completed}/{waves_total} waves "
-                f"({percentage}%)"
+                f"[cyan]进度：[/cyan] {waves_completed}/{waves_total} 波次（{percentage}%）"
             )
 
         tasks_completed = progress.get("tasks_completed", 0)
         tasks_total = progress.get("tasks_total", 0)
         if tasks_total > 0:
-            content_lines.append(f"[cyan]Tasks:[/cyan] {tasks_completed}/{tasks_total}")
+            content_lines.append(f"[cyan]任务：[/cyan] {tasks_completed}/{tasks_total}")
 
     panel = Panel(
         "\n".join(content_lines),
-        title="[bold]Current Status[/bold]",
+        title="[bold]当前状态[/bold]",
         border_style="cyan",
         padding=(1, 2),
     )
@@ -94,22 +102,22 @@ def show_task_table(
 ) -> None:
     """显示任务表格，包含状态、wave 与依赖信息。
 
-    Args:
+    参数：
         console: Rich 控制台实例
         tasks: 任务字典列表，包含键：id、status、wave、dependencies、estimate
         show_wave: 是否显示 Wave 列
         show_dependencies: 是否显示依赖列
     """
-    table = Table(title="Tasks Overview", border_style="cyan", show_header=True)
+    table = Table(title="任务概览", border_style="cyan", show_header=True)
 
     # 添加列
     if show_wave:
-        table.add_column("Wave", style="dim", width=6, justify="center")
-    table.add_column("Task ID", style="cyan", width=20)
-    table.add_column("Status", width=12, justify="center")
-    table.add_column("Estimate", style="dim", width=10, justify="right")
+        table.add_column("波次", style="dim", width=6, justify="center")
+    table.add_column("任务 ID", style="cyan", width=20)
+    table.add_column("状态", width=12, justify="center")
+    table.add_column("预估", style="dim", width=10, justify="right")
     if show_dependencies:
-        table.add_column("Dependencies", style="dim", width=20)
+        table.add_column("依赖", style="dim", width=20)
 
     # 按 wave 与 ID 排序任务
     sorted_tasks = sorted(tasks, key=lambda t: (t.get("wave", 0), t.get("id", "")))
@@ -125,9 +133,10 @@ def show_task_table(
         # 获取状态图标与颜色
         icon = STATUS_ICONS.get(status, "○")
         color = THEME.get(status, "white")
+        status_name = STATUS_NAMES.get(status, status)
 
         # 组合带图标的状态展示
-        status_display = f"{icon} [{color}]{status}[/{color}]"
+        status_display = f"{icon} [{color}]{status_name}[/{color}]"
 
         # 格式化依赖项
         deps_display = ", ".join(dependencies) if dependencies else "-"
@@ -152,13 +161,13 @@ def show_wave_tree(
 ) -> None:
     """显示 Wave 执行树，展示并行与串行关系。
 
-    Args:
+    参数：
         console: Rich 控制台实例
         waves: wave 编号到任务列表的映射
         current_wave: 可选：需要高亮的当前 wave 编号
     """
     tree = Tree(
-        "[bold cyan]Wave Execution Plan[/bold cyan]",
+        "[bold cyan]波次执行计划[/bold cyan]",
         guide_style="grey50",
     )
 
@@ -167,15 +176,15 @@ def show_wave_tree(
 
         # 高亮当前 wave
         if current_wave is not None and wave_num == current_wave:
-            wave_label = f"[yellow]Wave {wave_num}[/yellow] [dim](current)[/dim]"
+            wave_label = f"[yellow]波次 {wave_num}[/yellow] [dim]（当前）[/dim]"
         elif current_wave is not None and wave_num < current_wave:
-            wave_label = f"[green]Wave {wave_num}[/green] [dim](completed)[/dim]"
+            wave_label = f"[green]波次 {wave_num}[/green] [dim]（已完成）[/dim]"
         else:
-            wave_label = f"[white]Wave {wave_num}[/white]"
+            wave_label = f"[white]波次 {wave_num}[/white]"
 
         # 多任务时添加并发提示
         if len(tasks) > 1:
-            wave_label += " [dim](concurrent)[/dim]"
+            wave_label += " [dim]（可并发）[/dim]"
 
         wave_branch = tree.add(wave_label)
 
@@ -191,7 +200,7 @@ def show_wave_tree(
             # 添加依赖信息
             dependencies = task.get("dependencies", [])
             if dependencies:
-                task_label += f" [dim](depends: {', '.join(dependencies)})[/dim]"
+                task_label += f" [dim]（依赖：{', '.join(dependencies)}）[/dim]"
 
             wave_branch.add(task_label)
 
@@ -201,10 +210,10 @@ def show_wave_tree(
 def get_status_color(status: str) -> str:
     """获取指定状态对应的主题颜色。
 
-    Args:
+    参数：
         status: 状态字符串（pending/in_progress/completed/failed/timeout）
 
-    Returns:
+    返回：
         该状态对应的颜色名称
     """
     return THEME.get(status, "white")
@@ -213,10 +222,10 @@ def get_status_color(status: str) -> str:
 def get_status_icon(status: str) -> str:
     """获取指定状态对应的图标。
 
-    Args:
+    参数：
         status: 状态字符串（pending/in_progress/completed/failed/timeout）
 
-    Returns:
-        该状态对应的图标/emoji
+    返回：
+        该状态对应的图标
     """
     return STATUS_ICONS.get(status, "○")

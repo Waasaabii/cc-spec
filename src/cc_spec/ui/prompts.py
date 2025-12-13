@@ -19,28 +19,28 @@ def confirm_action(
 ) -> bool:
     """提示用户确认一个操作。
 
-    Args:
+    参数：
         console: Rich 控制台实例
         message: 要展示的确认提示消息
         default: 默认选择（True=是，False=否）
         warning: 是否以警告样式展示（危险操作）
 
-    Returns:
+    返回：
         用户确认则返回 True，否则返回 False
     """
     # 根据 warning 标志选择样式
     if warning:
         style = "yellow"
         border_style = "yellow"
-        prefix = "⚠️  [bold yellow]Warning[/bold yellow]"
+        prefix = "[bold yellow]警告[/bold yellow]"
     else:
         style = "cyan"
         border_style = "cyan"
-        prefix = "[bold cyan]Confirm[/bold cyan]"
+        prefix = "[bold cyan]确认[/bold cyan]"
 
     # 构建提示文本
     default_hint = "[Y/n]" if default else "[y/N]"
-    prompt_text = f"{prefix}\n\n{message}\n\n[dim]Continue? {default_hint}[/dim]"
+    prompt_text = f"{prefix}\n\n{message}\n\n[dim]继续？ {default_hint}[/dim]"
 
     panel = Panel(
         prompt_text,
@@ -57,43 +57,43 @@ def confirm_action(
 
             # 处理常见按键
             if key.lower() == "y":
-                console.print("[green]✓ Confirmed[/green]")
+                console.print("[green]√ 已确认[/green]")
                 return True
             elif key.lower() == "n":
-                console.print("[yellow]✗ Cancelled[/yellow]")
+                console.print("[yellow]× 已取消[/yellow]")
                 return False
             elif key in (readchar.key.ENTER, "\r", "\n"):
                 if default:
-                    console.print("[green]✓ Confirmed (default)[/green]")
+                    console.print("[green]√ 已确认（默认）[/green]")
                 else:
-                    console.print("[yellow]✗ Cancelled (default)[/yellow]")
+                    console.print("[yellow]× 已取消（默认）[/yellow]")
                 return default
             elif key in (readchar.key.ESC, readchar.key.CTRL_C):
-                console.print("[yellow]✗ Cancelled[/yellow]")
+                console.print("[yellow]× 已取消[/yellow]")
                 return False
 
         except KeyboardInterrupt:
-            console.print("[yellow]✗ Cancelled[/yellow]")
+            console.print("[yellow]× 已取消[/yellow]")
             return False
 
 
 def select_option(
     console: Console,
     options: dict[str, str] | list[str],
-    prompt_text: str = "Select an option",
+    prompt_text: str = "请选择一个选项",
     default: str | None = None,
     multi_select: bool = False,
 ) -> str | list[str]:
     """使用方向键进行交互式选项选择。
 
-    Args:
+    参数：
         console: Rich 控制台实例
         options: 可选项（dict：key->description 或字符串列表）
         prompt_text: 显示在选项上方的提示文本
         default: 默认选项 key/value
         multi_select: 是否允许多选
 
-    Returns:
+    返回：
         选中的选项 key（若 multi_select=True 则返回 key 列表）
     """
     # 将 options 统一成 dict
@@ -123,11 +123,11 @@ def select_option(
 
         for i, key in enumerate(option_keys):
             # 光标指示
-            cursor = "▶" if i == selected_index else " "
+            cursor = ">" if i == selected_index else " "
 
             # 多选复选框
             if multi_select:
-                checkbox = "[✓]" if key in selected_items else "[ ]"
+                checkbox = "[x]" if key in selected_items else "[ ]"
                 if i == selected_index:
                     row_text = f"[cyan]{key}[/cyan] [dim]({options_dict[key]})[/dim]"
                 else:
@@ -146,12 +146,12 @@ def select_option(
             table.add_row(
                 "",
                 "",
-                "[dim]Use ↑/↓ to navigate, Space to select, Enter to confirm, Esc to cancel[/dim]",
+                "[dim]使用↑/↓移动，空格选择，回车确认，Esc 取消[/dim]",
             )
         else:
             table.add_row(
                 "",
-                "[dim]Use ↑/↓ to navigate, Enter to select, Esc to cancel[/dim]",
+                "[dim]使用↑/↓移动，回车选择，Esc 取消[/dim]",
             )
 
         return Panel(
@@ -202,14 +202,14 @@ def select_option(
 
                     # 取消
                     elif key in (readchar.key.ESC, readchar.key.CTRL_C):
-                        console.print("\n[yellow]Selection cancelled[/yellow]")
+                        console.print("\n[yellow]已取消选择[/yellow]")
                         raise KeyboardInterrupt
 
                     # 更新显示
                     live.update(create_selection_panel(), refresh=True)
 
                 except KeyboardInterrupt:
-                    console.print("\n[yellow]Selection cancelled[/yellow]")
+                    console.print("\n[yellow]已取消选择[/yellow]")
                     raise
 
     try:
@@ -223,16 +223,16 @@ def select_option(
     # 返回结果
     if multi_select:
         if not selected_items:
-            console.print("\n[yellow]No items selected[/yellow]")
+            console.print("\n[yellow]未选择任何项[/yellow]")
             return []
         selected_list = sorted(selected_items, key=lambda k: option_keys.index(k))
-        console.print(f"\n[green]Selected:[/green] {', '.join(selected_list)}")
+        console.print(f"\n[green]已选择：[/green] {', '.join(selected_list)}")
         return selected_list
     else:
         if selected_key is None:
-            console.print("\n[red]Selection failed[/red]")
+            console.print("\n[red]选择失败[/red]")
             return ""
-        console.print(f"\n[green]Selected:[/green] {selected_key}")
+        console.print(f"\n[green]已选择：[/green] {selected_key}")
         return selected_key
 
 
@@ -244,20 +244,20 @@ def get_text_input(
 ) -> str:
     """获取用户的文本输入。
 
-    Args:
+    参数：
         console: Rich 控制台实例
         prompt: 提示信息
         default: 默认值
         required: 是否为必填（不能为空）
 
-    Returns:
+    返回：
         用户输入的字符串
     """
     # 显示提示
     if default:
-        prompt_text = f"[cyan]{prompt}[/cyan] [dim](default: {default})[/dim]: "
+        prompt_text = f"[cyan]{prompt}[/cyan] [dim](默认：{default})[/dim]："
     else:
-        prompt_text = f"[cyan]{prompt}[/cyan]: "
+        prompt_text = f"[cyan]{prompt}[/cyan]："
 
     console.print(prompt_text, end="")
 
@@ -265,7 +265,7 @@ def get_text_input(
     try:
         user_input = input().strip()
     except (KeyboardInterrupt, EOFError):
-        console.print("\n[yellow]Input cancelled[/yellow]")
+        console.print("\n[yellow]输入已取消[/yellow]")
         return ""
 
     # 处理空输入
@@ -273,7 +273,7 @@ def get_text_input(
         if default:
             return default
         elif required:
-            console.print("[red]Error:[/red] Input is required")
+            console.print("[red]错误：[/red] 输入不能为空")
             return get_text_input(console, prompt, default, required)
         else:
             return ""

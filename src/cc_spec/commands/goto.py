@@ -25,20 +25,20 @@ console = Console()
 def goto_command(
     id_: str = typer.Argument(
         ...,
-        help="Change ID (e.g., C-001) or Task ID (e.g., C-001:02-MODEL)",
+        help="变更 ID（例如 C-001）或任务 ID（例如 C-001:02-MODEL）",
         metavar="ID",
     ),
     force: bool = typer.Option(
         False,
         "--force",
         "-f",
-        help="Force navigation, ignore state checks",
+        help="强制导航，忽略状态检查",
     ),
     execute: bool = typer.Option(
         False,
         "--execute",
         "-x",
-        help="v1.2: Execute the selected command directly",
+        help="v1.2：直接执行所选命令",
     ),
 ) -> None:
     """导航到指定的变更或任务。
@@ -56,8 +56,7 @@ def goto_command(
     project_root = find_project_root()
     if project_root is None:
         console.print(
-            "[red]Error:[/red] Not in a cc-spec project. "
-            "Run 'cc-spec init' first."
+            "[red]错误：[/red] 当前目录不是 cc-spec 项目，请先运行 'cc-spec init'。"
         )
         raise typer.Exit(1)
 
@@ -67,28 +66,28 @@ def goto_command(
     try:
         parsed = id_manager.parse_id(id_)
     except ValueError as e:
-        console.print(f"[red]Error:[/red] {e}")
+        console.print(f"[red]错误：[/red] {e}")
         raise typer.Exit(1)
 
     if parsed.type == IDType.CHANGE:
         _goto_change(id_manager, cc_spec_root, parsed.change_id or id_, force, execute)
     elif parsed.type == IDType.TASK:
         if not parsed.change_id or not parsed.task_id:
-            console.print(f"[red]Error:[/red] Invalid task ID format: {id_}")
+            console.print(f"[red]错误：[/red] 任务 ID 格式无效：{id_}")
             raise typer.Exit(1)
         _goto_task(id_manager, cc_spec_root, parsed.change_id, parsed.task_id, force, execute)
     elif parsed.type == IDType.SPEC:
         console.print(
-            f"[yellow]Info:[/yellow] Specs don't have navigation. "
-            f"Use 'cc-spec list specs' to view."
+            "[yellow]提示：[/yellow] 规格（spec）不支持导航。"
+            "请使用 'cc-spec list specs' 查看。"
         )
     elif parsed.type == IDType.ARCHIVE:
         console.print(
-            f"[yellow]Info:[/yellow] Archives are read-only. "
-            f"Use 'cc-spec list archive' to view."
+            "[yellow]提示：[/yellow] 归档为只读。"
+            "请使用 'cc-spec list archive' 查看。"
         )
     else:
-        console.print(f"[red]Error:[/red] Unknown ID type: {id_}")
+        console.print(f"[red]错误：[/red] 未知 ID 类型：{id_}")
         raise typer.Exit(1)
 
 
@@ -116,7 +115,7 @@ def _goto_change(
         if result:
             change_id, entry = result
         else:
-            console.print(f"[red]Error:[/red] Change not found: {change_id}")
+            console.print(f"[red]错误：[/red] 未找到变更：{change_id}")
             raise typer.Exit(1)
 
     change_path = cc_spec_root / entry.path
@@ -124,14 +123,14 @@ def _goto_change(
 
     if not status_file.exists():
         console.print(
-            f"[red]Error:[/red] Status file not found for change: {change_id}"
+            f"[red]错误：[/red] 未找到变更的状态文件：{change_id}"
         )
         raise typer.Exit(1)
 
     try:
         state = load_state(status_file)
     except (ValueError, FileNotFoundError) as e:
-        console.print(f"[red]Error:[/red] Failed to load state: {e}")
+        console.print(f"[red]错误：[/red] 加载状态失败：{e}")
         raise typer.Exit(1)
 
     # 展示变更信息面板
@@ -164,10 +163,10 @@ def _show_change_panel(
 
     # 构建内容
     lines = [
-        f"[cyan]Change:[/cyan] [bold]{change_name}[/bold]",
-        f"[cyan]ID:[/cyan] {change_id}",
-        f"[cyan]Stage:[/cyan] [bold]{stage_name}[/bold]",
-        f"[cyan]Status:[/cyan] {status_icon} [{status_color}]{status}[/{status_color}]",
+        f"[cyan]变更：[/cyan] [bold]{change_name}[/bold]",
+        f"[cyan]ID：[/cyan] {change_id}",
+        f"[cyan]阶段：[/cyan] [bold]{stage_name}[/bold]",
+        f"[cyan]状态：[/cyan] {status_icon} [{status_color}]{status}[/{status_color}]",
     ]
 
     # 若处于 apply 阶段则添加任务进度
@@ -175,13 +174,13 @@ def _show_change_panel(
         waves_completed = stage_info.waves_completed or 0
         waves_total = stage_info.waves_total or 0
         if waves_total > 0:
-            lines.append(f"[cyan]Progress:[/cyan] Wave {waves_completed}/{waves_total}")
+            lines.append(f"[cyan]进度：[/cyan] 波次 {waves_completed}/{waves_total}")
 
     # 添加任务摘要
     if state.tasks:
         completed = sum(1 for t in state.tasks if t.status == TaskStatus.COMPLETED)
         total = len(state.tasks)
-        lines.append(f"[cyan]Tasks:[/cyan] {completed}/{total} completed")
+        lines.append(f"[cyan]任务：[/cyan] {completed}/{total} 已完成")
 
     panel = Panel(
         "\n".join(lines),
@@ -211,23 +210,23 @@ def _show_stage_options(
 
     if stage == Stage.SPECIFY:
         options = [
-            ("1", "Edit proposal", f"cc-spec specify {change_id}"),
-            ("2", "Continue to clarify", f"cc-spec clarify {change_id}"),
-            ("3", "View proposal file", f"proposal.md"),
+            ("1", "编辑提案", f"cc-spec specify {change_id}"),
+            ("2", "继续澄清", f"cc-spec clarify {change_id}"),
+            ("3", "查看提案文件", "proposal.md"),
         ]
 
     elif stage == Stage.CLARIFY:
         options = [
-            ("1", "Review tasks", f"cc-spec clarify {change_id}"),
-            ("2", "Continue to plan", f"cc-spec plan {change_id}"),
-            ("3", "List tasks", f"cc-spec list tasks -c {change_id}"),
+            ("1", "审查任务", f"cc-spec clarify {change_id}"),
+            ("2", "继续计划", f"cc-spec plan {change_id}"),
+            ("3", "列出任务", f"cc-spec list tasks -c {change_id}"),
         ]
 
     elif stage == Stage.PLAN:
         options = [
-            ("1", "Edit plan", f"cc-spec plan {change_id}"),
-            ("2", "Continue to apply", f"cc-spec apply {change_id}"),
-            ("3", "View tasks.md", f"tasks.md"),
+            ("1", "编辑计划", f"cc-spec plan {change_id}"),
+            ("2", "继续执行", f"cc-spec apply {change_id}"),
+            ("3", "查看 tasks.md", "tasks.md"),
         ]
 
     elif stage == Stage.APPLY:
@@ -236,14 +235,14 @@ def _show_stage_options(
 
         if status == "completed":
             options = [
-                ("1", "Run checklist", f"cc-spec checklist {change_id}"),
-                ("2", "List tasks", f"cc-spec list tasks -c {change_id}"),
+                ("1", "运行验收", f"cc-spec checklist {change_id}"),
+                ("2", "列出任务", f"cc-spec list tasks -c {change_id}"),
             ]
         else:
             options = [
-                ("1", "Continue execution", f"cc-spec apply {change_id}"),
-                ("2", "List tasks", f"cc-spec list tasks -c {change_id}"),
-                ("3", "Mark task for rework", f"cc-spec clarify {change_id}"),
+                ("1", "继续执行", f"cc-spec apply {change_id}"),
+                ("2", "列出任务", f"cc-spec list tasks -c {change_id}"),
+                ("3", "标记任务返工", f"cc-spec clarify {change_id}"),
             ]
 
     elif stage == Stage.CHECKLIST:
@@ -252,33 +251,33 @@ def _show_stage_options(
 
         if status == "completed":
             options = [
-                ("1", "Archive change", f"cc-spec archive {change_id}"),
-                ("2", "Re-run checklist", f"cc-spec checklist {change_id}"),
+                ("1", "归档变更", f"cc-spec archive {change_id}"),
+                ("2", "重新验收", f"cc-spec checklist {change_id}"),
             ]
         else:
             options = [
-                ("1", "Run checklist", f"cc-spec checklist {change_id}"),
-                ("2", "Rework failed tasks", f"cc-spec clarify {change_id}"),
+                ("1", "运行验收", f"cc-spec checklist {change_id}"),
+                ("2", "返工失败任务", f"cc-spec clarify {change_id}"),
             ]
 
     elif stage == Stage.ARCHIVE:
         console.print(
-            "[yellow]This change has been archived.[/yellow]"
+            "[yellow]该变更已归档。[/yellow]"
         )
         console.print(
-            f"[dim]View archived files in: changes/archive/{state.change_name}[/dim]"
+            f"[dim]查看归档文件：changes/archive/{state.change_name}[/dim]"
         )
         return
 
     # 显示选项
-    console.print("\n[bold]Next steps:[/bold]")
+    console.print("\n[bold]下一步：[/bold]")
     for key, label, cmd in options:
         console.print(f"  [{key}] {label} [dim]({cmd})[/dim]")
-    console.print("  [q] Exit")
+    console.print("  [q] 退出")
 
     # 交互式选择
     console.print()
-    choice = Prompt.ask("Select an option", choices=[o[0] for o in options] + ["q"])
+    choice = Prompt.ask("请选择一个选项", choices=[o[0] for o in options] + ["q"])
 
     if choice == "q":
         return
@@ -286,7 +285,7 @@ def _show_stage_options(
     # 找到所选项
     for key, label, cmd in options:
         if key == choice:
-            console.print(f"\n[cyan]Run:[/cyan] {cmd}")
+            console.print(f"\n[cyan]执行：[/cyan] {cmd}")
             # v1.2：如果设置了 --execute 则直接执行命令
             if execute:
                 _execute_command(cmd)
@@ -314,7 +313,7 @@ def _goto_task(
     # 解析变更
     entry = id_manager.get_change_entry(change_id)
     if not entry:
-        console.print(f"[red]Error:[/red] Change not found: {change_id}")
+        console.print(f"[red]错误：[/red] 未找到变更：{change_id}")
         raise typer.Exit(1)
 
     change_path = cc_spec_root / entry.path
@@ -322,14 +321,14 @@ def _goto_task(
 
     if not status_file.exists():
         console.print(
-            f"[red]Error:[/red] Status file not found for change: {change_id}"
+            f"[red]错误：[/red] 未找到变更的状态文件：{change_id}"
         )
         raise typer.Exit(1)
 
     try:
         state = load_state(status_file)
     except (ValueError, FileNotFoundError) as e:
-        console.print(f"[red]Error:[/red] Failed to load state: {e}")
+        console.print(f"[red]错误：[/red] 加载状态失败：{e}")
         raise typer.Exit(1)
 
     # 在状态中查找任务
@@ -428,40 +427,40 @@ def _show_task_options(
 
     if status == "pending":
         options = [
-            ("1", "Start execution", f"cc-spec apply {change_id}"),
-            ("2", "View task details", f"tasks.md"),
+            ("1", "开始执行", f"cc-spec apply {change_id}"),
+            ("2", "查看任务详情", "tasks.md"),
         ]
     elif status == "in_progress":
         options = [
-            ("1", "Continue execution", f"cc-spec apply {change_id}"),
-            ("2", "View task details", f"tasks.md"),
+            ("1", "继续执行", f"cc-spec apply {change_id}"),
+            ("2", "查看任务详情", "tasks.md"),
         ]
     elif status == "completed":
         options = [
-            ("1", "Run checklist", f"cc-spec checklist {change_id}"),
-            ("2", "Mark for rework", f"cc-spec clarify {full_id}"),
+            ("1", "运行验收", f"cc-spec checklist {change_id}"),
+            ("2", "标记返工", f"cc-spec clarify {full_id}"),
         ]
     elif status == "failed":
         options = [
-            ("1", "Mark for rework", f"cc-spec clarify {full_id}"),
-            ("2", "Retry execution", f"cc-spec apply {change_id}"),
-            ("3", "View execution log", f"execution-log.md"),
+            ("1", "标记返工", f"cc-spec clarify {full_id}"),
+            ("2", "重试执行", f"cc-spec apply {change_id}"),
+            ("3", "查看执行日志", "execution-log.md"),
         ]
     else:
         options = [
-            ("1", "View change", f"cc-spec goto {change_id}"),
-            ("2", "List tasks", f"cc-spec list tasks -c {change_id}"),
+            ("1", "查看变更", f"cc-spec goto {change_id}"),
+            ("2", "列出任务", f"cc-spec list tasks -c {change_id}"),
         ]
 
     # 显示选项
-    console.print("\n[bold]Next steps:[/bold]")
+    console.print("\n[bold]下一步：[/bold]")
     for key, label, cmd in options:
         console.print(f"  [{key}] {label} [dim]({cmd})[/dim]")
-    console.print("  [q] Exit")
+    console.print("  [q] 退出")
 
     # 交互式选择
     console.print()
-    choice = Prompt.ask("Select an option", choices=[o[0] for o in options] + ["q"])
+    choice = Prompt.ask("请选择一个选项", choices=[o[0] for o in options] + ["q"])
 
     if choice == "q":
         return
@@ -469,7 +468,7 @@ def _show_task_options(
     # 找到所选项
     for key, label, cmd in options:
         if key == choice:
-            console.print(f"\n[cyan]Run:[/cyan] {cmd}")
+            console.print(f"\n[cyan]执行：[/cyan] {cmd}")
             # v1.2：如果设置了 --execute 则直接执行命令
             if execute:
                 _execute_command(cmd)
@@ -486,10 +485,10 @@ def _execute_command(cmd: str) -> None:
     """
     # 跳过非命令项（例如文件名）
     if not cmd.startswith("cc-spec"):
-        console.print(f"[yellow]Note:[/yellow] '{cmd}' is a file, not a command")
+        console.print(f"[yellow]提示：[/yellow] '{cmd}' 是文件路径，不是命令")
         return
 
-    console.print(f"\n[cyan]Executing...[/cyan]")
+    console.print("\n[cyan]正在执行...[/cyan]")
     console.print()
 
     try:
@@ -501,7 +500,7 @@ def _execute_command(cmd: str) -> None:
         )
         if result.returncode != 0:
             console.print(
-                f"\n[yellow]Command exited with code {result.returncode}[/yellow]"
+                f"\n[yellow]命令退出码：{result.returncode}[/yellow]"
             )
     except subprocess.SubprocessError as e:
-        console.print(f"\n[red]Error executing command:[/red] {e}")
+        console.print(f"\n[red]执行命令出错：[/red] {e}")

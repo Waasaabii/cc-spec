@@ -14,7 +14,7 @@ from cc_spec.utils.download import (
 )
 
 # 默认模板仓库
-DEFAULT_TEMPLATE_REPO = "owner/cc-spec-templates"  # TODO：更新为实际仓库
+DEFAULT_TEMPLATE_REPO = "owner/cc-spec-templates"  # TODO：更新为实际仓库名称
 DEFAULT_TEMPLATE_BRANCH = "main"
 
 # 模板文件名
@@ -90,17 +90,17 @@ async def download_templates(
     if not all_success:
         # 下载失败时检查是否存在缓存模板
         if use_cache and _has_cached_templates(dest_dir):
-            print("Using cached templates (download failed)")
+            print("使用缓存模板（下载失败）")
             return True
 
         # 检查是否存在内置模板（兜底）
         bundled_dir = Path(__file__).parent.parent / "templates"
         if bundled_dir.exists():
-            print("Using bundled templates (download failed)")
+            print("使用内置模板（下载失败）")
             _copy_bundled_templates(bundled_dir, dest_dir)
             return True
 
-        raise TemplateError("Failed to download templates and no cache available")
+        raise TemplateError("模板下载失败，且没有可用的缓存模板")
 
     return True
 
@@ -174,7 +174,7 @@ def copy_template(
 
     template_path = source_dir / template_name
     if not template_path.exists():
-        raise TemplateError(f"Template not found: {template_name}")
+        raise TemplateError(f"未找到模板：{template_name}")
 
     # 读取模板内容
     template_content = template_path.read_text(encoding="utf-8")
@@ -231,6 +231,6 @@ def get_template_path(template_name: str, source_dir: Optional[Path] = None) -> 
 
     template_path = source_dir / template_name
     if not template_path.exists():
-        raise TemplateError(f"Template not found: {template_name}")
+        raise TemplateError(f"未找到模板：{template_name}")
 
     return template_path
