@@ -4,7 +4,7 @@
 
 [English](./docs/README.en.md) | 中文
 
-[![Version](https://img.shields.io/badge/version-1.3.0-blue.svg)](https://github.com/Waasaabii/cc-spec)
+[![Version](https://img.shields.io/badge/version-0.1.0-blue.svg)](https://github.com/Waasaabii/cc-spec)
 
 ---
 
