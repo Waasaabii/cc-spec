@@ -80,7 +80,7 @@ SubAgent 上下文（每个）:
 | 1 | T13 | INIT-PROMPT | ~12K | 空闲 | - |
 | 1 | T17 | TEMPLATE-REF | ~15K | 空闲 | - |
 | 2 | T06 | AMBIGUITY-DETECTOR | ~10K | ✅ 已完成（2025-12-14 07:27） | T02 |
-| 2 | T07 | APPLY-TEMPLATE | ~35K | 空闲 | T01 |
+| 2 | T07 | APPLY-TEMPLATE | ~35K | ✅ 已完成（2025-12-14 07:29） | T01 |
 | 2 | T08 | CHECKLIST-TEMPLATE | ~25K | 空闲 | T01 |
 | 2 | T14 | SINGLE-SOURCE | ~18K | 空闲 | - |
 | 3 | T10 | GENERATOR-REFACTOR | ~15K | 空闲 | T03,T04,T05,T07,T08 |
@@ -328,9 +328,8 @@ Wave-4 (单任务)
 #### Task T07: APPLY-TEMPLATE
 
 **预估上下文**: ~35K tokens
-**状态**: 🟠 执行中（Claude-Terminal-3847, 2025-12-14 07:25）
-**执行实例**: Claude-Terminal-3847
-**开始时间**: 2025-12-14 07:25
+**状态**: ✅ 已完成（2025-12-14 07:29）
+**完成时间**: 2025-12-14 07:29
 **依赖**: T01
 
 **必读文件**:
@@ -342,13 +341,13 @@ Wave-4 (单任务)
 | src/cc_spec/core/command_templates/base.py | ~60 | 基类接口 |
 
 **输出文件**:
-- src/cc_spec/core/command_templates/apply_template.py (~220 行)
+- src/cc_spec/core/command_templates/apply_template.py (270 行)
 
 **Checklist**:
-- [ ] SubAgent 执行流程清晰
-- [ ] 锁机制使用说明完整
-- [ ] 技术检查步骤正确
-- [ ] 输出长度 150-300 行
+- [x] SubAgent 执行流程清晰
+- [x] 锁机制使用说明完整
+- [x] 技术检查步骤正确
+- [x] 输出长度 150-300 行
 
 ---
 
