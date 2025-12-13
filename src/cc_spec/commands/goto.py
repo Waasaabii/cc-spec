@@ -370,12 +370,13 @@ def _show_task_panel(
 
     status_icon = STATUS_ICONS.get(status, "○")
     status_color = THEME.get(status, "white")
+    status_text = "未知" if status == "unknown" else status
 
     lines = [
-        f"[cyan]Task:[/cyan] [bold]{task_id}[/bold]",
-        f"[cyan]Full ID:[/cyan] {full_id}",
-        f"[cyan]Wave:[/cyan] {wave}",
-        f"[cyan]Status:[/cyan] {status_icon} [{status_color}]{status}[/{status_color}]",
+        f"[cyan]任务：[/cyan] [bold]{task_id}[/bold]",
+        f"[cyan]完整 ID：[/cyan] {full_id}",
+        f"[cyan]波次：[/cyan] {wave}",
+        f"[cyan]状态：[/cyan] {status_icon} [{status_color}]{status_text}[/{status_color}]",
     ]
 
     # 尝试从 tasks.md 读取补充信息
@@ -385,14 +386,14 @@ def _show_task_panel(
             content = tasks_file.read_text(encoding="utf-8")
             # 查找任务段落
             import re
-            pattern = rf"###\s+Task:\s*{re.escape(task_id)}.*?\n(.*?)(?=###\s+Task:|$)"
+            pattern = rf"###\s+(?:Task|任务)[:：]\s*{re.escape(task_id)}.*?\n(.*?)(?=###\s+(?:Task|任务)[:：]|$)"
             match = re.search(pattern, content, re.DOTALL)
             if match:
                 task_section = match.group(1)
                 # 提取预估信息
                 est_match = re.search(r"\*\*预估上下文\*\*:\s*~?(\d+[kK]?)", task_section)
                 if est_match:
-                    lines.append(f"[cyan]Estimate:[/cyan] {est_match.group(1)} tokens")
+                    lines.append(f"[cyan]预估：[/cyan] {est_match.group(1)} token")
         except (OSError, UnicodeDecodeError):
             pass
 

@@ -272,7 +272,7 @@ def _parse_task_detail(content: str, task_id: str) -> dict:
         "profile": None,  # v1.1：SubAgent Profile（配置）
     }
 
-    # 用于匹配任务标题的模式：### XX-NAME - Description / ### Task: XX-NAME / ### 任务：XX-NAME
+    # 用于匹配任务标题的模式：### XX-NAME - 描述 / ### Task: XX-NAME / ### 任务：XX-NAME
     # 捕获内容直到下一个 ### 或 ---
     pattern = re.compile(
         rf"^###\s+(?:(?:Task|任务)[:：]\s+)?{re.escape(task_id)}\s*-\s*(.+?)\s*\n"

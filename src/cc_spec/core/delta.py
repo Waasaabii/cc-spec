@@ -69,7 +69,7 @@ def parse_delta(content: str) -> DeltaSpec:
     # 从标题提取能力名称：# Delta: {capability}
     title_match = re.search(r"^#\s+Delta:\s+(.+)$", content, re.MULTILINE)
     if not title_match:
-        raise ValueError("Delta spec must have a title in format: # Delta: {capability}")
+        raise ValueError("Delta spec 标题格式无效：需要 `# Delta: {capability}`")
 
     capability = title_match.group(1).strip()
     items: list[DeltaItem] = []
@@ -272,43 +272,43 @@ def validate_delta(delta: DeltaSpec) -> tuple[bool, list[str]]:
 
     # 校验 capability 名称
     if not delta.capability:
-        errors.append("Delta spec must have a capability name")
+        errors.append("Delta spec 必须包含 capability 名称")
 
     # 校验是否存在变更项
     if not delta.items:
-        errors.append("Delta spec must have at least one change item")
+        errors.append("Delta spec 至少要包含一个变更项")
 
     # 逐项校验
     for idx, item in enumerate(delta.items):
-        item_prefix = f"Item {idx + 1} ({item.operation.value})"
+        item_prefix = f"第 {idx + 1} 项（{item.operation.value}）"
 
         # 校验 requirement_name
         if not item.requirement_name:
-            errors.append(f"{item_prefix}: requirement_name is required")
+            errors.append(f"{item_prefix}：必须提供 requirement_name")
 
         # 校验 ADDED/MODIFIED 项必须有 content
         if item.operation in (DeltaOperation.ADDED, DeltaOperation.MODIFIED):
             if not item.content:
                 errors.append(
-                    f"{item_prefix}: content is required for ADDED/MODIFIED operations"
+                    f"{item_prefix}：ADDED/MODIFIED 操作必须提供 content"
                 )
 
         # 校验 REMOVED 项必须有 reason
         if item.operation == DeltaOperation.REMOVED:
             if not item.reason:
                 errors.append(
-                    f"{item_prefix}: reason is required for REMOVED operations"
+                    f"{item_prefix}：REMOVED 操作必须提供 reason"
                 )
 
         # 校验 RENAMED 项必须有 old_name 与 new_name
         if item.operation == DeltaOperation.RENAMED:
             if not item.old_name:
                 errors.append(
-                    f"{item_prefix}: old_name is required for RENAMED operations"
+                    f"{item_prefix}：RENAMED 操作必须提供 old_name"
                 )
             if not item.new_name:
                 errors.append(
-                    f"{item_prefix}: new_name is required for RENAMED operations"
+                    f"{item_prefix}：RENAMED 操作必须提供 new_name"
                 )
 
     is_valid = len(errors) == 0
@@ -391,7 +391,7 @@ def _merge_modified(base_content: str, item: DeltaItem) -> str:
     match = pattern.search(base_content)
     if not match:
         raise ValueError(
-            f"Cannot modify requirement '{item.requirement_name}': not found in base spec"
+            f"无法修改需求 '{item.requirement_name}'：在基础 spec 中未找到"
         )
 
     # 替换为新内容
@@ -427,7 +427,7 @@ def _merge_removed(base_content: str, item: DeltaItem) -> str:
     match = pattern.search(base_content)
     if not match:
         raise ValueError(
-            f"Cannot remove requirement '{item.requirement_name}': not found in base spec"
+            f"无法删除需求 '{item.requirement_name}'：在基础 spec 中未找到"
         )
 
     # 移除需求区块
@@ -452,7 +452,7 @@ def _merge_renamed(base_content: str, item: DeltaItem) -> str:
         ValueError：当基础内容中找不到旧需求名称时
     """
     if not item.old_name or not item.new_name:
-        raise ValueError("RENAMED operation requires both old_name and new_name")
+        raise ValueError("RENAMED 操作需要同时提供 old_name 与 new_name")
 
     # 仅匹配需求标题行的模式
     pattern = re.compile(
@@ -462,7 +462,7 @@ def _merge_renamed(base_content: str, item: DeltaItem) -> str:
     match = pattern.search(base_content)
     if not match:
         raise ValueError(
-            f"Cannot rename requirement '{item.old_name}': not found in base spec"
+            f"无法重命名需求 '{item.old_name}'：在基础 spec 中未找到"
         )
 
     # 仅替换标题，保持内容不变
@@ -482,8 +482,8 @@ def generate_merge_preview(base_content: str, delta: DeltaSpec) -> str:
         可读的预览文本，描述所有变更
     """
     preview_lines: list[str] = []
-    preview_lines.append(f"# Merge Preview for Delta: {delta.capability}\n")
-    preview_lines.append(f"Total changes: {len(delta.items)}\n")
+    preview_lines.append(f"# Delta 合并预览：{delta.capability}\n")
+    preview_lines.append(f"变更总数：{len(delta.items)}\n")
 
     # 按操作类型分组
     added = [item for item in delta.items if item.operation == DeltaOperation.ADDED]
@@ -495,37 +495,37 @@ def generate_merge_preview(base_content: str, delta: DeltaSpec) -> str:
 
     # ADDED 区块
     if added:
-        preview_lines.append(f"\n## ADDED Requirements ({len(added)})\n")
+        preview_lines.append(f"\n## 新增需求（{len(added)}）\n")
         for item in added:
             preview_lines.append(f"  + {item.requirement_name}")
 
     # MODIFIED 区块
     if modified:
-        preview_lines.append(f"\n## MODIFIED Requirements ({len(modified)})\n")
+        preview_lines.append(f"\n## 修改需求（{len(modified)}）\n")
         for item in modified:
             preview_lines.append(f"  ~ {item.requirement_name}")
 
     # REMOVED 区块
     if removed:
-        preview_lines.append(f"\n## REMOVED Requirements ({len(removed)})\n")
+        preview_lines.append(f"\n## 删除需求（{len(removed)}）\n")
         for item in removed:
             preview_lines.append(f"  - {item.requirement_name}")
             if item.reason:
-                preview_lines.append(f"    Reason: {item.reason}")
+                preview_lines.append(f"    原因：{item.reason}")
 
     # RENAMED 区块
     if renamed:
-        preview_lines.append(f"\n## RENAMED Requirements ({len(renamed)})\n")
+        preview_lines.append(f"\n## 重命名需求（{len(renamed)}）\n")
         for item in renamed:
             preview_lines.append(f"  → {item.old_name} → {item.new_name}")
 
     # 校验区块
-    preview_lines.append("\n## Validation\n")
+    preview_lines.append("\n## 校验\n")
     is_valid, errors = validate_delta(delta)
     if is_valid:
-        preview_lines.append("  ✓ All validations passed")
+        preview_lines.append("  ✓ 全部校验通过")
     else:
-        preview_lines.append("  ✗ Validation errors found:")
+        preview_lines.append("  ✗ 发现校验错误：")
         for error in errors:
             preview_lines.append(f"    - {error}")
 

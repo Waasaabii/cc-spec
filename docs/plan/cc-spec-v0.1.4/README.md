@@ -16,10 +16,14 @@
 | 目标 | 说明 |
 |------|------|
 | 命令模板系统 | 每个命令生成 150-300 行完整工作流指令 |
-| 歧义检测器 | 支持 9 大歧义分类自动检测 |
+| 歧义检测器 | 支持 9 大歧义分类自动检测（含上下文判断） |
 | 技术检查模块 | 从 CLAUDE.md 读取或智能检测技术栈 |
 | clarify 增强 | 新增 `--detect` 选项 |
 | apply 增强 | 主 Agent 统一执行技术检查 |
+| **单一真相源** | 合并 proposal.md + design.md |
+| **结构化任务** | tasks.md → tasks.yaml（体积 -80%） |
+| **SubAgent 优化** | 上下文从 ~5K 降到 ~500 tokens/agent |
+| **模板引用机制** | `$templates/` 公共检查清单 |
 
 ### 技术约束
 
@@ -49,7 +53,7 @@
 | 02 | [现状分析](./02-现状分析.md) | 当前实现状态（含精确行号引用） |
 | 03 | [缺口分析](./03-缺口分析.md) | 7 大差距识别与影响分析 |
 | 04 | [设计方案](./04-设计方案.md) | 详细实现设计（含代码示例） |
-| 05 | [实施步骤](./05-实施步骤.md) | Gate/Wave 任务规划（13 个任务） |
+| 05 | [实施步骤](./05-实施步骤.md) | Gate/Wave 任务规划（17 个任务） |
 | 06 | [测试与验收](./06-测试与验收.md) | 测试文件、命令、验收标准 |
 | 07 | [风险与依赖](./07-风险与依赖.md) | 风险评估、依赖列表、回滚方案 |
 | 08 | [里程碑](./08-里程碑.md) | 6 个里程碑定义与验收标准 |
@@ -75,6 +79,9 @@ Wave-3 (并行)     T09-TECH-CHECK, T10-GENERATOR-REFACTOR
     │
     ▼
 Wave-4 (并行)     T11-CLARIFY-INTEGRATION, T12-APPLY-TECH-CHECK, T13-INIT-PROMPT
+    │
+    ▼
+Wave-5 (并行)     T14-SINGLE-SOURCE, T15-TASKS-YAML, T16-CONTEXT-OPTIMIZE, T17-TEMPLATE-REF
 ```
 
 ### 任务清单
@@ -94,6 +101,10 @@ Wave-4 (并行)     T11-CLARIFY-INTEGRATION, T12-APPLY-TECH-CHECK, T13-INIT-PROM
 | T11 | CLARIFY-INTEGRATION | ~80 |
 | T12 | APPLY-TECH-CHECK | ~60 |
 | T13 | INIT-PROMPT | ~50 |
+| T14 | SINGLE-SOURCE | ~120 |
+| T15 | TASKS-YAML | ~150 |
+| T16 | CONTEXT-OPTIMIZE | ~130 |
+| T17 | TEMPLATE-REF | ~100 |
 
 ---
 
@@ -105,8 +116,9 @@ Wave-4 (并行)     T11-CLARIFY-INTEGRATION, T12-APPLY-TECH-CHECK, T13-INIT-PROM
 | M2 | 核心模板完成 | ⬜ 未开始 |
 | M3 | 检测器和续模板完成 | ⬜ 未开始 |
 | M4 | 技术检查和集成完成 | ⬜ 未开始 |
-| M5 | 测试和文档完成 | ⬜ 未开始 |
-| M6 | 发布 v0.1.4 | ⬜ 未开始 |
+| M5 | 新架构实现完成 | ⬜ 未开始 |
+| M6 | 测试和文档完成 | ⬜ 未开始 |
+| M7 | 发布 v0.1.4 | ⬜ 未开始 |
 
 ---
 
@@ -139,19 +151,25 @@ uv run ruff format --check src/
 ## 变更日志预览
 
 ```
-## [0.1.4] - 四源融合
+## [0.1.4] - 四源融合 + 单一真相源
 
 ### Added
 - 命令模板系统：每个命令生成 150-300 行完整工作流指令
-- 歧义检测器：支持 9 大歧义分类自动检测
+- 歧义检测器：支持 9 大歧义分类自动检测（含上下文判断）
 - 技术检查模块：从 CLAUDE.md 读取或智能检测技术栈
 - clarify 命令新增 `--detect` 选项
 - apply 命令新增主 Agent 统一技术检查
 - init 命令完成后显示中文配置提示
+- 单一真相源：合并 proposal.md + design.md
+- 结构化任务：tasks.yaml 替代 tasks.md（体积 -80%）
+- SubAgent 上下文优化（从 ~5K 降到 ~500 tokens/agent）
+- 公共模板引用机制（$templates/）
 
 ### Changed
 - 重构 command_generator.py 使用模板系统
 - checklist 命令使用完整的四维度打分
+- plan 命令生成 tasks.yaml 而非 tasks.md
+- apply 命令预处理上下文后再分发给 SubAgent
 ```
 
 ---
