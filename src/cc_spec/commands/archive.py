@@ -9,10 +9,10 @@
 v1.1：新增通过 ID 指定变更的支持。
 """
 
+import shutil
 from datetime import datetime
 from pathlib import Path
 from typing import Optional
-import shutil
 
 import typer
 from rich.console import Console
@@ -20,7 +20,6 @@ from rich.panel import Panel
 from rich.prompt import Confirm
 
 from cc_spec.core.delta import (
-    DeltaSpec,
     generate_merge_preview,
     merge_delta,
     parse_delta,
@@ -28,13 +27,10 @@ from cc_spec.core.delta import (
 )
 from cc_spec.core.id_manager import IDManager
 from cc_spec.core.state import (
-    ChangeState,
     Stage,
-    StageInfo,
     TaskStatus,
     get_current_change,
     load_state,
-    update_state,
 )
 from cc_spec.utils.files import (
     ensure_dir,

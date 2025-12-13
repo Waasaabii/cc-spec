@@ -9,10 +9,9 @@ import typer
 from rich.console import Console
 from rich.panel import Panel
 
-from cc_spec.core.id_manager import IDManager, IDType
+from cc_spec.core.id_manager import IDManager
 from cc_spec.core.state import (
     ChangeState,
-    Stage,
     TaskStatus,
     get_current_change,
     load_state,

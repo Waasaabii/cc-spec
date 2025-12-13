@@ -262,6 +262,7 @@ def filter_false_positives(match: AmbiguityMatch, line: str) -> bool:
     1. 跳过行内代码（`code`）中的关键词
     2. 跳过 URL 中的关键词
     3. 跳过 Markdown 标题行（以 # 开头）
+    4. 跳过包含"已定义"、"已确定"等否定词的行
 
     参数：
         match: 歧义匹配结果
@@ -275,6 +276,19 @@ def filter_false_positives(match: AmbiguityMatch, line: str) -> bool:
     # 跳过 Markdown 标题行
     if stripped.startswith("#"):
         return False
+
+    # 跳过包含否定词的行（如"已定义"、"已确定"）
+    # 这些词表示内容已经明确，不应标记为歧义
+    negation_words = [
+        "已定义", "已确定", "已明确", "已指定", "已说明",
+        "已实现", "已完成", "已决定", "确定的", "明确的",
+        "defined", "determined", "specified", "confirmed", "clear",
+        "explicit", "concrete", "precise", "exact", "definite"
+    ]
+    line_lower = line.lower()
+    for negation in negation_words:
+        if negation in line_lower:
+            return False
 
     # 跳过 URL 中的关键词
     if "http://" in line or "https://" in line:

@@ -115,6 +115,8 @@ def _run_single_check(command: str, check_type: str, project_root: Path) -> Chec
             cwd=str(project_root),
             capture_output=True,
             text=True,
+            encoding="utf-8",  # 显式指定 UTF-8 编码
+            errors="replace",  # 遇到无法解码的字符时替换
             timeout=300,  # 5 分钟超时
         )
 

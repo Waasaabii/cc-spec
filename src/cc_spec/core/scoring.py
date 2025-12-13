@@ -10,7 +10,7 @@ import re
 from dataclasses import dataclass, field
 from enum import Enum
 
-from .config import Dimension, DimensionConfig, ScoringConfig, DEFAULT_DIMENSION_CONFIGS
+from .config import DEFAULT_DIMENSION_CONFIGS, Dimension, DimensionConfig, ScoringConfig
 
 
 class CheckStatus(Enum):

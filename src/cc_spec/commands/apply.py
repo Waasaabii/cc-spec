@@ -15,7 +15,6 @@ from typing import Optional
 
 import typer
 from rich.console import Console
-from rich.live import Live
 from rich.panel import Panel
 from rich.table import Table
 
@@ -23,13 +22,14 @@ from cc_spec.core.config import load_config
 from cc_spec.core.id_manager import IDManager
 from cc_spec.core.lock import LockManager
 from cc_spec.core.state import (
-    ChangeState,
     Stage,
     StageInfo,
-    TaskStatus as StateTaskStatus,
     get_current_change,
     load_state,
     update_state,
+)
+from cc_spec.core.state import (
+    TaskStatus as StateTaskStatus,
 )
 from cc_spec.subagent.executor import ExecutionResult, SubAgentExecutor
 from cc_spec.subagent.result_collector import ResultCollector

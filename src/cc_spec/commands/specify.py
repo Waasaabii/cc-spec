@@ -17,9 +17,9 @@ import typer
 from rich.console import Console
 from rich.panel import Panel
 
-from cc_spec.core.id_manager import IDManager, IDType
+from cc_spec.core.id_manager import IDManager
 from cc_spec.core.state import ChangeState, Stage, StageInfo, TaskStatus, update_state
-from cc_spec.core.templates import copy_template, get_template_path
+from cc_spec.core.templates import copy_template
 from cc_spec.utils.files import find_project_root, get_cc_spec_dir, get_changes_dir
 
 console = Console()
@@ -146,6 +146,7 @@ def _edit_existing_change(
         f"  • {proposal_path.relative_to(project_root)}\n\n"
         f"[bold]下一步：[/bold]\n"
         f"  1. 编辑 [cyan]{proposal_path.relative_to(project_root)}[/cyan]\n"
+        f"     包含 4 个章节：背景与目标、用户故事、技术决策、成功标准\n"
         f"  2. 运行 [bold]cc-spec clarify {change_id}[/bold] 进行审查\n"
         f"  3. 运行 [bold]cc-spec plan {change_id}[/bold] 生成任务",
         title=f"[bold cyan]变更 {change_id}[/bold cyan]",
@@ -202,15 +203,19 @@ def _create_new_change(
 
     # 基于模板生成 proposal.md
     proposal_path = change_dir / "proposal.md"
+    now = datetime.now().isoformat()
     try:
         # 尝试使用模板文件
-        template_name = f"{template}-proposal.md" if template != "default" else "spec-template.md"
+        template_name = (
+            f"{template}-proposal.md" if template != "default" else "spec-template.md"
+        )
         copy_template(
             template_name,
             proposal_path,
             variables={
                 "change_name": name,
                 "project_name": project_root.name,
+                "timestamp": now,
             },
         )
     except Exception:
@@ -218,7 +223,6 @@ def _create_new_change(
         proposal_path.write_text(DEFAULT_PROPOSAL_TEMPLATE, encoding="utf-8")
 
     # 初始化 status.yaml
-    now = datetime.now().isoformat()
     state = ChangeState(
         change_name=name,
         created_at=now,
@@ -247,9 +251,10 @@ def _create_new_change(
         f"  • {status_path.relative_to(project_root)}\n\n"
         f"[bold]下一步：[/bold]\n"
         f"  1. 编辑 [cyan]{proposal_path.relative_to(project_root)}[/cyan] 补充说明：\n"
-        f"     • 原因：动机与要解决的问题\n"
-        f"     • 改动内容：具体要做的改动\n"
-        f"     • 影响范围：影响的规格与预期代码改动\n"
+        f"     • 背景与目标：问题陈述、业务价值、技术约束\n"
+        f"     • 用户故事：按优先级描述用户场景和验收标准\n"
+        f"     • 技术决策：架构设计、模块划分、接口设计\n"
+        f"     • 成功标准：功能、质量、性能、用户体验标准\n"
         f"  2. 运行 [bold]cc-spec clarify {change_id}[/bold] 审查并完善提案\n"
         f"  3. 运行 [bold]cc-spec plan {change_id}[/bold] 生成执行任务",
         title=f"[bold green]已创建变更 {change_id}[/bold green]",

@@ -16,7 +16,7 @@ from rich.prompt import Prompt
 
 from cc_spec.core.id_manager import IDManager, IDType
 from cc_spec.core.state import ChangeState, Stage, TaskStatus, load_state
-from cc_spec.ui.display import STATUS_ICONS, STAGE_NAMES, THEME
+from cc_spec.ui.display import STAGE_NAMES, STATUS_ICONS, THEME
 from cc_spec.utils.files import find_project_root, get_cc_spec_dir
 
 console = Console()

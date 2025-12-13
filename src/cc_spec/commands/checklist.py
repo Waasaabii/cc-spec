@@ -23,19 +23,16 @@ from cc_spec.core.scoring import (
     calculate_score,
     extract_checklists_from_tasks_md,
     format_dimension_report,
-    format_result,
     generate_failure_report,
     generate_failure_report_v13,
 )
 from cc_spec.core.state import (
-    ChangeState,
     Stage,
     StageInfo,
     TaskStatus,
     load_state,
     update_state,
 )
-from cc_spec.ui.display import get_status_color, get_status_icon
 from cc_spec.utils.files import find_project_root, get_cc_spec_dir
 
 console = Console()

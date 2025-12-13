@@ -1,115 +1,136 @@
-# Feature Specification: [FEATURE NAME]
+# proposal.md - {change_name}
 
-**Feature Branch**: `[###-feature-name]`  
-**Created**: [DATE]  
-**Status**: Draft  
-**Input**: User description: "$ARGUMENTS"
-
-## User Scenarios & Testing *(mandatory)*
-
-<!--
-  重要：用户故事应按重要性排序，作为用户旅程的优先级列表。
-  每个用户故事/旅程必须可以独立测试——也就是说即使只实现其中一个，
-  也应能形成一个可用的 MVP（最小可行产品）并交付价值。
-  
-  为每个故事分配优先级（P1、P2、P3 等），其中 P1 最关键。
-  将每个故事视为一块可独立交付的功能切片，可以：
-  - 独立开发
-  - 独立测试
-  - 独立部署
-  - 独立向用户演示
--->
-
-### User Story 1 - [Brief Title] (Priority: P1)
-
-[Describe this user journey in plain language]
-
-**Why this priority**: [Explain the value and why it has this priority level]
-
-**Independent Test**: [Describe how this can be tested independently - e.g., "Can be fully tested by [specific action] and delivers [specific value]"]
-
-**Acceptance Scenarios**:
-
-1. **Given** [initial state], **When** [action], **Then** [expected outcome]
-2. **Given** [initial state], **When** [action], **Then** [expected outcome]
+**变更 ID**: {change_name}
+**创建时间**: {timestamp}
+**状态**: Draft
 
 ---
 
-### User Story 2 - [Brief Title] (Priority: P2)
+## 1. 背景与目标
 
-[Describe this user journey in plain language]
+### 问题陈述
 
-**Why this priority**: [Explain the value and why it has this priority level]
+[描述要解决的问题或改进的需求]
 
-**Independent Test**: [Describe how this can be tested independently]
+### 业务价值
 
-**Acceptance Scenarios**:
+[说明这个变更能带来的业务价值]
 
-1. **Given** [initial state], **When** [action], **Then** [expected outcome]
+### 技术约束
 
----
-
-### User Story 3 - [Brief Title] (Priority: P3)
-
-[Describe this user journey in plain language]
-
-**Why this priority**: [Explain the value and why it has this priority level]
-
-**Independent Test**: [Describe how this can be tested independently]
-
-**Acceptance Scenarios**:
-
-1. **Given** [initial state], **When** [action], **Then** [expected outcome]
+| 约束 | 说明 |
+|------|------|
+| 版本要求 | [例如：Python ≥3.10] |
+| 依赖约束 | [例如：不引入新的重量级依赖] |
+| 性能要求 | [例如：响应时间 <100ms] |
+| 其他约束 | [补充其他技术约束] |
 
 ---
 
-[Add more user stories as needed, each with an assigned priority]
+## 2. 用户故事
 
-### Edge Cases
+### 故事 1 - [简要标题] (优先级: P1)
 
-<!--
-  需要填写：本节内容为占位符。
-  请补充合适的边界情况。
--->
+[用通俗语言描述用户场景]
 
-- What happens when [boundary condition]?
-- How does system handle [error scenario]?
+**为什么是这个优先级**: [解释价值和优先级原因]
 
-## Requirements *(mandatory)*
+**验收场景**:
 
-<!--
-  需要填写：本节内容为占位符。
-  请补充合适的功能性需求。
--->
+1. **给定** [初始状态]，**当** [执行动作]，**那么** [期望结果]
+2. **给定** [初始状态]，**当** [执行动作]，**那么** [期望结果]
 
-### Functional Requirements
+---
 
-- **FR-001**: System MUST [specific capability, e.g., "allow users to create accounts"]
-- **FR-002**: System MUST [specific capability, e.g., "validate email addresses"]  
-- **FR-003**: Users MUST be able to [key interaction, e.g., "reset their password"]
-- **FR-004**: System MUST [data requirement, e.g., "persist user preferences"]
-- **FR-005**: System MUST [behavior, e.g., "log all security events"]
+### 故事 2 - [简要标题] (优先级: P2)
 
-*Example of marking unclear requirements:*
+[用通俗语言描述用户场景]
 
-- **FR-006**: System MUST authenticate users via [NEEDS CLARIFICATION: auth method not specified - email/password, SSO, OAuth?]
-- **FR-007**: System MUST retain user data for [NEEDS CLARIFICATION: retention period not specified]
+**为什么是这个优先级**: [解释价值和优先级原因]
 
-### Key Entities *(include if feature involves data)*
+**验收场景**:
 
-- **[Entity 1]**: [What it represents, key attributes without implementation]
-- **[Entity 2]**: [What it represents, relationships to other entities]
+1. **给定** [初始状态]，**当** [执行动作]，**那么** [期望结果]
 
-## Success Criteria *(mandatory)*
+---
 
-<!--
-  需要填写：定义可量化的成功标准。
-  这些标准应与具体技术无关，并且可衡量。
--->
+[根据需要添加更多用户故事，每个都要分配优先级]
 
-### Measurable Outcomes
+### 边界情况
 
-- **SC-001**: [Measurable metric, e.g., "Users can complete account creation in under 2 minutes"]
-- **SC-002**: [Measurable metric, e.g., "System handles 1000 concurrent users without degradation"]
-- **SC-003**: [User satisfaction metric, e.g., "90% of users successfully complete primary task on first attempt"]
-- **SC-004**: [Business metric, e.g., "Reduce support tickets related to [X] by 50%"]
+- 当 [边界条件] 时会发生什么？
+- 系统如何处理 [错误场景]？
+
+---
+
+## 3. 技术决策
+
+### 3.1 架构设计
+
+[描述整体架构方案]
+
+**决策**: [核心技术决策]
+
+**理由**: [为什么选择这个方案]
+
+### 3.2 模块划分
+
+[描述模块结构]
+
+```
+相关模块/
+├── module1/
+├── module2/
+└── module3/
+```
+
+### 3.3 数据模型
+
+[如果涉及数据，描述关键实体]
+
+- **[实体 1]**: [代表什么，关键属性]
+- **[实体 2]**: [代表什么，与其他实体的关系]
+
+### 3.4 接口设计
+
+[描述关键 API 或接口]
+
+```python
+# 示例接口
+def key_function(param: Type) -> ReturnType:
+    """函数说明"""
+    pass
+```
+
+### 3.5 技术选型
+
+**主要依赖**: [例如：FastAPI, Pydantic, Typer]
+**测试框架**: [例如：pytest]
+**其他工具**: [例如：ruff, mypy]
+
+---
+
+## 4. 成功标准
+
+### 功能标准
+
+- [ ] [功能性需求 1 - 例如：系统必须支持用户创建账户]
+- [ ] [功能性需求 2 - 例如：系统必须验证邮箱地址]
+- [ ] [功能性需求 3 - 例如：用户可以重置密码]
+
+### 质量标准
+
+- [ ] 代码通过 linting 检查（ruff check）
+- [ ] 代码通过类型检查（mypy）
+- [ ] 所有测试通过（pytest）
+- [ ] 测试覆盖率 ≥ [例如：70%]
+
+### 性能标准
+
+- [ ] [性能指标 1 - 例如：响应时间 p95 < 100ms]
+- [ ] [性能指标 2 - 例如：支持 1000 并发用户]
+
+### 用户体验标准
+
+- [ ] [UX 指标 1 - 例如：90% 用户首次操作成功]
+- [ ] [UX 指标 2 - 例如：操作流程不超过 3 步]

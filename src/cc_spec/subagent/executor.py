@@ -11,16 +11,16 @@ import asyncio
 import time
 import uuid
 from collections.abc import Callable
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 
-from cc_spec.core.config import Config, SubAgentProfile, load_config
-from cc_spec.core.lock import LockManager, LockInfo
+from cc_spec.core.config import Config, SubAgentProfile
+from cc_spec.core.lock import LockManager
 from cc_spec.subagent.task_parser import (
     Task,
-    TaskStatus,
     TasksDocument,
+    TaskStatus,
     get_tasks_by_wave,
     parse_tasks_md,
     update_task_status,

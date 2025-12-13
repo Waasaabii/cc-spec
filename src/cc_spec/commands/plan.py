@@ -1,28 +1,28 @@
 """cc-spec 的 plan 命令实现。
 
-根据变更提案生成执行计划（tasks.md）与技术设计（design.md）。
+根据变更提案生成执行计划（tasks.md）。
 
 v1.1：新增通过 ID 指定变更的支持。
+v1.2：移除 design.md 生成，技术决策已整合到 proposal.md。
 """
 
 from datetime import datetime
 from pathlib import Path
-from typing import Optional
+from typing import Any, Optional
 
 import typer
 from rich.console import Console
 
 from cc_spec.core.id_manager import IDManager
 from cc_spec.core.state import (
-    ChangeState,
     Stage,
     StageInfo,
     TaskStatus,
     load_state,
     update_state,
 )
-from cc_spec.core.templates import copy_template, render_template
-from cc_spec.ui.display import show_status_panel, show_task_table
+from cc_spec.core.templates import copy_template
+from cc_spec.ui.display import show_task_table
 from cc_spec.utils.files import find_project_root, get_cc_spec_dir
 
 console = Console()
@@ -34,13 +34,13 @@ def plan_command(
         help="变更名称或 ID（例如 add-oauth 或 C-001）",
     ),
 ) -> None:
-    """生成执行计划（tasks.md）与技术设计（design.md）。
+    """生成执行计划（tasks.md）。
 
     v1.1：现支持通过变更 ID（例如 C-001）。
+    v1.2：移除 design.md 生成，技术决策已整合到 proposal.md。
 
     该命令读取 proposal.md 并生成：
     1. tasks.md - 按 Wave 分组的任务拆解
-    2. design.md - 技术决策与架构设计
 
     示例：
         cc-spec plan              # 为当前激活的变更生成计划
@@ -111,7 +111,6 @@ def plan_command(
 
     # 基于模板生成 tasks.md
     tasks_path = change_dir / "tasks.md"
-    design_path = change_dir / "design.md"
 
     console.print("\n[cyan]正在生成执行计划...[/cyan]")
 
@@ -131,29 +130,13 @@ def plan_command(
             variables=template_vars,
         )
         console.print("[green]√[/green] 已生成 tasks.md")
-    except Exception as e:
+    except Exception:
         # 若模板不存在，则创建基础结构
         console.print(
             "[yellow]警告：[/yellow] 未找到模板，正在创建基础结构"
         )
         _create_basic_tasks_md(tasks_path, change, proposal_content)
         console.print("[green]√[/green] 已创建基础 tasks.md")
-
-    # 生成 design.md
-    try:
-        copy_template(
-            "plan-template.md",
-            design_path,
-            variables=template_vars,
-        )
-        console.print("[green]√[/green] 已生成 design.md")
-    except Exception as e:
-        # 创建基础结构
-        console.print(
-            "[yellow]警告：[/yellow] 未找到模板，正在创建基础结构"
-        )
-        _create_basic_design_md(design_path, change, proposal_content)
-        console.print("[green]√[/green] 已创建基础 design.md")
 
     # 校验依赖关系（目前为基础校验）
     console.print("\n[cyan]正在校验任务依赖...[/cyan]")
@@ -201,13 +184,12 @@ def plan_command(
     )
     console.print("\n[bold]下一步：[/bold]")
     console.print("1. 查看并编辑 tasks.md，完善任务拆解")
-    console.print("2. 查看并编辑 design.md，补充技术决策")
+    console.print("2. proposal.md 中的技术决策章节包含架构设计信息")
     console.print("3. 运行 [cyan]cc-spec apply[/cyan] 执行任务")
 
     console.print(
         f"\n[dim]已生成文件：[/dim]\n"
-        f"  - {tasks_path.relative_to(Path.cwd())}\n"
-        f"  - {design_path.relative_to(Path.cwd())}"
+        f"  - {tasks_path.relative_to(Path.cwd())}"
     )
 
 
@@ -234,7 +216,6 @@ def _create_basic_tasks_md(
 
 **必读文档**:
 - .cc-spec/changes/{change_name}/proposal.md
-- .cc-spec/changes/{change_name}/design.md
 
 **核心代码入口**:
 - (TODO: 根据需求填写)
@@ -270,75 +251,7 @@ _(SubAgent 执行时填写)_
     tasks_path.write_text(content, encoding="utf-8")
 
 
-def _create_basic_design_md(
-    design_path: Path, change_name: str, proposal_content: str
-) -> None:
-    """当模板不可用时创建基础 design.md 结构。"""
-    content = f"""# 设计 - {change_name}
-
-> 技术设计与架构决策
-
-## 概述
-
-本文档记录了 `{change_name}` 变更的技术设计决策。
-
-## 架构设计
-
-### 模块划分
-
-(TODO: 描述模块结构)
-
-### 数据流
-
-(TODO: 描述数据流向)
-
-### 接口设计
-
-(TODO: 描述 API 接口)
-
-## 技术选型
-
-### 依赖库
-
-(TODO: 列出新增或升级的依赖)
-
-### 技术栈
-
-(TODO: 描述使用的技术)
-
-## 实施方案
-
-### 阶段划分
-
-参考 tasks.md 中的 Wave 划分。
-
-### 风险控制
-
-(TODO: 识别风险点和应对措施)
-
-## 测试策略
-
-### 单元测试
-
-(TODO: 测试范围)
-
-### 集成测试
-
-(TODO: 测试场景)
-
-## 迁移方案
-
-(如果涉及数据迁移或向后兼容)
-
-## 参考资料
-
-- proposal.md - 需求规格
-- tasks.md - 任务拆分
-"""
-    design_path.write_text(content, encoding="utf-8")
-
-
-def _validate_tasks_dependencies(tasks_path: Path) -> dict:
+def _validate_tasks_dependencies(tasks_path: Path) -> dict[str, Any]:
     """校验 tasks.md 中的任务依赖关系。
 
     返回：
@@ -396,7 +309,7 @@ def _validate_tasks_dependencies(tasks_path: Path) -> dict:
         return {"valid": False, "message": f"解析任务失败：{e}", "tasks": []}
 
 
-def _parse_tasks_summary(tasks_path: Path) -> list[dict]:
+def _parse_tasks_summary(tasks_path: Path) -> list[dict[str, Any]]:
     """解析 tasks.md，提取用于展示的任务摘要。
 
     返回：

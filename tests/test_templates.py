@@ -14,6 +14,7 @@ from cc_spec.core.templates import (
     get_template_source,
     list_templates,
     render_template,
+    resolve_template_ref,
 )
 
 
@@ -116,7 +117,7 @@ class TestCopyTemplate:
 
     def test_copy_template_not_found(self, tmp_path):
         """Test copying non-existent template."""
-        with pytest.raises(TemplateError, match="Template not found"):
+        with pytest.raises(TemplateError, match="未找到模板"):
             copy_template("nonexistent.md", tmp_path / "dest.md", source_dir=tmp_path)
 
     def test_copy_template_creates_parent_dirs(self, tmp_path):
@@ -175,7 +176,7 @@ class TestGetTemplatePath:
 
     def test_get_template_path_not_found(self, tmp_path):
         """Test getting path to non-existent template."""
-        with pytest.raises(TemplateError, match="Template not found"):
+        with pytest.raises(TemplateError, match="未找到模板"):
             get_template_path("nonexistent.md", tmp_path)
 
 
@@ -241,5 +242,110 @@ class TestDownloadTemplates:
                 with patch("pathlib.Path.exists") as mock_exists:
                     mock_exists.return_value = False
 
-                    with pytest.raises(TemplateError, match="Failed to download"):
+                    with pytest.raises(TemplateError, match="模板下载失败"):
                         await download_templates(tmp_path, use_cache=True)
+
+
+class TestResolveTemplateRef:
+    """Tests for resolve_template_ref function."""
+
+    def test_resolve_template_ref_with_valid_reference(self, tmp_path):
+        """Test resolving a valid template reference."""
+        # 创建 .cc-spec/templates/checklists 目录结构
+        cc_spec_dir = tmp_path / ".cc-spec"
+        templates_dir = cc_spec_dir / "templates" / "checklists"
+        templates_dir.mkdir(parents=True)
+
+        # 创建测试模板文件
+        template_content = "# Setup Checklist\n\n- [ ] Item 1\n- [ ] Item 2"
+        template_path = templates_dir / "setup-checklist.md"
+        template_path.write_text(template_content, encoding="utf-8")
+
+        # 测试引用解析
+        result = resolve_template_ref("$templates/checklists/setup-checklist", cc_spec_dir)
+        assert result == template_content
+
+    def test_resolve_template_ref_with_md_extension(self, tmp_path):
+        """Test resolving reference that already has .md extension."""
+        cc_spec_dir = tmp_path / ".cc-spec"
+        templates_dir = cc_spec_dir / "templates"
+        templates_dir.mkdir(parents=True)
+
+        template_content = "# Feature Checklist"
+        template_path = templates_dir / "feature-checklist.md"
+        template_path.write_text(template_content, encoding="utf-8")
+
+        # 引用中已包含 .md 扩展名
+        result = resolve_template_ref("$templates/feature-checklist.md", cc_spec_dir)
+        assert result == template_content
+
+    def test_resolve_template_ref_without_md_extension(self, tmp_path):
+        """Test resolving reference without .md extension (auto-append)."""
+        cc_spec_dir = tmp_path / ".cc-spec"
+        templates_dir = cc_spec_dir / "templates"
+        templates_dir.mkdir(parents=True)
+
+        template_content = "# Test Checklist"
+        template_path = templates_dir / "test-checklist.md"
+        template_path.write_text(template_content, encoding="utf-8")
+
+        # 引用中不包含 .md 扩展名，应自动添加
+        result = resolve_template_ref("$templates/test-checklist", cc_spec_dir)
+        assert result == template_content
+
+    def test_resolve_template_ref_not_found(self, tmp_path):
+        """Test resolving a non-existent template reference."""
+        cc_spec_dir = tmp_path / ".cc-spec"
+        templates_dir = cc_spec_dir / "templates"
+        templates_dir.mkdir(parents=True)
+
+        # 引用不存在的模板
+        with pytest.raises(TemplateError, match="未找到公共模板"):
+            resolve_template_ref("$templates/nonexistent-checklist", cc_spec_dir)
+
+    def test_resolve_template_ref_non_template_string(self, tmp_path):
+        """Test that non-template strings are returned as-is."""
+        cc_spec_dir = tmp_path / ".cc-spec"
+
+        # 普通字符串应原样返回
+        plain_text = "This is just a plain string"
+        result = resolve_template_ref(plain_text, cc_spec_dir)
+        assert result == plain_text
+
+    def test_resolve_template_ref_inline_content(self, tmp_path):
+        """Test that inline content (not starting with $templates/) is returned unchanged."""
+        cc_spec_dir = tmp_path / ".cc-spec"
+
+        inline_content = "# Inline Checklist\n\n- [ ] Task 1\n- [ ] Task 2"
+        result = resolve_template_ref(inline_content, cc_spec_dir)
+        assert result == inline_content
+
+    def test_resolve_template_ref_read_error(self, tmp_path):
+        """Test handling of file read errors."""
+        cc_spec_dir = tmp_path / ".cc-spec"
+        templates_dir = cc_spec_dir / "templates"
+        templates_dir.mkdir(parents=True)
+
+        # 创建一个文件但模拟读取错误
+        template_path = templates_dir / "error-checklist.md"
+        template_path.write_text("content", encoding="utf-8")
+
+        with patch("pathlib.Path.read_text") as mock_read:
+            mock_read.side_effect = IOError("Read error")
+
+            with pytest.raises(TemplateError, match="读取公共模板失败"):
+                resolve_template_ref("$templates/error-checklist", cc_spec_dir)
+
+    def test_resolve_template_ref_nested_path(self, tmp_path):
+        """Test resolving templates in nested directories."""
+        cc_spec_dir = tmp_path / ".cc-spec"
+        templates_dir = cc_spec_dir / "templates" / "nested" / "folder"
+        templates_dir.mkdir(parents=True)
+
+        template_content = "# Nested Template"
+        template_path = templates_dir / "nested-checklist.md"
+        template_path.write_text(template_content, encoding="utf-8")
+
+        result = resolve_template_ref("$templates/nested/folder/nested-checklist", cc_spec_dir)
+        assert result == template_content
+

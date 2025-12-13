@@ -6,6 +6,7 @@ from typing import Optional
 import typer
 from rich.console import Console
 from rich.panel import Panel
+from rich.tree import Tree
 
 from cc_spec.core.command_generator import get_generator
 from cc_spec.core.config import AgentsConfig, Config, detect_agent, save_config
@@ -310,7 +311,7 @@ def init_command(
     if not agents_md_path.exists():
         console.print("[cyan]正在生成 AGENTS.md...[/cyan]")
         try:
-            agents_md_content = f"""# AI工具使用指南
+            agents_md_content = """# AI工具使用指南
 
 本项目使用 cc-spec 工作流进行规格驱动的开发。
 
@@ -439,12 +440,27 @@ cc-spec update [config|commands|templates]
 
         if bundled_templates_dir.exists():
             import shutil
-            # 复制所有模板文件
+
+            # 复制所有模板文件（根目录）
             template_files = list(bundled_templates_dir.glob("*.md"))
             for template_file in template_files:
                 dest_file = templates_dir / template_file.name
                 shutil.copy2(template_file, dest_file)
-            console.print(f"[green]✓[/green] 已复制 {len(template_files)} 个模板文件到 .cc-spec/templates/")
+
+            # 复制 checklists 子目录（如果存在）
+            bundled_checklists_dir = bundled_templates_dir / "checklists"
+            if bundled_checklists_dir.exists():
+                dest_checklists_dir = templates_dir / "checklists"
+                dest_checklists_dir.mkdir(exist_ok=True)
+
+                checklist_files = list(bundled_checklists_dir.glob("*.md"))
+                for checklist_file in checklist_files:
+                    dest_file = dest_checklists_dir / checklist_file.name
+                    shutil.copy2(checklist_file, dest_file)
+
+                console.print(f"[green]✓[/green] 已复制 {len(template_files)} 个模板文件和 {len(checklist_files)} 个检查清单到 .cc-spec/templates/")
+            else:
+                console.print(f"[green]✓[/green] 已复制 {len(template_files)} 个模板文件到 .cc-spec/templates/")
         else:
             console.print(
                 "[yellow]⚠[/yellow] 警告: 未找到bundled模板文件"
@@ -480,6 +496,47 @@ cc-spec update [config|commands|templates]
     # 步骤5: 显示成功消息
     console.print()
 
+    console.print(
+        Panel(
+            "[bold green]✅ cc-spec 初始化完成！[/bold green]",
+            border_style="green",
+        )
+    )
+
+    console.print()
+
+    # 显示目录结构
+    console.print("[bold cyan]📁 目录结构:[/bold cyan]")
+    console.print()
+
+    tree = Tree("📁 [bold].cc-spec/[/bold]", guide_style="dim")
+    tree.add("[cyan]config.yaml[/cyan]         # 配置文件")
+    tree.add("[cyan]templates/[/cyan]          # 公共模板")
+    tree.add("[cyan]changes/[/cyan]            # 活跃变更")
+    tree.add("[cyan]specs/[/cyan]              # 规格说明")
+    tree.add("[cyan]archive/[/cyan]            # 已归档变更")
+
+    console.print(tree)
+    console.print()
+
+    # 显示配置建议
+    console.print("[bold cyan]⚙️  建议配置:[/bold cyan]")
+    console.print()
+    console.print("  编辑 [cyan].cc-spec/config.yaml[/cyan] 可以调整以下配置：")
+    console.print()
+    console.print("  1. [yellow]subagent.max_concurrent[/yellow]: [green]10[/green]")
+    console.print("     SubAgent 最大并发数（Claude Code 中最多支持 10 个并发）")
+    console.print()
+    console.print(f"  2. [yellow]agents.enabled[/yellow]: [green][{', '.join(selected_agents)}][/green]")
+    console.print("     启用的 AI 工具列表")
+    console.print()
+    console.print(f"  3. [yellow]agents.default[/yellow]: [green]{primary_agent}[/green]")
+    console.print("     默认使用的 AI 工具")
+    console.print()
+    console.print("  4. [yellow]checklist.threshold[/yellow]: [green]80[/green]")
+    console.print("     检查清单通过阈值（满分 100 分）")
+    console.print()
+
     # 构建AI工具列表显示
     agents_display = []
     for i, agent_key in enumerate(selected_agents):
@@ -494,15 +551,13 @@ cc-spec update [config|commands|templates]
 
     console.print(
         Panel(
-            f"[green]成功初始化 cc-spec！[/green]\n\n"
             f"[cyan]项目名称:[/cyan] {project_name}\n"
-            f"[cyan]AI工具:[/cyan]\n{agents_text}\n"
-            f"[cyan]配置文件:[/cyan] .cc-spec/config.yaml\n\n"
+            f"[cyan]AI工具:[/cyan]\n{agents_text}\n\n"
             f"[bold]下一步操作:[/bold]\n"
             f"  1. 运行 [cyan]cc-spec specify <变更名称>[/cyan] 创建新变更\n"
             f"  2. 编辑生成的 proposal.md 描述您的变更\n"
             f"  3. 运行 [cyan]cc-spec plan[/cyan] 生成执行计划",
-            title="[bold green]初始化完成[/bold green]",
+            title="[bold green]快速开始[/bold green]",
             border_style="green",
         )
     )

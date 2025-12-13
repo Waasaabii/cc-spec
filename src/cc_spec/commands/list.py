@@ -13,8 +13,8 @@ from rich.console import Console
 from rich.table import Table
 
 from cc_spec.core.id_manager import IDManager
-from cc_spec.core.state import ChangeState, Stage, TaskStatus, load_state
-from cc_spec.ui.display import STATUS_ICONS, STATUS_NAMES, STAGE_NAMES, THEME
+from cc_spec.core.state import ChangeState, Stage, load_state
+from cc_spec.ui.display import STAGE_NAMES, STATUS_ICONS, STATUS_NAMES, THEME
 from cc_spec.utils.files import find_project_root, get_cc_spec_dir
 
 console = Console()

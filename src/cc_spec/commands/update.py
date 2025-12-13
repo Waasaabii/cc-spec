@@ -8,13 +8,12 @@ v1.2：新增在线下载模板并提供本地兜底。
 import asyncio
 import shutil
 from pathlib import Path
-from typing import Any
 
 import typer
 import yaml
 from rich.console import Console
 
-from cc_spec.core.config import Config, load_config, save_config
+from cc_spec.core.config import Config, load_config
 from cc_spec.utils.download import download_file, get_github_raw_url
 from cc_spec.utils.files import find_project_root, get_cc_spec_dir
 

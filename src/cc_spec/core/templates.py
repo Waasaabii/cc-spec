@@ -234,3 +234,53 @@ def get_template_path(template_name: str, source_dir: Optional[Path] = None) -> 
         raise TemplateError(f"未找到模板：{template_name}")
 
     return template_path
+
+
+def resolve_template_ref(ref: str, cc_spec_dir: Path) -> str:
+    """解析公共模板引用。
+
+    支持格式：
+    - $templates/xxx - 引用 .cc-spec/templates/ 目录下的模板
+    - 其他 - 作为普通字符串返回
+
+    参数：
+        ref：模板引用字符串（如 "$templates/feature-checklist"）
+        cc_spec_dir：.cc-spec 目录的路径
+
+    返回：
+        解析后的模板内容（如果是引用）或原始字符串
+
+    异常：
+        TemplateError：引用的模板文件不存在时抛出
+
+    示例：
+        >>> resolve_template_ref("$templates/setup-checklist", Path(".cc-spec"))
+        "# Setup Checklist\\n\\n- [ ] Item 1\\n..."
+
+        >>> resolve_template_ref("inline content", Path(".cc-spec"))
+        "inline content"
+    """
+    # 检查是否为公共模板引用
+    if ref.startswith("$templates/"):
+        # 提取模板名称
+        template_name = ref[len("$templates/") :]
+
+        # 添加 .md 扩展名（如果没有）
+        if not template_name.endswith(".md"):
+            template_name = f"{template_name}.md"
+
+        # 构建模板路径
+        template_path = cc_spec_dir / "templates" / template_name
+
+        # 检查模板是否存在
+        if not template_path.exists():
+            raise TemplateError(f"未找到公共模板：{ref} (查找路径：{template_path})")
+
+        # 读取并返回模板内容
+        try:
+            return template_path.read_text(encoding="utf-8")
+        except Exception as e:
+            raise TemplateError(f"读取公共模板失败：{ref} - {e}")
+
+    # 不是模板引用，直接返回原字符串
+    return ref

@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from typing import Any
-
 import readchar
 from rich.console import Console
 from rich.live import Live

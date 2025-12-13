@@ -5,11 +5,11 @@
 v1.3: 新增 git diff 解析，自动提取文件变更列表和统计信息。
 """
 
+import re
+import subprocess
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
-import re
-import subprocess
 
 import typer
 from rich.console import Console
@@ -292,7 +292,7 @@ def quick_delta_command(
 
     mini_proposal_path.write_text(mini_proposal_content, encoding="utf-8")
     console.print(
-        f"\n[green]✓[/green] 已创建 mini-proposal.md",
+        "\n[green]✓[/green] 已创建 mini-proposal.md",
     )
 
     # 5. 显示成功信息
