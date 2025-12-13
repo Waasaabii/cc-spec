@@ -72,7 +72,7 @@ SubAgent 上下文（每个）:
 | Wave | Task-ID | 任务名称 | 预估上下文 | 状态 | 依赖 |
 |------|---------|---------|-----------|------|------|
 | 0 | T01 | TEMPLATE-BASE | ~15K | ✅ 已完成（2025-12-14 16:45） | - |
-| 0 | T02 | AMBIGUITY-BASE | ~12K | 🟠 执行中（Claude-Terminal-8472, 2025-12-14 06:01） | - |
+| 0 | T02 | AMBIGUITY-BASE | ~12K | ✅ 已完成（2025-12-14 06:05） | - |
 | 1 | T03 | SPECIFY-TEMPLATE | ~18K | 空闲 | T01 |
 | 1 | T04 | CLARIFY-TEMPLATE | ~16K | 空闲 | T01 |
 | 1 | T05 | PLAN-TEMPLATE | ~20K | 空闲 | T01 |
@@ -203,7 +203,7 @@ Wave-4 (单任务)
 #### Task T02: AMBIGUITY-BASE
 
 **预估上下文**: ~12K tokens
-**状态**: 空闲
+**状态**: ✅ 已完成（2025-12-14 06:05）
 **依赖**: 无
 
 **必读文件**:
@@ -216,10 +216,10 @@ Wave-4 (单任务)
 - src/cc_spec/core/ambiguity/detector.py (~100 行，数据类部分)
 
 **Checklist**:
-- [ ] AmbiguityType 枚举包含 9 种分类（SCOPE, DATA_STRUCTURE, INTERFACE, VALIDATION, ERROR_HANDLING, PERFORMANCE, SECURITY, DEPENDENCY, UX）
-- [ ] AMBIGUITY_KEYWORDS 每种类型至少 5 个关键词
-- [ ] AmbiguityMatch 数据类包含 type, keyword, line_number, context
-- [ ] 数据类测试通过
+- [x] AmbiguityType 枚举包含 9 种分类（SCOPE, DATA_STRUCTURE, INTERFACE, VALIDATION, ERROR_HANDLING, PERFORMANCE, SECURITY, DEPENDENCY, UX）
+- [x] AMBIGUITY_KEYWORDS 每种类型至少 5 个关键词
+- [x] AmbiguityMatch 数据类包含 type, keyword, line_number, context
+- [x] 数据类测试通过
 
 ---
 
