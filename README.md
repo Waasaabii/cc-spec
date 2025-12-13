@@ -1,0 +1,174 @@
+# cc-spec
+
+**规范驱动的 AI 辅助开发工作流 CLI 工具**
+
+[English](./docs/README.en.md) | 中文
+
+[![Version](https://img.shields.io/badge/version-1.3.0-blue.svg)](https://github.com/anthropics/cc-spec)
+
+---
+
+## 简介
+
+cc-spec 是一个整合了 [OpenSpec](https://github.com/hannesrudolph/openspec) 和 [Spec-Kit](https://github.com/github/spec-kit) 精华的规范驱动开发 CLI 工具，专为 Claude Code 的 SubAgent 并发执行能力设计。
+
+## ps
+```typescript
+openspec缺少打分环节。speckit又对模型的改造太大，完全忽略了模型能力，所以两个都不喜欢用
+你们说我是不是贱
+虽然一开始就是从自己的工作流优化的，但自己的工作流又缺少openspec和speckit的牛逼之处
+
+```
+
+### 核心特性
+
+- **7 步标准工作流**: `init → specify → clarify → plan → apply → checklist → archive`
+- **SubAgent 并发执行**: apply 阶段支持最多 10 个 SubAgent 并发（仅 Claude Code）
+- **多 AI 工具支持**: 17+ AI 工具的命令集成（Claude、Cursor、Gemini、Copilot 等）
+- **Delta 变更追踪**: ADDED / MODIFIED / REMOVED / RENAMED 格式
+- **打分验收机制**: checklist 打分 ≥80 通过，否则打回 apply
+- **超简单模式**: `quick-delta` 一步生成变更记录
+
+---
+
+## 安装
+
+需要先安装 [uv](https://docs.astral.sh/uv/)。
+
+```bash
+# 方式 1: 一次性运行（推荐）
+uvx --from git+https://github.com/<owner>/cc-spec.git cc-spec init
+
+# 方式 2: 全局安装
+uv tool install cc-spec --from git+https://github.com/<owner>/cc-spec.git
+
+# 升级到最新版本
+uv tool install cc-spec --force --from git+https://github.com/<owner>/cc-spec.git
+```
+
+---
+
+## 快速开始
+
+```bash
+# 1. 初始化项目（选择要支持的 AI 工具）
+cc-spec init --ai claude,cursor
+
+# 2. 创建变更规格
+cc-spec specify add-user-auth
+
+# 3. 澄清需求
+cc-spec clarify
+
+# 4. 生成执行计划
+cc-spec plan
+
+# 5. 执行任务（SubAgent 并发，仅 Claude Code）
+cc-spec apply
+
+# 6. 验收打分
+cc-spec checklist
+
+# 7. 归档变更
+cc-spec archive
+```
+
+### 超简单模式
+
+```bash
+# 小改动、紧急修复：一步记录
+cc-spec quick-delta "修复登录页面样式问题"
+```
+
+---
+
+## 在 AI 工具中使用
+
+cc-spec init 会为选中的 AI 工具生成命令文件，用户可以在各工具的输入框中直接调用：
+
+| 工具 | 调用方式 | 示例 |
+|------|----------|------|
+| Claude Code | `/cc-spec:specify` | `/cc-spec:specify add-oauth` |
+| Cursor | `/cc-spec-specify` | `/cc-spec-specify add-oauth` |
+| Gemini CLI | `/cc-spec:specify` | `/cc-spec:specify add-oauth` |
+| GitHub Copilot | 提示库选择 | 选择 "cc-spec-specify" |
+| Amazon Q | `@cc-spec-specify` | `@cc-spec-specify add-oauth` |
+| 其他工具 | 自然语言 | "帮我执行 cc-spec specify" |
+
+---
+
+## 工作流设计来源
+
+cc-spec 整合了以下项目的设计精华：
+
+| 来源 | 贡献 |
+|------|------|
+| **[OpenSpec](https://github.com/hannesrudolph/openspec)** | Delta 变更追踪、归档规范、多 AI 工具配置、AGENTS.md 标准 |
+| **[Spec-Kit](https://github.com/github/spec-kit)** | CLI 技术栈 (uv + typer + rich)、模板系统、clarify 澄清流程、打分机制 |
+| **auto-dev** | SubAgent 并发执行、Wave 任务规划格式 |
+
+### 模板来源
+
+cc-spec 使用的模板基于 OpenSpec 和 Spec-Kit 的模板设计：
+
+- **规格模板 (spec-template.md)**: 基于 Spec-Kit 的 User Story + Given/When/Then 格式
+- **计划模板 (plan-template.md)**: 基于 Spec-Kit 的 Phase 分阶段设计
+- **任务模板 (tasks-template.md)**: 基于 auto-dev 的 Wave/Task-ID 格式
+- **Delta 格式**: 基于 OpenSpec 的 ADDED/MODIFIED/REMOVED/RENAMED 规范
+- **命令文件**: 基于 OpenSpec 的多工具适配器模式
+
+---
+
+## 文档
+
+详细设计文档请参见 [docs/plan/cc-spec/](./docs/plan/cc-spec/README.md)。
+
+---
+
+## 致谢
+
+本项目深受 **[John Lam](https://github.com/jflam)** 的工作和研究的影响，并以他的作品和研究为基础。
+
+特别感谢：
+
+- **[OpenSpec](https://github.com/hannesrudolph/openspec)** - Hannes Rudolph 创建的规范驱动开发框架，提供了优秀的 Delta 变更追踪和多工具支持设计
+- **[Spec-Kit](https://github.com/github/spec-kit)** - GitHub 团队（Den Delimarsky、John Lam 等）创建的规范驱动开发工具包，提供了成熟的 CLI 框架和模板系统
+
+---
+
+## 更新日志
+
+### v1.3.0 (2025-01)
+
+- **四维度打分机制**: 功能完整性 (30%)、代码质量 (25%)、测试覆盖 (25%)、文档同步 (20%)
+- **任务锁机制**: 防止多 agent 同时执行同一任务导致冲突
+- **Agent ID 追踪**: 执行结果中包含 agent_id、wave、retry_count 等字段
+- **quick-delta 增强**: 自动解析 git diff，显示文件变更列表和统计信息
+- **checklist 报告增强**: 支持四维度打分报告和改进建议
+
+### v1.2.0 (2025-01)
+
+- **多工具配置**: `agents.enabled[]` 支持同时启用多个 AI 工具
+- **17+ AI 工具**: 新增 tabnine, aider, devin, replit, cody, supermaven, kilo, auggie
+- **模板下载**: `update --templates` 支持从远程更新模板
+- **命令执行**: `goto --execute` 直接执行选择的命令
+
+### v1.1.0 (2024-12)
+
+- **导航命令**: `list`, `goto`, `update` 三个新命令
+- **ID 系统**: C-001, S-001, A-001 格式的变更/规范/归档 ID
+- **Profile 系统**: SubAgent 配置支持 quick/heavy/explore 等多种配置
+
+### v1.0.0 (2024-11)
+
+- 初始版本
+- 7 步标准工作流
+- SubAgent 并发执行
+- Delta 变更追踪
+- 打分验收机制
+
+---
+
+## 许可证
+
+MIT License
