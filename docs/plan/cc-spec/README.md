@@ -61,10 +61,10 @@ HTTP 客户端: httpx
 
 ```bash
 # 一次性运行（推荐）
-uvx --from git+https://github.com/<owner>/cc-spec.git cc-spec init
+uvx --from git+https://github.com/Waasaabii/cc-spec.git cc-spec init
 
 # 全局安装
-uv tool install cc-spec --from git+https://github.com/<owner>/cc-spec.git
+uv tool install cc-spec --from git+https://github.com/Waasaabii/cc-spec.git
 ```
 
 ## 任务总览

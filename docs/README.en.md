@@ -27,13 +27,13 @@ Requires [uv](https://docs.astral.sh/uv/) to be installed first.
 
 ```bash
 # Option 1: One-shot execution (recommended)
-uvx --from git+https://github.com/<owner>/cc-spec.git cc-spec init
+uvx --from git+https://github.com/Waasaabii/cc-spec.git cc-spec init
 
 # Option 2: Global installation
-uv tool install cc-spec --from git+https://github.com/<owner>/cc-spec.git
+uv tool install cc-spec --from git+https://github.com/Waasaabii/cc-spec.git
 
 # Upgrade to latest version
-uv tool install cc-spec --force --from git+https://github.com/<owner>/cc-spec.git
+uv tool install cc-spec --force --from git+https://github.com/Waasaabii/cc-spec.git
 ```
 
 ---

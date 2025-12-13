@@ -41,9 +41,9 @@ dev = [
 cc-spec = "cc_spec:main"
 
 [project.urls]
-Homepage = "https://github.com/<owner>/cc-spec"
-Repository = "https://github.com/<owner>/cc-spec"
-Documentation = "https://github.com/<owner>/cc-spec#readme"
+Homepage = "https://github.com/Waasaabii/cc-spec"
+Repository = "https://github.com/Waasaabii/cc-spec"
+Documentation = "https://github.com/Waasaabii/cc-spec#readme"
 
 [build-system]
 requires = ["hatchling"]

@@ -29,7 +29,7 @@ pip install cc-spec
 
 ```bash
 # 克隆仓库
-git clone https://github.com/your-org/cc-spec.git
+git clone https://github.com/Waasaabii/cc-spec.git
 cd cc-spec
 
 # 使用 uv 安装开发版本
@@ -96,7 +96,7 @@ agent:
   model: "claude-3"
 templates:
   source: "github"     # 模板来源
-  url: "https://github.com/your-org/templates"
+  url: "https://github.com/Waasaabii/templates"
 project:
   name: "my-project"
   language: "python"

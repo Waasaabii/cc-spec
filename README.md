@@ -4,7 +4,7 @@
 
 [English](./docs/README.en.md) | 中文
 
-[![Version](https://img.shields.io/badge/version-1.3.0-blue.svg)](https://github.com/anthropics/cc-spec)
+[![Version](https://img.shields.io/badge/version-1.3.0-blue.svg)](https://github.com/Waasaabii/cc-spec)
 
 ---
 
@@ -37,13 +37,13 @@ openspec缺少打分环节。speckit又对模型的改造太大，完全忽略�
 
 ```bash
 # 方式 1: 一次性运行（推荐）
-uvx --from git+https://github.com/<owner>/cc-spec.git cc-spec init
+uvx --from git+https://github.com/Waasaabii/cc-spec.git cc-spec init
 
 # 方式 2: 全局安装
-uv tool install cc-spec --from git+https://github.com/<owner>/cc-spec.git
+uv tool install cc-spec --from git+https://github.com/Waasaabii/cc-spec.git
 
 # 升级到最新版本
-uv tool install cc-spec --force --from git+https://github.com/<owner>/cc-spec.git
+uv tool install cc-spec --force --from git+https://github.com/Waasaabii/cc-spec.git
 ```
 
 ---

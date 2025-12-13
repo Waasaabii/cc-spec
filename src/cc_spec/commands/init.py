@@ -271,7 +271,7 @@ def init_command(
 
 ## 相关文档
 
-- [cc-spec 文档](https://github.com/your-org/cc-spec)
+- [cc-spec 文档](https://github.com/Waasaabii/cc-spec)
 """
             readme_path.write_text(readme_content, encoding="utf-8")
 
