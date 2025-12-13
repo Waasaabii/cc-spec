@@ -78,7 +78,7 @@ SubAgent 上下文（每个）:
 | 1 | T05 | PLAN-TEMPLATE | ~20K | ✅ 已完成（2025-12-14 07:30） | T01 |
 | 1 | T09 | TECH-CHECK | ~18K | ✅ 已完成（2025-12-14 07:23） | - |
 | 1 | T13 | INIT-PROMPT | ~12K | 空闲 | - |
-| 1 | T17 | TEMPLATE-REF | ~15K | 空闲 | - |
+| 1 | T17 | TEMPLATE-REF | ~15K | ✅ 已完成（2025-12-14 07:34） | - |
 | 2 | T06 | AMBIGUITY-DETECTOR | ~10K | ✅ 已完成（2025-12-14 07:27） | T02 |
 | 2 | T07 | APPLY-TEMPLATE | ~35K | ✅ 已完成（2025-12-14 07:29） | T01 |
 | 2 | T08 | CHECKLIST-TEMPLATE | ~25K | ✅ 已完成（2025-12-14 07:33） | T01 |
@@ -428,29 +428,28 @@ Wave-4 (单任务)
 #### Task T17: TEMPLATE-REF
 
 **预估上下文**: ~15K tokens
-**状态**: 🟠 执行中（Claude-Terminal-9421, 2025-12-14 07:31）
-**执行实例**: Claude-Terminal-9421
-**开始时间**: 2025-12-14 07:31
+**状态**: ✅ 已完成（2025-12-14 07:34）
+**完成时间**: 2025-12-14 07:34
 **依赖**: 无
 
 **必读文件**:
 | 文件 | 行数 | 用途 |
 |------|------|------|
-| src/cc_spec/core/templates.py | 236 | 现有模板逻辑 |
-| src/cc_spec/commands/init.py | 525 | init 命令 |
+| src/cc_spec/core/templates.py | 287 | 现有模板逻辑（含 resolve_template_ref） |
+| src/cc_spec/commands/init.py | 581 | init 命令（含 templates/ 和 checklists/ 创建） |
 
 **输出文件**:
-- src/cc_spec/core/templates.py (修改，+50 行)
-- src/cc_spec/commands/init.py (修改，+20 行)
-- src/cc_spec/templates/checklists/setup-checklist.md (~30 行)
-- src/cc_spec/templates/checklists/feature-checklist.md (~40 行)
-- src/cc_spec/templates/checklists/test-checklist.md (~30 行)
+- src/cc_spec/core/templates.py - resolve_template_ref() 已实现
+- src/cc_spec/commands/init.py - templates/ 和 checklists/ 目录创建已实现
+- src/cc_spec/templates/checklists/setup-checklist.md (39 行)
+- src/cc_spec/templates/checklists/feature-checklist.md (56 行)
+- src/cc_spec/templates/checklists/test-checklist.md (52 行)
 
 **Checklist**:
-- [ ] init 创建 templates/ 目录
-- [ ] 默认模板包含 3 个检查清单
-- [ ] $templates/xxx 引用正确解析
-- [ ] 单元测试覆盖引用解析
+- [x] init 创建 templates/ 目录（init.py:241-247, 450-459）
+- [x] 默认模板包含 3 个检查清单（src/cc_spec/templates/checklists/）
+- [x] $templates/xxx 引用正确解析（templates.py:239-286）
+- [x] 单元测试覆盖引用解析（tests/test_templates.py:249-351, 8 个测试用例全通过）
 
 ---
 
