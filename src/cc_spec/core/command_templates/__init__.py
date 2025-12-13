@@ -9,8 +9,14 @@ from .base import (
     CommandTemplate,
     CommandTemplateContext,
 )
+from .clarify_template import ClarifyTemplate
+from .plan_template import PlanTemplate
+from .specify_template import SpecifyTemplate
 
 __all__ = [
     "CommandTemplate",
     "CommandTemplateContext",
+    "ClarifyTemplate",
+    "PlanTemplate",
+    "SpecifyTemplate",
 ]
