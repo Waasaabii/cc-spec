@@ -79,7 +79,7 @@ SubAgent 上下文（每个）:
 | 1 | T09 | TECH-CHECK | ~18K | ✅ 已完成（2025-12-14 07:23） | - |
 | 1 | T13 | INIT-PROMPT | ~12K | 空闲 | - |
 | 1 | T17 | TEMPLATE-REF | ~15K | 空闲 | - |
-| 2 | T06 | AMBIGUITY-DETECTOR | ~10K | 空闲 | T02 |
+| 2 | T06 | AMBIGUITY-DETECTOR | ~10K | ✅ 已完成（2025-12-14 07:27） | T02 |
 | 2 | T07 | APPLY-TEMPLATE | ~35K | 空闲 | T01 |
 | 2 | T08 | CHECKLIST-TEMPLATE | ~25K | 空闲 | T01 |
 | 2 | T14 | SINGLE-SOURCE | ~18K | 空闲 | - |
@@ -306,9 +306,8 @@ Wave-4 (单任务)
 #### Task T06: AMBIGUITY-DETECTOR
 
 **预估上下文**: ~10K tokens
-**状态**: 🟠 执行中（Claude-Terminal-6284, 2025-12-14 07:24）
-**执行实例**: Claude-Terminal-6284
-**开始时间**: 2025-12-14 07:24
+**状态**: ✅ 已完成（2025-12-14 07:27）
+**完成时间**: 2025-12-14 07:27
 **依赖**: T02
 
 **必读文件**:
@@ -320,10 +319,10 @@ Wave-4 (单任务)
 - src/cc_spec/core/ambiguity/detector.py (扩展，+100 行)
 
 **Checklist**:
-- [ ] detect() 正确扫描内容
-- [ ] 关键词匹配支持中英文
-- [ ] 上下文包含前后各 2 行
-- [ ] 含误报过滤逻辑（如"已定义"、"已确定"不标记）
+- [x] detect() 正确扫描内容
+- [x] 关键词匹配支持中英文
+- [x] 上下文包含前后各 2 行
+- [x] 含误报过滤逻辑（如"已定义"、"已确定"不标记）
 
 ---
 
