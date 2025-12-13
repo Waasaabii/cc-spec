@@ -81,7 +81,7 @@ SubAgent 上下文（每个）:
 | 1 | T17 | TEMPLATE-REF | ~15K | 空闲 | - |
 | 2 | T06 | AMBIGUITY-DETECTOR | ~10K | ✅ 已完成（2025-12-14 07:27） | T02 |
 | 2 | T07 | APPLY-TEMPLATE | ~35K | ✅ 已完成（2025-12-14 07:29） | T01 |
-| 2 | T08 | CHECKLIST-TEMPLATE | ~25K | 空闲 | T01 |
+| 2 | T08 | CHECKLIST-TEMPLATE | ~25K | ✅ 已完成（2025-12-14 07:33） | T01 |
 | 2 | T14 | SINGLE-SOURCE | ~18K | 空闲 | - |
 | 3 | T10 | GENERATOR-REFACTOR | ~15K | 空闲 | T03,T04,T05,T07,T08 |
 | 3 | T11 | CLARIFY-INTEGRATION | ~10K | 空闲 | T06 |
@@ -353,9 +353,8 @@ Wave-4 (单任务)
 #### Task T08: CHECKLIST-TEMPLATE
 
 **预估上下文**: ~25K tokens
-**状态**: 🟠 执行中（Claude-Terminal-8291, 2025-12-14 07:29）
-**执行实例**: Claude-Terminal-8291
-**开始时间**: 2025-12-14 07:29
+**状态**: ✅ 已完成（2025-12-14 07:33）
+**完成时间**: 2025-12-14 07:33
 **依赖**: T01
 
 **必读文件**:
@@ -366,13 +365,13 @@ Wave-4 (单任务)
 | src/cc_spec/core/command_templates/base.py | ~60 | 基类接口 |
 
 **输出文件**:
-- src/cc_spec/core/command_templates/checklist_template.py (~180 行)
+- src/cc_spec/core/command_templates/checklist_template.py (250 行)
 
 **Checklist**:
-- [ ] 四维度说明完整（功能完整性、代码质量、测试覆盖、文档完善）
-- [ ] 权重计算公式正确
-- [ ] 改进建议格式规范
-- [ ] 输出长度 150-300 行
+- [x] 四维度说明完整（功能完整性、代码质量、测试覆盖、文档完善）
+- [x] 权重计算公式正确
+- [x] 改进建议格式规范
+- [x] 输出长度 150-300 行（实际 202 行渲染输出）
 
 ---
 
