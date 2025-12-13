@@ -76,7 +76,7 @@ SubAgent 上下文（每个）:
 | 1 | T03 | SPECIFY-TEMPLATE | ~18K | ✅ 已完成（2025-12-14 07:22） | T01 |
 | 1 | T04 | CLARIFY-TEMPLATE | ~16K | 空闲 | T01 |
 | 1 | T05 | PLAN-TEMPLATE | ~20K | 空闲 | T01 |
-| 1 | T09 | TECH-CHECK | ~18K | 空闲 | - |
+| 1 | T09 | TECH-CHECK | ~18K | ✅ 已完成（2025-12-14 07:23） | - |
 | 1 | T13 | INIT-PROMPT | ~12K | 空闲 | - |
 | 1 | T17 | TEMPLATE-REF | ~15K | 空闲 | - |
 | 2 | T06 | AMBIGUITY-DETECTOR | ~10K | 空闲 | T02 |
@@ -377,9 +377,8 @@ Wave-4 (单任务)
 #### Task T09: TECH-CHECK
 
 **预估上下文**: ~18K tokens
-**状态**: 🟠 执行中（Claude-Terminal-4592, 2025-12-14 07:21）
-**执行实例**: Claude-Terminal-4592
-**开始时间**: 2025-12-14 07:21
+**状态**: ✅ 已完成（2025-12-14 07:23）
+**完成时间**: 2025-12-14 07:23
 **依赖**: 无
 
 **必读文件**:
@@ -394,10 +393,10 @@ Wave-4 (单任务)
 - src/cc_spec/core/tech_check/runner.py (~70 行)
 
 **Checklist**:
-- [ ] 正确解析 CLAUDE.md 中的命令（支持 ```bash 代码块）
-- [ ] 技术栈检测支持 Python/Node/Go
-- [ ] lint/type-check 警告继续，test 失败阻断
-- [ ] 单元测试覆盖
+- [x] 正确解析 CLAUDE.md 中的命令（支持 ```bash 代码块）
+- [x] 技术栈检测支持 Python/Node/Go
+- [x] lint/type-check 警告继续，test 失败阻断
+- [x] 单元测试覆盖
 
 ---
 
