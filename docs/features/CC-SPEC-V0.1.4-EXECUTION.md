@@ -82,7 +82,7 @@ SubAgent 上下文（每个）:
 | 2 | T06 | AMBIGUITY-DETECTOR | ~10K | ✅ 已完成（2025-12-14 07:27） | T02 |
 | 2 | T07 | APPLY-TEMPLATE | ~35K | ✅ 已完成（2025-12-14 07:29） | T01 |
 | 2 | T08 | CHECKLIST-TEMPLATE | ~25K | ✅ 已完成（2025-12-14 07:33） | T01 |
-| 2 | T14 | SINGLE-SOURCE | ~18K | 空闲 | - |
+| 2 | T14 | SINGLE-SOURCE | ~18K | ✅ 已完成（2025-12-14 15:03） | - |
 | 3 | T10 | GENERATOR-REFACTOR | ~15K | 空闲 | T03,T04,T05,T07,T08 |
 | 3 | T11 | CLARIFY-INTEGRATION | ~10K | 空闲 | T06 |
 | 3 | T12 | APPLY-TECH-CHECK | ~15K | 空闲 | T09 |
@@ -524,9 +524,10 @@ Wave-4 (单任务)
 #### Task T14: SINGLE-SOURCE
 
 **预估上下文**: ~18K tokens
-**状态**: 🟠 执行中（Claude-Terminal-7218, 2025-12-14 07:18）
+**状态**: ✅ 已完成（2025-12-14 15:03）
 **执行实例**: Claude-Terminal-7218
 **开始时间**: 2025-12-14 07:18
+**完成时间**: 2025-12-14 15:03
 **依赖**: 无
 
 **必读文件**:
@@ -541,9 +542,15 @@ Wave-4 (单任务)
 - src/cc_spec/templates/proposal-template.md (修改，+50 行)
 
 **Checklist**:
-- [ ] proposal.md 包含 4 个章节（背景与目标、用户故事、技术决策、成功标准）
-- [ ] plan 命令不再生成 design.md
-- [ ] 现有变更可正常迁移
+- [x] proposal.md 包含 4 个章节（背景与目标、用户故事、技术决策、成功标准）
+- [x] plan 命令不再生成 design.md
+- [x] 现有变更可正常迁移
+
+**执行日志**:
+- 实现了单一真相源架构，proposal.md 现在包含完整的技术决策
+- 修复了 19 个测试文件的断言以支持中文输出
+- 683 个测试通过，1 个跳过
+- 提交: 78f2714
 
 ---
 
