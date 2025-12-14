@@ -1,4 +1,4 @@
-version: '1.1'
+version: '1.2'
 project_name: cc-spec
 tech_requirements_sources:
 - .claude/CLAUDE.md
@@ -11,25 +11,12 @@ subagent:
     model: sonnet
     timeout: 300000
     permissionMode: default
-  profiles:
-    quick:
-      model: haiku
-      timeout: 60000
-      description: 'Quick tasks: simple modifications'
-    heavy:
-      model: opus
-      timeout: 600000
-      description: 'Heavy tasks: complex refactoring'
-    explore:
-      model: sonnet[1m]
-      timeout: 180000
-      tools: Read,Glob,Grep,WebFetch,WebSearch
-      description: 'Exploration tasks: code research'
 agents:
   enabled:
   - claude
-  - gemini
   - codex
+  - gemini
+  - cursor
   default: claude
 checklist:
   pass_threshold: 80

@@ -8,15 +8,15 @@
 
 <!-- 
   ============================================================================
-  IMPORTANT: The checklist items below are SAMPLE ITEMS for illustration only.
+  重要：下面的检查项仅为示例，用于说明格式。
   
-  The /speckit.checklist command MUST replace these with actual items based on:
-  - User's specific checklist request
-  - Feature requirements from spec.md
-  - Technical context from plan.md
-  - Implementation details from tasks.md
+  /speckit.checklist 命令必须基于以下内容生成并替换为真实条目：
+  - 用户的具体检查清单需求
+  - spec.md 中的功能需求
+  - plan.md 中的技术上下文
+  - tasks.md 中的实现细节
   
-  DO NOT keep these sample items in the generated checklist file.
+  不要在生成的 checklist 文件中保留这些示例条目。
   ============================================================================
 -->
 

@@ -12,9 +12,8 @@
 ## Technical Context
 
 <!--
-  ACTION REQUIRED: Replace the content in this section with the technical details
-  for the project. The structure here is presented in advisory capacity to guide
-  the iteration process.
+  需要填写：用项目的技术细节替换本节内容。
+  这里的结构仅作为建议，用于引导迭代过程。
 -->
 
 **Language/Version**: [e.g., Python 3.11, Swift 5.9, Rust 1.75 or NEEDS CLARIFICATION]  
@@ -49,10 +48,9 @@ specs/[###-feature]/
 
 ### Source Code (repository root)
 <!--
-  ACTION REQUIRED: Replace the placeholder tree below with the concrete layout
-  for this feature. Delete unused options and expand the chosen structure with
-  real paths (e.g., apps/admin, packages/something). The delivered plan must
-  not include Option labels.
+  需要填写：用本功能的实际目录结构替换下面的占位树。
+  删除未使用的选项，并将选择的结构扩展为真实路径（例如 apps/admin、packages/something）。
+  交付的计划中不应保留 “Option” 标签。
 -->
 
 ```text

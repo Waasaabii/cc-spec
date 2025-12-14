@@ -27,20 +27,20 @@ description: "Task list template for feature implementation"
 
 <!-- 
   ============================================================================
-  IMPORTANT: The tasks below are SAMPLE TASKS for illustration purposes only.
+  重要：下面的任务仅为示例，用于说明格式。
   
-  The /speckit.tasks command MUST replace these with actual tasks based on:
-  - User stories from spec.md (with their priorities P1, P2, P3...)
-  - Feature requirements from plan.md
-  - Entities from data-model.md
-  - Endpoints from contracts/
+  /speckit.tasks 命令必须基于以下内容生成并替换为真实任务：
+  - spec.md 中的用户故事（包含优先级 P1、P2、P3...）
+  - plan.md 中的功能需求
+  - data-model.md 中的实体
+  - contracts/ 中的接口定义
   
-  Tasks MUST be organized by user story so each story can be:
-  - Implemented independently
-  - Tested independently
-  - Delivered as an MVP increment
+  任务必须按用户故事组织，使每个故事都可以：
+  - 独立实现
+  - 独立测试
+  - 作为 MVP 的一个增量交付
   
-  DO NOT keep these sample tasks in the generated tasks.md file.
+  不要在生成的 tasks.md 中保留这些示例任务。
   ============================================================================
 -->
 
