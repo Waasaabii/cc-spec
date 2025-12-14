@@ -8,7 +8,14 @@ from pathlib import Path
 import typer
 from rich.console import Console
 from rich.panel import Panel
+from rich.table import Table
 
+from cc_spec.core.ambiguity.detector import (
+    AmbiguityMatch,
+    AmbiguityType,
+    detect,
+    get_type_description,
+)
 from cc_spec.core.id_manager import IDManager
 from cc_spec.core.state import (
     ChangeState,
@@ -97,6 +104,86 @@ def show_task_list(state: ChangeState) -> None:
     console.print()
     console.print(
         "[dim]运行 [cyan]cc-spec clarify <task-id>[/cyan] 将任务标记为返工[/dim]"
+    )
+
+
+def show_ambiguity_report(matches: list[AmbiguityMatch], file_path: Path) -> None:
+    """展示歧义检测报告。
+
+    以表格形式展示检测到的歧义，按类型分组。
+
+    参数：
+        matches: 检测到的歧义匹配列表
+        file_path: 被检测的文件路径
+    """
+    if not matches:
+        console.print(
+            Panel(
+                "[green]✓ 未检测到歧义[/green]\n\n"
+                f"文件：{file_path}",
+                title="[bold]歧义检测结果[/bold]",
+                border_style="green",
+            )
+        )
+        return
+
+    # 按类型分组统计
+    type_counts: dict[AmbiguityType, int] = {}
+    for match in matches:
+        type_counts[match.type] = type_counts.get(match.type, 0) + 1
+
+    # 显示摘要面板
+    summary_lines = [f"文件：{file_path}", f"检测到 {len(matches)} 处歧义："]
+    for amb_type, count in sorted(type_counts.items(), key=lambda x: -x[1]):
+        summary_lines.append(f"  • {amb_type.value}: {count} 处")
+
+    console.print(
+        Panel(
+            "\n".join(summary_lines),
+            title="[bold yellow]歧义检测摘要[/bold yellow]",
+            border_style="yellow",
+        )
+    )
+    console.print()
+
+    # 显示详细表格
+    table = Table(
+        title="歧义详情",
+        show_header=True,
+        header_style="bold cyan",
+        expand=True,
+    )
+    table.add_column("行号", justify="right", style="dim", width=6)
+    table.add_column("类型", width=15)
+    table.add_column("关键词", width=12)
+    table.add_column("内容", overflow="fold")
+
+    for match in matches:
+        # 高亮关键词
+        content = match.original_line.strip()
+        if len(content) > 80:
+            content = content[:77] + "..."
+
+        table.add_row(
+            str(match.line_number),
+            match.type.value,
+            f"[yellow]{match.keyword}[/yellow]",
+            content,
+        )
+
+    console.print(table)
+    console.print()
+
+    # 显示类型说明
+    console.print("[dim]歧义类型说明：[/dim]")
+    for amb_type in type_counts.keys():
+        console.print(f"  [cyan]{amb_type.value}[/cyan]: {get_type_description(amb_type)}")
+    console.print()
+
+    # 显示建议
+    console.print(
+        "[dim]建议：请在 proposal.md 中补充以上歧义点的具体说明，"
+        "或运行 [cyan]cc-spec clarify[/cyan] 标记需要返工的任务[/dim]"
     )
 
 
@@ -190,6 +277,12 @@ def clarify(
         "-c",
         help="变更名称或 ID（已弃用，建议使用位置参数）",
     ),
+    detect_ambiguity: bool = typer.Option(
+        False,
+        "--detect",
+        "-d",
+        help="检测 proposal.md 中的歧义",
+    ),
 ) -> None:
     """审查任务并将其标记为返工。
 
@@ -201,8 +294,12 @@ def clarify(
     不带参数时：展示当前变更中的全部任务。
     带参数时：将对应任务标记为返工（重置状态为 pending）。
 
+    v1.2：新增 --detect 选项检测 proposal.md 中的歧义。
+
     示例：
         cc-spec clarify                     # 显示所有任务
+        cc-spec clarify --detect            # 检测当前变更的歧义
+        cc-spec clarify -d C-001            # 检测指定变更的歧义
         cc-spec clarify C-001               # 显示变更 C-001 的任务
         cc-spec clarify C-001:02-MODEL      # 将任务 02-MODEL 标记为返工
         cc-spec clarify 02-MODEL            # 在当前变更中标记任务
@@ -274,6 +371,21 @@ def clarify(
 
         change_dir = cc_spec_root / "changes" / state.change_name
         state_path = change_dir / "status.yaml"
+
+    # 如果启用歧义检测模式
+    if detect_ambiguity:
+        proposal_path = change_dir / "proposal.md"
+        if not proposal_path.exists():
+            console.print(
+                f"[red]错误：[/red] 变更 '{state.change_name}' 缺少 proposal.md 文件"
+            )
+            raise typer.Exit(1)
+
+        # 读取 proposal.md 并检测歧义
+        content = proposal_path.read_text(encoding="utf-8")
+        matches = detect(content)
+        show_ambiguity_report(matches, proposal_path)
+        return
 
     # 执行对应操作
     if task_id is None:

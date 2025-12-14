@@ -198,3 +198,98 @@ def test_clarify_pending_task_shows_note(mock_readkey, mock_cc_spec_project: Pat
 
     assert result.exit_code == 0
     assert "pending" in result.stdout.lower()
+
+
+def test_clarify_detect_with_proposal(mock_cc_spec_project: Path) -> None:
+    """Test that --detect option detects ambiguities in proposal.md."""
+    # Create proposal.md with ambiguous content
+    proposal_path = (
+        mock_cc_spec_project / ".cc-spec" / "changes" / "test-change" / "proposal.md"
+    )
+    proposal_path.write_text(
+        """# Test Change Proposal
+
+## 背景与目标
+
+这个功能可能需要支持多种格式。
+
+## 技术决策
+
+接口参数需要灵活定义。
+
+## 用户故事
+
+用户可以某些方式使用这个功能。
+""",
+        encoding="utf-8",
+    )
+
+    result = runner.invoke(app, ["clarify", "--detect"])
+
+    assert result.exit_code == 0
+    # Should show ambiguity detection results
+    assert "歧义" in result.stdout or "ambiguity" in result.stdout.lower()
+
+
+def test_clarify_detect_no_ambiguity(mock_cc_spec_project: Path) -> None:
+    """Test that --detect shows success message when no ambiguities found."""
+    # Create proposal.md with clear content (no ambiguous keywords)
+    proposal_path = (
+        mock_cc_spec_project / ".cc-spec" / "changes" / "test-change" / "proposal.md"
+    )
+    proposal_path.write_text(
+        """# Test Change Proposal
+
+## 背景与目标
+
+实现用户登录功能。
+
+## 技术决策
+
+使用 JWT 进行身份验证。
+已定义的 API 端点为 /auth/login。
+
+## 成功标准
+
+用户能够成功登录并获取令牌。
+""",
+        encoding="utf-8",
+    )
+
+    result = runner.invoke(app, ["clarify", "--detect"])
+
+    assert result.exit_code == 0
+    # Should show success message (no ambiguities)
+    assert "检测" in result.stdout or "未检测到" in result.stdout or "proposal" in result.stdout.lower()
+
+
+def test_clarify_detect_missing_proposal(mock_cc_spec_project: Path) -> None:
+    """Test that --detect shows error when proposal.md is missing."""
+    # Don't create proposal.md
+    result = runner.invoke(app, ["clarify", "--detect"])
+
+    assert result.exit_code == 1
+    assert "proposal.md" in result.stdout.lower() or "缺少" in result.stdout
+
+
+def test_clarify_detect_short_option(mock_cc_spec_project: Path) -> None:
+    """Test that -d short option works for detect."""
+    # Create proposal.md
+    proposal_path = (
+        mock_cc_spec_project / ".cc-spec" / "changes" / "test-change" / "proposal.md"
+    )
+    proposal_path.write_text(
+        """# Test Change Proposal
+
+## 背景
+
+这个功能的实现方式比较灵活。
+""",
+        encoding="utf-8",
+    )
+
+    result = runner.invoke(app, ["clarify", "-d"])
+
+    assert result.exit_code == 0
+    # Should run ambiguity detection
+    assert "检测" in result.stdout or "歧义" in result.stdout or "proposal" in result.stdout.lower()

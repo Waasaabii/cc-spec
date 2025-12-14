@@ -84,7 +84,7 @@ SubAgent 上下文（每个）:
 | 2 | T08 | CHECKLIST-TEMPLATE | ~25K | ✅ 已完成（2025-12-14 07:33） | T01 |
 | 2 | T14 | SINGLE-SOURCE | ~18K | ✅ 已完成（2025-12-14 15:03） | - |
 | 3 | T10 | GENERATOR-REFACTOR | ~15K | ✅ 已完成（2025-12-14 15:07） | T03,T04,T05,T07,T08 |
-| 3 | T11 | CLARIFY-INTEGRATION | ~10K | 🟠 执行中（Claude-Terminal-8842, 2025-12-14 15:05） | T06 |
+| 3 | T11 | CLARIFY-INTEGRATION | ~10K | ✅ 已完成（2025-12-14 15:10） | T06 |
 | 3 | T12 | APPLY-TECH-CHECK | ~15K | 空闲 | T09 |
 | 3 | T15 | TASKS-YAML | ~22K | 🟠 执行中（Claude-Terminal-9156, 2025-12-14 15:07） | T14 |
 | 4 | T16 | CONTEXT-OPTIMIZE | ~30K | 空闲 | T15 |
@@ -488,9 +488,10 @@ Wave-4 (单任务)
 #### Task T11: CLARIFY-INTEGRATION
 
 **预估上下文**: ~10K tokens
-**状态**: 🟠 执行中（Claude-Terminal-8842, 2025-12-14 15:05）
+**状态**: ✅ 已完成（2025-12-14 15:10）
 **执行实例**: Claude-Terminal-8842
 **开始时间**: 2025-12-14 15:05
+**完成时间**: 2025-12-14 15:10
 **依赖**: T06
 
 **必读文件**:
@@ -500,12 +501,20 @@ Wave-4 (单任务)
 | src/cc_spec/core/ambiguity/detector.py | ~200 | 检测器 |
 
 **输出文件**:
-- src/cc_spec/commands/clarify.py (修改，+50 行)
+- src/cc_spec/commands/clarify.py (修改，+77 行)
+- tests/test_cmd_clarify.py (添加 4 个测试用例)
 
 **Checklist**:
-- [ ] --detect 选项可用
-- [ ] 歧义报告格式正确（表格形式）
-- [ ] 与现有功能兼容
+- [x] --detect 选项可用
+- [x] 歧义报告格式正确（表格形式）
+- [x] 与现有功能兼容
+
+**执行日志**:
+- 添加 `--detect` / `-d` 选项到 clarify 命令
+- 实现 `show_ambiguity_report()` 函数，以表格形式展示歧义检测结果
+- 添加 4 个测试用例覆盖新功能
+- 707 个测试通过，覆盖率 77%
+- clarify.py 覆盖率从 57% 提升到 79%
 
 ---
 
