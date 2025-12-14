@@ -20,13 +20,16 @@ BANNER_LINES = [
 # 兼容旧代码
 BANNER = "\n".join(BANNER_LINES)
 
-# 喵娘装饰
-MASCOT = """
-  ∧＿∧
- (｡･ω･｡)
- |  つ♡
- しーＪ
-"""
+# 喵娘装饰（基于 wu.jpg：粉发紫眼、蝴蝶结、圣诞帽、绿外套）
+MASCOT_LINES = [
+    "    ∧ ∧    ",
+    "  (ᵒ̴̶̷ᴗᵒ̴̶̷)   ",
+    "  /|♡ |\\  ",
+    "  ╰───╯   ",
+]
+
+# 兼容旧代码
+MASCOT = "\n".join(MASCOT_LINES)
 
 TAGLINE = "规范驱动的 AI 辅助开发工作流 CLI 喵～"
 VERSION_INFO = "v0.1.4 - 四源融合 + 单一真相源"
@@ -54,7 +57,9 @@ def show_banner(console: Console | None = None) -> None:
         color = colors[i % len(colors)]
         console.print(f"[{color}]{line}[/{color}]")
     console.print()
-    console.print(Align.center(mascot_text))
+    # 直接打印 mascot（使用 MASCOT_LINES 保留精确格式）
+    for line in MASCOT_LINES:
+        console.print(f"[bright_magenta]{line}[/bright_magenta]")
     console.print(Align.center(Text(TAGLINE, style="italic bright_yellow")))
     console.print(Align.center(Text(VERSION_INFO, style="dim")))
     console.print()
