@@ -123,9 +123,9 @@ def select_option(
             # 光标指示
             cursor = ">" if i == selected_index else " "
 
-            # 多选复选框
+            # 多选复选框（使用 Rich 转义避免被解析为样式）
             if multi_select:
-                checkbox = "[x]" if key in selected_items else "[ ]"
+                checkbox = "[green]\\[x][/green]" if key in selected_items else "\\[ ]"
                 if i == selected_index:
                     row_text = f"[cyan]{key}[/cyan] [dim]({options_dict[key]})[/dim]"
                 else:
