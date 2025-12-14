@@ -375,31 +375,29 @@ tasks:
             SubAgentExecutor(tasks_md_path=tmp_path / "nonexistent.yaml")
 
     def test_build_task_prompt(self, sample_tasks_yaml: Path) -> None:
-        """Test building task prompt."""
+        """Test building task prompt (v1.4 compact format)."""
         executor = SubAgentExecutor(tasks_md_path=sample_tasks_yaml)
         task = executor.doc.all_tasks["01-SETUP"]
 
-        prompt = executor.build_task_prompt(task, Path(".cc-spec/changes/test-change"))
+        prompt = executor.build_task_prompt(task)
 
-        # Support Chinese prompt: "# 任务：01-SETUP" instead of "# Task: 01-SETUP"
-        assert "01-SETUP" in prompt and ("Project Setup" in prompt or "任务" in prompt)
-        assert "test-change" in prompt
-        assert "docs/plan/spec.md" in prompt
-        assert "src/config/" in prompt
+        # v1.4: 精简格式检查
+        assert "## 任务: 01-SETUP" in prompt
+        assert "**名称**:" in prompt
+        assert "**Checklist**:" in prompt
         assert "创建配置文件" in prompt
         assert "添加环境变量" in prompt
-        # Support Chinese and English prompt format
-        assert "状态报告" in prompt or "Status Reporting" in prompt or "状态回报" in prompt
+        assert "**执行**:" in prompt
 
     def test_build_task_prompt_with_dependencies(self, sample_tasks_yaml: Path) -> None:
-        """Test building prompt for task with dependencies."""
+        """Test building prompt for task with dependencies (v1.4 compact format)."""
         executor = SubAgentExecutor(tasks_md_path=sample_tasks_yaml)
         task = executor.doc.all_tasks["02-MODEL"]
 
-        prompt = executor.build_task_prompt(task, Path(".cc-spec/changes/test-change"))
+        prompt = executor.build_task_prompt(task)
 
-        # Support Chinese and English
-        assert ("依赖" in prompt or "Dependencies" in prompt)
+        # v1.4: 依赖检查
+        assert "**依赖**:" in prompt
         assert "01-SETUP" in prompt
 
     @pytest.mark.asyncio

@@ -40,7 +40,11 @@ from cc_spec.core.tech_check import (
     run_tech_checks,
     should_block,
 )
-from cc_spec.subagent.executor import ExecutionResult, SubAgentExecutor
+from cc_spec.subagent.executor import (
+    ExecutionResult,
+    SubAgentExecutor,
+    generate_change_summary,
+)
 from cc_spec.subagent.result_collector import ResultCollector
 from cc_spec.subagent.task_parser import (
     TasksDocument,
@@ -305,13 +309,21 @@ def apply_command(
             )
 
     try:
-        # 创建带配置的执行器（v1.2：profile 支持，v1.3：锁支持）
+        # v1.4: 生成变更摘要以优化 SubAgent 上下文
+        change_summary = generate_change_summary(change_dir, change)
+        if change_summary.estimated_tokens > 0:
+            console.print(
+                f"[dim]变更摘要：~{change_summary.estimated_tokens} tokens[/dim]"
+            )
+
+        # 创建带配置的执行器（v1.2：profile 支持，v1.3：锁支持，v1.4：上下文优化）
         executor = SubAgentExecutor(
             tasks_md_path=tasks_path,
             max_concurrent=max_concurrent,
             timeout_ms=timeout,
             config=config,  # v1.2：传入配置以支持 profile
             cc_spec_root=cc_spec_root if use_lock else None,  # v1.3：传入根目录以支持锁
+            change_summary=change_summary,  # v1.4：传入变更摘要以优化上下文
         )
 
         # 创建结果收集器

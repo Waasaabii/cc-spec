@@ -5,13 +5,14 @@
 
 v1.2: 添加 Profile 支持，实现任务特定的配置。
 v1.3: 添加锁集成、agent_id、wave 字段和重试计数。
+v1.4: 添加上下文优化，主 Agent 预处理生成变更摘要，SubAgent 只接收精简上下文。
 """
 
 import asyncio
 import time
 import uuid
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
 
@@ -34,6 +35,160 @@ def _generate_agent_id() -> str:
         格式为 'agent-<8位随机字符>' 的字符串
     """
     return f"agent-{uuid.uuid4().hex[:8]}"
+
+
+def _estimate_tokens(text: str) -> int:
+    """估算文本的 token 数量。
+
+    使用简单的启发式方法：平均每 4 个字符约 1 个 token。
+    中文字符按每字符 1.5 tokens 计算。
+
+    参数：
+        text: 要估算的文本
+
+    返回：
+        估算的 token 数量
+    """
+    if not text:
+        return 0
+
+    # 统计中文字符
+    chinese_chars = sum(1 for c in text if "\u4e00" <= c <= "\u9fff")
+    other_chars = len(text) - chinese_chars
+
+    # 中文每字符约 1.5 tokens，其他每 4 字符约 1 token
+    return int(chinese_chars * 1.5 + other_chars / 4)
+
+
+@dataclass
+class ChangeSummary:
+    """v1.4: 变更摘要数据类，用于上下文优化。
+
+    主 Agent 预处理 proposal.md 生成精简摘要，传递给 SubAgent。
+    目标是将每个 SubAgent 的上下文从 ~5K 降到 ~500 tokens。
+
+    属性：
+        change_name: 变更名称
+        objective: 变更目标（1-2 句话）
+        scope: 影响范围（简短列表）
+        tech_decisions: 技术决策要点
+        estimated_tokens: 摘要的估算 token 数
+    """
+
+    change_name: str
+    objective: str = ""
+    scope: list[str] = field(default_factory=list)
+    tech_decisions: list[str] = field(default_factory=list)
+    estimated_tokens: int = 0
+
+    def to_prompt_section(self) -> str:
+        """将摘要转换为 prompt 片段。
+
+        返回：
+            格式化的摘要文本（目标 ~200 tokens）
+        """
+        lines = [
+            f"## 变更: {self.change_name}",
+            "",
+            f"**目标**: {self.objective}",
+        ]
+
+        if self.scope:
+            lines.append("")
+            lines.append("**范围**: " + ", ".join(self.scope[:3]))  # 最多 3 项
+
+        if self.tech_decisions:
+            lines.append("")
+            lines.append("**技术要点**: " + "; ".join(self.tech_decisions[:2]))  # 最多 2 项
+
+        return "\n".join(lines)
+
+
+def generate_change_summary(
+    change_dir: Path,
+    change_name: str,
+) -> ChangeSummary:
+    """v1.4: 从 proposal.md 生成变更摘要。
+
+    主 Agent 调用此函数预处理变更信息，生成精简摘要供 SubAgent 使用。
+
+    参数：
+        change_dir: 变更目录路径
+        change_name: 变更名称
+
+    返回：
+        ChangeSummary 实例
+    """
+    summary = ChangeSummary(change_name=change_name)
+
+    proposal_path = change_dir / "proposal.md"
+    if not proposal_path.exists():
+        summary.objective = f"执行变更 {change_name}"
+        summary.estimated_tokens = _estimate_tokens(summary.to_prompt_section())
+        return summary
+
+    try:
+        content = proposal_path.read_text(encoding="utf-8")
+
+        # 提取目标（从 ## 背景与目标 或 ## 目标 章节）
+        objective = _extract_section(content, ["背景与目标", "目标", "概述"])
+        if objective:
+            # 取第一段或前 100 字符
+            first_para = objective.split("\n\n")[0].strip()
+            summary.objective = first_para[:150] if len(first_para) > 150 else first_para
+
+        # 提取范围（从 ## 范围 或 ## 影响范围 章节）
+        scope_text = _extract_section(content, ["范围", "影响范围", "涉及模块"])
+        if scope_text:
+            # 提取列表项
+            for line in scope_text.split("\n"):
+                line = line.strip()
+                if line.startswith("- ") or line.startswith("* "):
+                    summary.scope.append(line[2:].strip()[:50])
+                    if len(summary.scope) >= 3:
+                        break
+
+        # 提取技术决策（从 ## 技术决策 章节）
+        tech_text = _extract_section(content, ["技术决策", "技术方案", "实现方案"])
+        if tech_text:
+            for line in tech_text.split("\n"):
+                line = line.strip()
+                if line.startswith("- ") or line.startswith("* "):
+                    summary.tech_decisions.append(line[2:].strip()[:80])
+                    if len(summary.tech_decisions) >= 2:
+                        break
+
+        # 如果没提取到目标，使用默认值
+        if not summary.objective:
+            summary.objective = f"执行变更 {change_name}"
+
+    except Exception:
+        summary.objective = f"执行变更 {change_name}"
+
+    summary.estimated_tokens = _estimate_tokens(summary.to_prompt_section())
+    return summary
+
+
+def _extract_section(content: str, section_names: list[str]) -> str:
+    """从 Markdown 内容中提取指定章节。
+
+    参数：
+        content: Markdown 内容
+        section_names: 可能的章节名称列表
+
+    返回：
+        章节内容，未找到返回空字符串
+    """
+    import re
+
+    for name in section_names:
+        # 匹配 ## 章节名 或 # 章节名
+        pattern = rf"^#{1,2}\s*{re.escape(name)}\s*\n(.*?)(?=^#{1,2}\s|\Z)"
+        match = re.search(pattern, content, re.MULTILINE | re.DOTALL)
+        if match:
+            return match.group(1).strip()
+
+    return ""
 
 
 @dataclass
@@ -76,6 +231,7 @@ class SubAgentExecutor:
 
     v1.2: 添加 Profile 支持，实现任务特定的配置。
     v1.3: 添加 LockManager 集成，防止并发冲突；添加 agent_id 追踪。
+    v1.4: 添加上下文优化，支持变更摘要和精简 prompt。
 
     属性：
         tasks_md_path: tasks.md 文件路径
@@ -85,6 +241,7 @@ class SubAgentExecutor:
         lock_manager: v1.3 - 锁管理器
         doc: 解析后的 TasksDocument
         tasks_md_content: tasks.md 的原始内容
+        change_summary: v1.4 - 变更摘要（由主 Agent 预处理生成）
     """
 
     def __init__(
@@ -95,6 +252,7 @@ class SubAgentExecutor:
         config: Config | None = None,
         lock_manager: LockManager | None = None,  # v1.3 新增
         cc_spec_root: Path | None = None,  # v1.3 新增
+        change_summary: ChangeSummary | None = None,  # v1.4 新增
     ):
         """初始化执行器。
 
@@ -105,6 +263,7 @@ class SubAgentExecutor:
             config: 可选的 Config 配置对象 (v1.2)
             lock_manager: v1.3 - 可选的锁管理器
             cc_spec_root: v1.3 - .cc-spec 目录路径 (用于创建锁管理器)
+            change_summary: v1.4 - 预处理的变更摘要
 
         异常：
             FileNotFoundError: 如果 tasks_md_path 不存在
@@ -117,6 +276,9 @@ class SubAgentExecutor:
         self.max_concurrent = max_concurrent
         self.timeout_ms = timeout_ms
         self.config = config
+
+        # v1.4: 变更摘要
+        self.change_summary = change_summary
 
         # v1.3: 初始化锁管理器
         if lock_manager is not None:
@@ -182,92 +344,72 @@ class SubAgentExecutor:
         """
         self._task_executor = executor
 
-    def build_task_prompt(self, task: Task, change_dir: Path) -> str:
-        """构建供 SubAgent 执行任务的提示词（prompt）。
+    def build_task_prompt(self, task: Task) -> str:
+        """v1.4: 构建精简的任务提示词（目标 ~500 tokens）。
 
-        提示词包含：
-        - 任务描述与检查清单
-        - 需要阅读的必读文档
-        - 需要修改的代码入口
-        - 在 tasks.md 中更新任务状态与检查清单的说明
+        使用预处理的变更摘要 + 任务定义 + 检查清单，
+        将上下文从 ~5K 降到 ~500 tokens/agent。
 
         参数：
             task: 需要构建提示词的任务
-            change_dir: 变更目录路径
 
         返回：
-            面向 SubAgent 的格式化提示词字符串
+            精简的提示词字符串
         """
-        prompt_lines = [
-            f"# 任务：{task.task_id} - {task.name}",
-            "",
-            f"你正在执行任务 {task.task_id}，这是变更 '{self.doc.change_name}' 的一部分。",
-            "",
-            "## 任务详情",
-            "",
-        ]
+        prompt_lines = []
 
-        # 添加依赖信息
-        if task.dependencies:
-            prompt_lines.extend([
-                "**依赖（已完成）：**",
-                *[f"- {dep_id}" for dep_id in task.dependencies],
-                "",
-            ])
+        # 1. 变更摘要（~200 tokens）
+        if self.change_summary:
+            prompt_lines.append(self.change_summary.to_prompt_section())
+            prompt_lines.append("")
 
-        # 添加必读文档
-        if task.required_docs:
-            prompt_lines.extend([
-                "**必读文档：**",
-                "",
-                "请阅读这些文档以理解上下文与要求：",
-                *[f"- {doc}" for doc in task.required_docs],
-                "",
-            ])
-
-        # 添加代码入口
-        if task.code_entry_points:
-            prompt_lines.extend([
-                "**代码入口：**",
-                "",
-                "请把实现重点放在这些代码位置：",
-                *[f"- {entry}" for entry in task.code_entry_points],
-                "",
-            ])
-
-        # 添加检查清单
-        if task.checklist_items:
-            prompt_lines.extend([
-                "**检查清单：**",
-                "",
-                "请完成以下检查清单中的所有条目：",
-                *[
-                    f"- [{'x' if item.status.value == 'passed' else ' '}] {item.description}"
-                    for item in task.checklist_items
-                ],
-                "",
-            ])
-
-        # 添加执行说明
+        # 2. 任务定义（~150 tokens）
         prompt_lines.extend([
-            "## 执行说明",
-            "",
-            "1. 仔细阅读所有必读文档",
-            "2. 在指定的代码入口处实现所需改动",
-            "3. 充分测试你的实现",
-            "4. 完成检查清单项后，在 tasks.md 中更新进度",
-            "",
-            "## 状态回报",
-            "",
-            f"完成任务后，请在 {self.tasks_md_path} 中更新状态：",
-            f"- 将任务 {task.task_id} 状态改为 🟩 完成",
-            "- 添加执行日志，包含完成时间与 SubAgent ID",
-            "- 将所有检查清单项勾选为已完成",
-            "",
-            "如果遇到错误，请将状态更新为 🟥 失败，并记录问题说明。",
+            f"## 任务: {task.task_id}",
+            f"**名称**: {task.name}",
         ])
 
+        # 依赖
+        if task.dependencies:
+            prompt_lines.append(f"**依赖**: {', '.join(task.dependencies)}")
+
+        # 代码入口（最多 3 个）
+        if task.code_entry_points:
+            entries = task.code_entry_points[:3]
+            prompt_lines.append(f"**入口**: {', '.join(entries)}")
+
+        prompt_lines.append("")
+
+        # 3. 检查清单（~100 tokens）
+        if task.checklist_items:
+            prompt_lines.append("**Checklist**:")
+            for item in task.checklist_items[:5]:  # 最多 5 项
+                mark = "x" if item.status.value == "passed" else " "
+                prompt_lines.append(f"- [{mark}] {item.description[:60]}")
+            prompt_lines.append("")
+
+        # 4. 执行说明（~50 tokens）
+        prompt_lines.append("**执行**: 完成 checklist 所有项，更新 tasks.yaml 状态。")
+
         return "\n".join(prompt_lines)
+
+    def get_prompt_stats(self, task: Task) -> dict:
+        """v1.4: 获取 prompt 统计信息。
+
+        参数：
+            task: 任务
+
+        返回：
+            包含 token 估算的字典
+        """
+        prompt = self.build_task_prompt(task)
+        return {
+            "task_id": task.task_id,
+            "prompt_tokens": _estimate_tokens(prompt),
+            "summary_tokens": (
+                self.change_summary.estimated_tokens if self.change_summary else 0
+            ),
+        }
 
     async def execute_task(self, task: Task, wave_num: int = 0) -> ExecutionResult:
         """执行单个任务 (模拟 SubAgent 执行)。
