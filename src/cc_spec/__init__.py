@@ -1,5 +1,7 @@
 """cc-spec: 规格驱动的AI辅助开发工作流CLI工具。"""
 
+import sys
+
 import typer
 from rich.console import Console
 
@@ -14,8 +16,9 @@ from cc_spec.commands import plan as plan_cmd
 from cc_spec.commands import quick_delta as quick_delta_cmd
 from cc_spec.commands import specify as specify_cmd
 from cc_spec.commands import update as update_cmd
+from cc_spec.ui.banner import show_banner
 
-__version__ = "0.1.3"
+__version__ = "0.1.4"
 
 app = typer.Typer(
     name="cc-spec",
@@ -33,8 +36,12 @@ def main_callback(
 ) -> None:
     """cc-spec: 为AI编码助手设计的规格驱动开发工作流。"""
     if version:
+        show_banner(console)
         console.print(f"[bold]cc-spec[/bold] 版本 {__version__}")
         raise typer.Exit()
+    # 如果没有子命令且不是帮助请求，显示 banner
+    if ctx.invoked_subcommand is None and "--help" not in sys.argv and "-h" not in sys.argv:
+        show_banner(console)
 
 
 # 注册命令
