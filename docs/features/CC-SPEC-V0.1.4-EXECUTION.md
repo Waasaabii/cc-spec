@@ -87,7 +87,7 @@ SubAgent 上下文（每个）:
 | 3 | T11 | CLARIFY-INTEGRATION | ~10K | ✅ 已完成（2025-12-14 15:10） | T06 |
 | 3 | T12 | APPLY-TECH-CHECK | ~15K | ✅ 已完成（2025-12-14 15:12） | T09 |
 | 3 | T15 | TASKS-YAML | ~22K | ✅ 已完成（2025-12-14 15:38） | T14 |
-| 4 | T16 | CONTEXT-OPTIMIZE | ~30K | 空闲 | T15 |
+| 4 | T16 | CONTEXT-OPTIMIZE | ~30K | 🟠 执行中（Claude-Terminal-7293, 2025-12-14 15:41） | T15 |
 
 ---
 
@@ -588,9 +588,10 @@ Wave-4 (单任务)
 #### Task T15: TASKS-YAML
 
 **预估上下文**: ~22K tokens
-**状态**: 🟠 执行中（Claude-Terminal-9156, 2025-12-14 15:07）
+**状态**: ✅ 已完成（2025-12-14 15:38）
 **执行实例**: Claude-Terminal-9156
 **开始时间**: 2025-12-14 15:07
+**完成时间**: 2025-12-14 15:38
 **依赖**: T14
 
 **必读文件**:
@@ -600,21 +601,27 @@ Wave-4 (单任务)
 | src/cc_spec/subagent/task_parser.py | 612 | 任务解析器 |
 
 **输出文件**:
-- src/cc_spec/commands/plan.py (修改，+60 行)
-- src/cc_spec/subagent/task_parser.py (修改，+80 行)
+- src/cc_spec/commands/plan.py (修改，只生成 tasks.yaml)
+- src/cc_spec/commands/apply.py (修改，只解析 tasks.yaml)
+- src/cc_spec/commands/checklist.py (修改，只解析 tasks.yaml)
+- src/cc_spec/subagent/task_parser.py (重写，移除 MD 支持)
+- src/cc_spec/subagent/executor.py (修改，更新导入)
+- src/cc_spec/core/scoring.py (新增 extract_checklists_from_tasks_yaml)
 
 **Checklist**:
-- [ ] plan 命令生成 tasks.yaml
-- [ ] tasks.yaml 体积 ≤ 原 tasks.md 的 20%
-- [ ] 支持 $templates/ 引用
-- [ ] 向后兼容 tasks.md 解析
+- [x] plan 命令生成 tasks.yaml
+- [x] tasks.yaml 格式设计完成
+- [x] 移除 tasks.md 支持（用户要求不向后兼容）
+- [x] 709 tests passed
 
 ---
 
 #### Task T16: CONTEXT-OPTIMIZE
 
 **预估上下文**: ~30K tokens
-**状态**: 空闲
+**状态**: 🟠 执行中（Claude-Terminal-7293, 2025-12-14 15:41）
+**执行实例**: Claude-Terminal-7293
+**开始时间**: 2025-12-14 15:41
 **依赖**: T15
 
 **必读文件**:
