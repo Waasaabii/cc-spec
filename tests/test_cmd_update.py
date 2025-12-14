@@ -28,13 +28,13 @@ class TestAvailableAgents:
     """Tests for AVAILABLE_AGENTS constant."""
 
     def test_available_agents_count(self) -> None:
-        """Test that we have 17 available agents (9 original + 8 new)."""
-        assert len(AVAILABLE_AGENTS) == 17
+        """Test that we have 18 available agents (10 original + 8 new)."""
+        assert len(AVAILABLE_AGENTS) == 18
 
     def test_available_agents_original(self) -> None:
-        """Test original 9 agents are in list."""
+        """Test original agents are in list."""
         original = ["claude", "cursor", "gemini", "copilot", "amazonq",
-                    "windsurf", "qwen", "codeium", "continue"]
+                    "windsurf", "qwen", "codeium", "continue", "codex"]
         for agent in original:
             assert agent in AVAILABLE_AGENTS
 
@@ -64,7 +64,7 @@ class TestGetAgentCommandDir:
         with tempfile.TemporaryDirectory() as tmpdir:
             project_root = Path(tmpdir)
             cmd_dir = _get_agent_command_dir(project_root, "claude")
-            assert cmd_dir == project_root / ".claude" / "commands" / "speckit"
+            assert cmd_dir == project_root / ".claude" / "commands" / "cc-spec"
 
     def test_get_agent_command_dir_cursor(self) -> None:
         """Test Cursor command directory."""

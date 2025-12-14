@@ -173,7 +173,7 @@ class TestCommandGeneratorWorkflow:
         assert path is not None
         assert path.exists()
         assert path.suffix == ".md"
-        assert "speckit" in str(path)
+        assert "cc-spec" in str(path)
 
         # Check content
         content = path.read_text(encoding="utf-8")

@@ -193,3 +193,16 @@ def test_init_creates_agent_folder(tmp_path, monkeypatch):
     assert result.exit_code == 0
     # Claude uses .claude folder
     assert (tmp_path / ".claude").exists()
+
+
+def test_init_creates_codex_prompts_when_selected(tmp_path, monkeypatch):
+    """Test that init generates Codex CLI prompts when codex is selected."""
+    monkeypatch.chdir(tmp_path)
+    codex_prompts_dir = tmp_path / ".codex-user" / "prompts"
+    monkeypatch.setenv("CC_SPEC_CODEX_PROMPTS_DIR", str(codex_prompts_dir))
+
+    result = runner.invoke(app, ["init", "test-project", "--agent", "codex"])
+
+    assert result.exit_code == 0
+    assert codex_prompts_dir.exists()
+    assert (codex_prompts_dir / "cc-spec-specify.md").exists()

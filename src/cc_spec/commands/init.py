@@ -16,44 +16,34 @@ from cc_spec.utils.files import ensure_dir, get_cc_spec_dir, get_config_path
 
 console = Console()
 
-# AI工具配置（参考spec-kit的AGENT_CONFIG）
-# 首选工具放在前面：claude, codex, gemini, cursor
+# AI 工具配置（与 docs/plan + core/command_generator.py 对齐）
+# 首选工具放在前面：claude / cursor / gemini
 AI_TOOLS_CONFIG = {
     # === 首选工具 ===
     "claude": {
-        "name": "Anthropic Claude (Claude Code / API)",
+        "name": "Claude Code (Anthropic Claude)",
         "folder": ".claude/",
         "requires_cli": True,
     },
-    "codex": {
-        "name": "Codex CLI",
-        "folder": ".codex/",
-        "requires_cli": True,
-    },
-    "gemini": {
-        "name": "Google Gemini",
-        "folder": ".gemini/",
-        "requires_cli": True,
-    },
     "cursor": {
-        "name": "Cursor编辑器",
+        "name": "Cursor",
         "folder": ".cursor/",
         "requires_cli": False,
     },
-    # === 其他工具 ===
+    "gemini": {
+        "name": "Gemini CLI (Google Gemini)",
+        "folder": ".gemini/",
+        "requires_cli": True,
+    },
+    # === 其他工具（17+ 命令生成器覆盖） ===
     "copilot": {
         "name": "GitHub Copilot",
-        "folder": ".github/",  # Copilot使用.github/
+        "folder": ".github/",
         "requires_cli": False,
     },
-    "chatgpt": {
-        "name": "OpenAI ChatGPT",
-        "folder": ".chatgpt/",
-        "requires_cli": False,
-    },
-    "qwen": {
-        "name": "Qwen Code (通义千问)",
-        "folder": ".qwen/",
+    "amazonq": {
+        "name": "Amazon Q Developer",
+        "folder": ".amazonq/",
         "requires_cli": True,
     },
     "windsurf": {
@@ -61,54 +51,66 @@ AI_TOOLS_CONFIG = {
         "folder": ".windsurf/",
         "requires_cli": False,
     },
-    "kilocode": {
+    "qwen": {
+        "name": "Qwen Code",
+        "folder": ".qwen/",
+        "requires_cli": True,
+    },
+    "codeium": {
+        "name": "Codeium",
+        "folder": ".codeium/",
+        "requires_cli": False,
+    },
+    "continue": {
+        "name": "Continue.dev",
+        "folder": ".continue/",
+        "requires_cli": False,
+    },
+    # v1.2 新增
+    "tabnine": {
+        "name": "Tabnine",
+        "folder": ".tabnine/",
+        "requires_cli": False,
+    },
+    "aider": {
+        "name": "Aider",
+        "folder": ".aider/",
+        "requires_cli": True,
+    },
+    "devin": {
+        "name": "Devin",
+        "folder": ".devin/",
+        "requires_cli": True,
+    },
+    "replit": {
+        "name": "Replit AI",
+        "folder": ".replit/",
+        "requires_cli": False,
+    },
+    "cody": {
+        "name": "Sourcegraph Cody",
+        "folder": ".cody/",
+        "requires_cli": False,
+    },
+    "supermaven": {
+        "name": "Supermaven",
+        "folder": ".supermaven/",
+        "requires_cli": False,
+    },
+    "kilo": {
         "name": "Kilo Code",
-        "folder": ".kilocode/",
+        "folder": ".kilo/",
         "requires_cli": False,
     },
     "auggie": {
-        "name": "Auggie CLI",
-        "folder": ".augment/",
+        "name": "Auggie",
+        "folder": ".auggie/",
         "requires_cli": True,
     },
-    "codebuddy": {
-        "name": "CodeBuddy",
-        "folder": ".codebuddy/",
-        "requires_cli": True,
-    },
-    "qoder": {
-        "name": "Qoder CLI",
-        "folder": ".qoder/",
-        "requires_cli": True,
-    },
-    "roo": {
-        "name": "Roo Code",
-        "folder": ".roo/",
-        "requires_cli": False,
-    },
-    "amazonq": {
-        "name": "Amazon Q Developer CLI",
-        "folder": ".amazonq/",
-        "requires_cli": True,
-    },
-    "amp": {
-        "name": "Amp",
-        "folder": ".agents/",
-        "requires_cli": True,
-    },
-    "shai": {
-        "name": "SHAI",
-        "folder": ".shai/",
-        "requires_cli": True,
-    },
-    "bob": {
-        "name": "IBM Bob",
-        "folder": ".bob/",
-        "requires_cli": False,
-    },
-    "opencode": {
-        "name": "OpenCode",
-        "folder": ".opencode/",
+    # 预留：Codex CLI（当前未实现命令生成器，仍可用于放置配置）
+    "codex": {
+        "name": "Codex CLI",
+        "folder": ".codex/",
         "requires_cli": True,
     },
 }
@@ -259,6 +261,13 @@ def init_command(
     console.print("[cyan]正在创建AI工具配置目录...[/cyan]")
     for agent_key in selected_agents:
         agent_config = AI_TOOLS_CONFIG[agent_key]
+        # Codex CLI 的配置/Prompts 默认在用户目录 `~/.codex/`，不需要在项目内创建 `.codex/`
+        if agent_key == "codex":
+            console.print(
+                f"[green]✓[/green] 已选择 codex（prompts 输出到用户目录 ~/.codex/prompts）"
+            )
+            continue
+
         agent_folder = project_root / agent_config["folder"]
 
         # 创建AI工具文件夹
@@ -297,8 +306,16 @@ def init_command(
             try:
                 created_files = generator.generate_all(project_root)
                 total_commands_generated += len(created_files)
+
+                cmd_dir = generator.get_command_dir(project_root)
+                try:
+                    cmd_dir_display = str(cmd_dir.relative_to(project_root))
+                except ValueError:
+                    cmd_dir_display = str(cmd_dir)
+
                 console.print(
                     f"[green]✓[/green] 已为 {agent_key} 生成 {len(created_files)} 个命令文件"
+                    f"（输出到 {cmd_dir_display}）"
                 )
             except Exception as e:
                 console.print(
@@ -318,114 +335,87 @@ def init_command(
     if not agents_md_path.exists():
         console.print("[cyan]正在生成 AGENTS.md...[/cyan]")
         try:
-            agents_md_content = """# AI工具使用指南
+            agents_md_content = """# CC-Spec 工作流指南
 
-本项目使用 cc-spec 工作流进行规格驱动的开发。
+本项目使用 **cc-spec** 进行规格驱动开发（Spec → Plan → Execute → Verify → Archive）。
 
-## cc-spec 命令说明
+## 快速入口
 
-cc-spec 提供以下命令来管理开发工作流：
+- 标准 7 步：`init → specify → clarify → plan → apply → checklist → archive`
+- 超简单模式：`quick-delta`
 
-### 1. specify - 创建新的变更规格说明
-创建一个新的变更提案，描述要实现的功能或修复。
+## 在 AI 工具中调用（由 `cc-spec init` 生成命令文件）
 
-**使用方式**：
+| 工具 | 调用方式 | 示例 |
+|------|----------|------|
+| Claude Code | `/cc-spec:specify` | `/cc-spec:specify add-oauth` |
+| Cursor | `/cc-spec-specify` | `/cc-spec-specify add-oauth` |
+| Gemini CLI | `/cc-spec:specify` | `/cc-spec:specify add-oauth` |
+| Codex CLI | `/prompts:cc-spec-specify` | `/prompts:cc-spec-specify add-oauth` |
+| GitHub Copilot | 提示库选择 | 选择 `cc-spec-specify` |
+| Amazon Q | `@cc-spec-specify` | `@cc-spec-specify add-oauth` |
+| 其他工具 | 自然语言 | “帮我执行 cc-spec specify …” |
+
+## CLI 命令速查
+
+### init - 初始化项目
 ```bash
-cc-spec specify <变更名称>
+cc-spec init [project] [--agent <agent>] [--force]
 ```
 
-### 2. clarify - 审查任务并标记需要返工的内容
-审查现有任务，标记需要重新处理的部分。
-
-**使用方式**：
+### specify - 创建/编辑变更提案
 ```bash
-cc-spec clarify
+cc-spec specify <change-name | C-XXX>
 ```
 
-### 3. plan - 从提案生成执行计划
-根据变更提案自动生成详细的执行计划和任务列表。
-
-**使用方式**：
+### clarify - 审查任务 / 标记返工（可选歧义检测）
 ```bash
-cc-spec plan
+cc-spec clarify [C-XXX | C-XXX:task-id | task-id] [--detect]
 ```
 
-### 4. apply - 使用SubAgent并行执行任务
-使用多个SubAgent并行执行计划中的任务。
-
-**使用方式**：
+### plan - 生成执行计划（tasks.yaml）
 ```bash
-cc-spec apply
+cc-spec plan [change-name | C-XXX]
 ```
 
-### 5. checklist - 使用检查清单评分验证任务完成情况
-根据检查清单验证任务是否按要求完成。
-
-**使用方式**：
+### apply - 执行任务（SubAgent 并发）
 ```bash
-cc-spec checklist
+cc-spec apply [change-name | C-XXX]
 ```
 
-### 6. archive - 归档已完成的变更
-将完成的变更归档，清理工作区。
-
-**使用方式**：
+### checklist - 验收打分（默认 ≥80 通过）
 ```bash
-cc-spec archive
+cc-spec checklist [change-name | C-XXX] [--threshold 80]
 ```
 
-### 7. quick-delta - 快速模式
-一步创建并归档简单变更，适用于小型修改。
-
-**使用方式**：
+### archive - 归档已完成变更
 ```bash
-cc-spec quick-delta <变更名称> "<变更描述>"
+cc-spec archive <change-name | C-XXX>
 ```
 
-### 8. list - 列出变更、任务、规格或归档
-列出项目中的各种工作项。
-
-**使用方式**：
+### list - 列出 changes/tasks/specs/archive
 ```bash
-cc-spec list [changes|tasks|specs|archives]
+cc-spec list <changes | tasks | specs | archive>
 ```
 
-### 9. goto - 导航到特定变更或任务
-快速导航到指定的变更或任务。
-
-**使用方式**：
+### goto - 导航到变更或任务
 ```bash
-cc-spec goto <变更名称>
+cc-spec goto <C-XXX | C-XXX:task-id | change-name>
 ```
 
-### 10. update - 更新配置、命令或模板
-更新cc-spec的配置文件、命令或模板。
-
-**使用方式**：
+### update - 更新命令/模板/配置
 ```bash
-cc-spec update [config|commands|templates]
+cc-spec update [commands|subagent|agents|all] [--add-agent <agent> ...] [--templates]
 ```
 
-## 工作流程示例
-
-1. 创建新变更：`cc-spec specify add-user-auth`
-2. 编辑生成的 `.cc-spec/changes/add-user-auth/proposal.md`
-3. 生成执行计划：`cc-spec plan`
-4. 执行任务：`cc-spec apply`
-5. 验证完成：`cc-spec checklist`
-6. 归档变更：`cc-spec archive`
-
-## 配置
-
-项目配置位于 `.cc-spec/config.yaml`，您可以在其中调整：
-- 默认AI工具
-- SubAgent并发数
-- 检查清单阈值
-- 技术规范文件路径
+### quick-delta - 一步记录并归档小变更
+```bash
+cc-spec quick-delta \"<description>\"
+```
 
 ---
 
-*本文件由 cc-spec v0.1.0 自动生成*
+*本文件由 `cc-spec init` 生成，可按需自行补充项目约定。*
 """
             agents_md_path.write_text(agents_md_content, encoding="utf-8")
             console.print("[green]✓[/green] 已生成 AGENTS.md 通用指令文件")

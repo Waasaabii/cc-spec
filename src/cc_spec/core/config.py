@@ -551,14 +551,27 @@ def detect_agent(project_root: Path) -> str:
     返回：
         检测到的 agent 类型（"claude"、"cursor"、"gemini" 等），或 "unknown"
     """
+    # 与 init.py / command_generator.py 生成的目录结构对齐
+    # 注：字典顺序即优先级（检测到第一个即返回）
     agent_markers = {
         ".claude": "claude",
         ".cursor": "cursor",
         ".gemini": "gemini",
-        ".github/copilot": "copilot",
+        ".github/prompts": "copilot",
         ".amazonq": "amazonq",
         ".windsurf": "windsurf",
         ".qwen": "qwen",
+        ".codeium": "codeium",
+        ".continue": "continue",
+        ".tabnine": "tabnine",
+        ".aider": "aider",
+        ".devin": "devin",
+        ".replit": "replit",
+        ".cody": "cody",
+        ".supermaven": "supermaven",
+        ".kilo": "kilo",
+        ".auggie": "auggie",
+        ".codex": "codex",
     }
 
     for marker, agent_type in agent_markers.items():

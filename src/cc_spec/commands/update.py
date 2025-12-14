@@ -14,6 +14,7 @@ import yaml
 from rich.console import Console
 
 from cc_spec.core.config import Config, load_config
+from cc_spec.core.command_generator import CC_SPEC_COMMANDS, get_generator
 from cc_spec.ui.banner import show_banner
 from cc_spec.utils.download import download_file, get_github_raw_url
 from cc_spec.utils.files import find_project_root, get_cc_spec_dir
@@ -26,6 +27,7 @@ AVAILABLE_AGENTS = [
     "claude",
     "cursor",
     "gemini",
+    "codex",
     "copilot",
     "amazonq",
     "windsurf",
@@ -192,8 +194,12 @@ def _add_agent(
     agent_dir = _get_agent_command_dir(project_root, agent_lower)
     if agent_dir:
         agent_dir.mkdir(parents=True, exist_ok=True)
-        _generate_agent_commands(agent_dir, agent_lower)
-        console.print(f"  [green]√[/green] 已创建 {agent_dir.relative_to(project_root)}")
+        _generate_agent_commands(project_root, agent_lower)
+        try:
+            agent_dir_display = str(agent_dir.relative_to(project_root))
+        except ValueError:
+            agent_dir_display = str(agent_dir)
+        console.print(f"  [green]√[/green] 已创建 {agent_dir_display}")
         return True
 
     return False
@@ -209,50 +215,26 @@ def _get_agent_command_dir(project_root: Path, agent: str) -> Path | None:
     返回：
         命令目录路径；未知 agent 则返回 None
     """
-    agent_dirs = {
-        "claude": project_root / ".claude" / "commands" / "speckit",
-        "cursor": project_root / ".cursor" / "commands",
-        "gemini": project_root / ".gemini" / "commands" / "speckit",
-        "copilot": project_root / ".github" / "copilot" / "commands",
-        "amazonq": project_root / ".amazonq" / "commands",
-        "windsurf": project_root / ".windsurf" / "commands",
-        "qwen": project_root / ".qwen" / "commands",
-        "codeium": project_root / ".codeium" / "commands",
-        "continue": project_root / ".continue" / "commands",
-    }
-
-    return agent_dirs.get(agent)
+    generator = get_generator(agent)
+    if not generator:
+        return None
+    return generator.get_command_dir(project_root)
 
 
-def _generate_agent_commands(agent_dir: Path, agent: str) -> None:
+def _generate_agent_commands(project_root: Path, agent: str) -> None:
     """为某个 agent 生成 slash 命令文件。
 
     参数：
-        agent_dir：命令文件生成目录
+        project_root：项目根目录
         agent：agent 名称
     """
-    # 定义要生成的命令
-    commands = [
-        ("specify", "创建或编辑变更规格"),
-        ("clarify", "审查任务并标记返工"),
-        ("plan", "根据提案生成执行计划"),
-        ("apply", "使用 SubAgent 执行任务"),
-        ("checklist", "验收任务完成情况"),
-        ("archive", "归档已完成的变更"),
-        ("quick-delta", "快速模式：处理简单变更"),
-        ("list", "列出变更、任务、规格或归档"),
-        ("goto", "导航到变更或任务"),
-        ("update", "更新配置与模板"),
-    ]
+    # v0.1.4+: 统一复用 core.command_generator 的生成逻辑
+    generator = get_generator(agent)
+    if not generator:
+        return
 
-    # 根据 agent 确定文件格式
-    use_toml = agent in ("gemini",)
-
-    for cmd_name, description in commands:
-        if use_toml:
-            _write_toml_command(agent_dir, cmd_name, description)
-        else:
-            _write_md_command(agent_dir, cmd_name, description)
+    for cmd_name, description in CC_SPEC_COMMANDS:
+        generator.update_command(cmd_name, description, project_root)
 
 
 def _write_md_command(cmd_dir: Path, cmd_name: str, description: str) -> None:
@@ -468,22 +450,20 @@ def _update_slash_commands(
     """
     console.print("[cyan]正在更新 slash 命令...[/cyan]")
 
-    # 获取当前 agent
-    current_agent = config.agent
+    # v1.2+: 若配置了 agents.enabled，则为全部启用的 agent 更新命令；
+    # 否则为 legacy 的 config.agent 更新命令
+    if config.agents and config.agents.enabled:
+        agents_to_update = config.agents.enabled
+    else:
+        agents_to_update = [config.agent]
 
-    # 为当前 agent 更新命令
-    agent_dir = _get_agent_command_dir(project_root, current_agent)
-    if agent_dir and agent_dir.exists():
-        _generate_agent_commands(agent_dir, current_agent)
-        console.print(
-            f"  [green]√[/green] 已更新 {current_agent} 的命令"
-        )
-    elif agent_dir:
+    for agent in agents_to_update:
+        agent_dir = _get_agent_command_dir(project_root, agent)
+        if not agent_dir:
+            continue
         agent_dir.mkdir(parents=True, exist_ok=True)
-        _generate_agent_commands(agent_dir, current_agent)
-        console.print(
-            f"  [green]√[/green] 已创建 {current_agent} 的命令"
-        )
+        _generate_agent_commands(project_root, agent)
+        console.print(f"  [green]√[/green] 已更新 {agent} 的命令")
 
 
 def _update_subagent_config(

@@ -13,11 +13,8 @@ subagent:
     permissionMode: default
 agents:
   enabled:
-  - claude
   - codex
-  - gemini
-  - cursor
-  default: claude
+  default: codex
 checklist:
   pass_threshold: 80
   auto_retry: false

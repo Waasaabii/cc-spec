@@ -18,7 +18,7 @@ class TestCommandTemplateContext:
         """Test that default values are set correctly."""
         ctx = CommandTemplateContext(command_name="specify")
         assert ctx.command_name == "specify"
-        assert ctx.namespace == "speckit"
+        assert ctx.namespace == "cc-spec"
         assert ctx.config_sources == []
         assert ctx.project_root is None
         assert ctx.extra == {}
@@ -27,9 +27,9 @@ class TestCommandTemplateContext:
         """Test full command name with namespace."""
         ctx = CommandTemplateContext(
             command_name="specify",
-            namespace="speckit",
+            namespace="cc-spec",
         )
-        assert ctx.get_full_command_name() == "speckit.specify"
+        assert ctx.get_full_command_name() == "cc-spec.specify"
 
     def test_full_command_name_without_namespace(self) -> None:
         """Test full command name without namespace."""
@@ -108,7 +108,7 @@ class TestCommandTemplate:
         ctx = CommandTemplateContext(command_name="specify")
 
         outline = template.get_outline(ctx)
-        assert "speckit.specify" in outline
+        assert "cc-spec.specify" in outline
 
         steps = template.get_execution_steps(ctx)
         assert len(steps) == 3
@@ -150,7 +150,7 @@ class TestRenderMarkdown:
 
         # Check content
         assert "$ARGUMENTS" in content
-        assert "speckit.specify" in content
+        assert "cc-spec.specify" in content
         assert "1. Parse user arguments" in content
         assert "- [ ] Command executed successfully" in content
         assert "cc-spec specify --help" in content
@@ -194,7 +194,7 @@ class TestRenderToml:
 
         # Check markdown content is embedded
         assert "## User Input" in content
-        assert "speckit.specify" in content
+        assert "cc-spec.specify" in content
 
     def test_render_toml_escapes_triple_quotes(self) -> None:
         """Test that triple quotes are escaped in TOML output."""

@@ -1,0 +1,18 @@
+change_name: add-docsplan-implementation-check
+created_at: '2025-12-14T20:10:41.747958'
+current_stage: specify
+stages:
+  specify:
+    status: in_progress
+    started_at: '2025-12-14T20:10:41.747958'
+  clarify:
+    status: pending
+  plan:
+    status: pending
+  apply:
+    status: pending
+  checklist:
+    status: pending
+  archive:
+    status: pending
+tasks: []

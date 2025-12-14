@@ -17,6 +17,7 @@ from cc_spec.core.command_generator import (
     AmazonQCommandGenerator,
     AuggieCommandGenerator,
     ClaudeCommandGenerator,
+    CodexCommandGenerator,
     CodeiumCommandGenerator,
     CodyCommandGenerator,
     CommandGenerator,
@@ -55,8 +56,8 @@ class TestConstants:
         assert "update" in command_names
 
     def test_command_generators_count(self) -> None:
-        """Test that we have 17 command generators (9 original + 8 new)."""
-        assert len(COMMAND_GENERATORS) == 17
+        """Test that we have 18 command generators (10 original + 8 new)."""
+        assert len(COMMAND_GENERATORS) == 18
 
     def test_managed_block_markers(self) -> None:
         """Test managed block markers are correct."""
@@ -89,15 +90,15 @@ class TestGetAvailableAgents:
     """Tests for get_available_agents function."""
 
     def test_get_available_agents_count(self) -> None:
-        """Test that 17 agents are available."""
+        """Test that 18 agents are available."""
         agents = get_available_agents()
-        assert len(agents) == 17
+        assert len(agents) == 18
 
     def test_get_available_agents_original(self) -> None:
-        """Test original 9 agents are in list."""
+        """Test original agents are in list."""
         agents = get_available_agents()
         original = ["claude", "cursor", "gemini", "copilot", "amazonq",
-                    "windsurf", "qwen", "codeium", "continue"]
+                    "windsurf", "qwen", "codeium", "continue", "codex"]
         for agent in original:
             assert agent in agents
 
@@ -119,7 +120,7 @@ class TestClaudeCommandGenerator:
         with tempfile.TemporaryDirectory() as tmpdir:
             project_root = Path(tmpdir)
             cmd_dir = generator.get_command_dir(project_root)
-            assert cmd_dir == project_root / ".claude" / "commands" / "speckit"
+            assert cmd_dir == project_root / ".claude" / "commands" / "cc-spec"
 
     def test_file_format(self) -> None:
         """Test Claude uses markdown format."""
@@ -153,7 +154,7 @@ class TestGeminiCommandGenerator:
         with tempfile.TemporaryDirectory() as tmpdir:
             project_root = Path(tmpdir)
             cmd_dir = generator.get_command_dir(project_root)
-            assert cmd_dir == project_root / ".gemini" / "commands" / "speckit"
+            assert cmd_dir == project_root / ".gemini" / "commands" / "cc-spec"
 
     def test_file_format(self) -> None:
         """Test Gemini uses TOML format."""
@@ -175,6 +176,20 @@ class TestGeminiCommandGenerator:
             assert 'description = "Review tasks"' in content
             assert MANAGED_START in content
             assert MANAGED_END in content
+
+
+class TestCodexCommandGenerator:
+    """Tests for Codex command generator."""
+
+    def test_command_dir_path(self, monkeypatch) -> None:
+        """Test Codex command directory path (defaults to user prompts dir)."""
+        generator = CodexCommandGenerator()
+        with tempfile.TemporaryDirectory() as tmpdir:
+            project_root = Path(tmpdir)
+            prompts_dir = project_root / "codex-prompts"
+            monkeypatch.setenv("CC_SPEC_CODEX_PROMPTS_DIR", str(prompts_dir))
+            cmd_dir = generator.get_command_dir(project_root)
+            assert cmd_dir == prompts_dir
 
 
 class TestCursorCommandGenerator:
@@ -199,7 +214,7 @@ class TestNewV12Generators:
         with tempfile.TemporaryDirectory() as tmpdir:
             project_root = Path(tmpdir)
             cmd_dir = generator.get_command_dir(project_root)
-            assert cmd_dir == project_root / ".tabnine" / "commands" / "speckit"
+            assert cmd_dir == project_root / ".tabnine" / "commands" / "cc-spec"
             assert generator.file_format == "markdown"
 
     def test_aider_generator(self) -> None:
@@ -217,7 +232,7 @@ class TestNewV12Generators:
         with tempfile.TemporaryDirectory() as tmpdir:
             project_root = Path(tmpdir)
             cmd_dir = generator.get_command_dir(project_root)
-            assert cmd_dir == project_root / ".devin" / "commands" / "speckit"
+            assert cmd_dir == project_root / ".devin" / "commands" / "cc-spec"
 
     def test_replit_generator(self) -> None:
         """Test Replit command generator."""
@@ -233,7 +248,7 @@ class TestNewV12Generators:
         with tempfile.TemporaryDirectory() as tmpdir:
             project_root = Path(tmpdir)
             cmd_dir = generator.get_command_dir(project_root)
-            assert cmd_dir == project_root / ".cody" / "commands" / "speckit"
+            assert cmd_dir == project_root / ".cody" / "commands" / "cc-spec"
 
     def test_supermaven_generator(self) -> None:
         """Test Supermaven command generator."""
@@ -257,7 +272,7 @@ class TestNewV12Generators:
         with tempfile.TemporaryDirectory() as tmpdir:
             project_root = Path(tmpdir)
             cmd_dir = generator.get_command_dir(project_root)
-            assert cmd_dir == project_root / ".auggie" / "commands" / "speckit"
+            assert cmd_dir == project_root / ".auggie" / "commands" / "cc-spec"
 
 
 class TestGenerateAll:

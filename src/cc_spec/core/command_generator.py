@@ -7,6 +7,7 @@ v0.1.4：集成命令模板系统，主要命令使用结构化模板生成内�
 """
 
 from abc import ABC, abstractmethod
+import os
 from pathlib import Path
 
 from cc_spec.core.command_templates import (
@@ -55,7 +56,10 @@ class CommandGenerator(ABC):
 
     file_format: str = "markdown"
     folder: str = "commands"
-    namespace: str = "speckit"
+    # 命令命名空间（与 README / docs/plan 对齐）
+    namespace: str = "cc-spec"
+    # 某些工具不支持 namespace 子目录时，通过文件名前缀实现命名空间
+    file_name_prefix: str = ""
 
     # v0.1.4: 跟踪当前项目根目录，用于模板上下文
     _current_project_root: Path | None = None
@@ -136,10 +140,11 @@ class CommandGenerator(ABC):
 
         cmd_dir = self.get_command_dir(project_root)
 
+        file_stem = self._get_command_file_stem(cmd_name)
         if self.file_format == "toml":
-            file_path = cmd_dir / f"{cmd_name}.toml"
+            file_path = cmd_dir / f"{file_stem}.toml"
         else:
-            file_path = cmd_dir / f"{cmd_name}.md"
+            file_path = cmd_dir / f"{file_stem}.md"
 
         if not file_path.exists():
             return self.generate_command(cmd_name, description, project_root)
@@ -161,6 +166,10 @@ class CommandGenerator(ABC):
         file_path.write_text(updated, encoding="utf-8")
         return file_path
 
+    def _get_command_file_stem(self, cmd_name: str) -> str:
+        """获取命令文件名（不含扩展名）。"""
+        return f"{self.file_name_prefix}{cmd_name}"
+
     def _write_md_command(
         self,
         cmd_dir: Path,
@@ -168,7 +177,7 @@ class CommandGenerator(ABC):
         description: str,
     ) -> Path:
         """写入 Markdown 格式的命令文件。"""
-        file_path = cmd_dir / f"{cmd_name}.md"
+        file_path = cmd_dir / f"{self._get_command_file_stem(cmd_name)}.md"
         content = self._get_md_content(cmd_name, description)
         file_path.write_text(content, encoding="utf-8")
         return file_path
@@ -180,7 +189,7 @@ class CommandGenerator(ABC):
         description: str,
     ) -> Path:
         """写入 TOML 格式的命令文件。"""
-        file_path = cmd_dir / f"{cmd_name}.toml"
+        file_path = cmd_dir / f"{self._get_command_file_stem(cmd_name)}.toml"
         content = self._get_toml_content(cmd_name, description)
         file_path.write_text(content, encoding="utf-8")
         return file_path
@@ -310,7 +319,7 @@ class ClaudeCommandGenerator(CommandGenerator):
     """Claude Code 的命令生成器。"""
 
     file_format = "markdown"
-    namespace = "speckit"
+    namespace = "cc-spec"
 
     def get_command_dir(self, project_root: Path) -> Path:
         return project_root / ".claude" / "commands" / self.namespace
@@ -320,7 +329,8 @@ class CursorCommandGenerator(CommandGenerator):
     """Cursor 的命令生成器。"""
 
     file_format = "markdown"
-    namespace = ""
+    namespace = "cc-spec"
+    file_name_prefix = "cc-spec-"
 
     def get_command_dir(self, project_root: Path) -> Path:
         return project_root / ".cursor" / "commands"
@@ -330,47 +340,76 @@ class GeminiCommandGenerator(CommandGenerator):
     """Gemini CLI 的命令生成器。"""
 
     file_format = "toml"
-    namespace = "speckit"
+    namespace = "cc-spec"
 
     def get_command_dir(self, project_root: Path) -> Path:
         return project_root / ".gemini" / "commands" / self.namespace
+
+
+class CodexCommandGenerator(CommandGenerator):
+    """Codex CLI 的命令生成器。
+
+    Codex CLI 的自定义 prompts 默认从用户目录加载：`~/.codex/prompts/`。
+
+    参考 Codex 官方文档：Slash commands in Codex CLI。
+    cc-spec 为避免与其他 prompt 冲突，使用文件名前缀：`cc-spec-`。
+    """
+
+    file_format = "markdown"
+    namespace = "cc-spec"
+    file_name_prefix = "cc-spec-"
+
+    def get_command_dir(self, project_root: Path) -> Path:
+        # 可通过环境变量覆盖，便于测试或自定义安装位置
+        override = os.getenv("CC_SPEC_CODEX_PROMPTS_DIR")
+        if override:
+            return Path(override).expanduser()
+
+        return Path.home() / ".codex" / "prompts"
 
 
 class CopilotCommandGenerator(CommandGenerator):
     """GitHub Copilot 的命令生成器。"""
 
     file_format = "markdown"
-    namespace = ""
+    namespace = "cc-spec"
+    file_name_prefix = "cc-spec-"
 
     def get_command_dir(self, project_root: Path) -> Path:
-        return project_root / ".github" / "copilot" / "commands"
+        # 与 README / docs/plan 对齐：Copilot 使用 prompts/
+        return project_root / ".github" / "prompts"
 
 
 class AmazonQCommandGenerator(CommandGenerator):
     """Amazon Q 的命令生成器。"""
 
     file_format = "markdown"
-    namespace = "speckit"
+    namespace = "cc-spec"
+    file_name_prefix = "cc-spec-"
 
     def get_command_dir(self, project_root: Path) -> Path:
-        return project_root / ".amazonq" / "commands" / self.namespace
+        # 与 README / docs/plan 对齐：Amazon Q 使用 prompts/
+        return project_root / ".amazonq" / "prompts"
 
 
 class WindsurfCommandGenerator(CommandGenerator):
     """Windsurf 的命令生成器。"""
 
     file_format = "markdown"
-    namespace = ""
+    namespace = "cc-spec"
+    file_name_prefix = "cc-spec-"
 
     def get_command_dir(self, project_root: Path) -> Path:
-        return project_root / ".windsurf" / "commands"
+        # 与 README / docs/plan 对齐：Windsurf 使用 workflows/
+        return project_root / ".windsurf" / "workflows"
 
 
 class QwenCommandGenerator(CommandGenerator):
     """Qwen 的命令生成器。"""
 
-    file_format = "markdown"
-    namespace = "speckit"
+    # 与 docs/plan/cc-spec/03-设计方案.md 中 AGENT_CONFIG 对齐：Qwen 使用 TOML
+    file_format = "toml"
+    namespace = "cc-spec"
 
     def get_command_dir(self, project_root: Path) -> Path:
         return project_root / ".qwen" / "commands" / self.namespace
@@ -380,7 +419,8 @@ class CodeiumCommandGenerator(CommandGenerator):
     """Codeium 的命令生成器。"""
 
     file_format = "markdown"
-    namespace = ""
+    namespace = "cc-spec"
+    file_name_prefix = "cc-spec-"
 
     def get_command_dir(self, project_root: Path) -> Path:
         return project_root / ".codeium" / "commands"
@@ -390,7 +430,8 @@ class ContinueCommandGenerator(CommandGenerator):
     """Continue.dev 的命令生成器。"""
 
     file_format = "markdown"
-    namespace = ""
+    namespace = "cc-spec"
+    file_name_prefix = "cc-spec-"
 
     def get_command_dir(self, project_root: Path) -> Path:
         return project_root / ".continue" / "commands"
@@ -402,7 +443,7 @@ class TabnineCommandGenerator(CommandGenerator):
     """Tabnine 的命令生成器。"""
 
     file_format = "markdown"
-    namespace = "speckit"
+    namespace = "cc-spec"
 
     def get_command_dir(self, project_root: Path) -> Path:
         return project_root / ".tabnine" / "commands" / self.namespace
@@ -412,7 +453,8 @@ class AiderCommandGenerator(CommandGenerator):
     """Aider 的命令生成器。"""
 
     file_format = "markdown"
-    namespace = ""
+    namespace = "cc-spec"
+    file_name_prefix = "cc-spec-"
 
     def get_command_dir(self, project_root: Path) -> Path:
         return project_root / ".aider" / "commands"
@@ -422,7 +464,7 @@ class DevinCommandGenerator(CommandGenerator):
     """Devin 的命令生成器。"""
 
     file_format = "markdown"
-    namespace = "speckit"
+    namespace = "cc-spec"
 
     def get_command_dir(self, project_root: Path) -> Path:
         return project_root / ".devin" / "commands" / self.namespace
@@ -432,7 +474,8 @@ class ReplitCommandGenerator(CommandGenerator):
     """Replit AI 的命令生成器。"""
 
     file_format = "markdown"
-    namespace = ""
+    namespace = "cc-spec"
+    file_name_prefix = "cc-spec-"
 
     def get_command_dir(self, project_root: Path) -> Path:
         return project_root / ".replit" / "commands"
@@ -442,7 +485,7 @@ class CodyCommandGenerator(CommandGenerator):
     """Sourcegraph Cody 的命令生成器。"""
 
     file_format = "markdown"
-    namespace = "speckit"
+    namespace = "cc-spec"
 
     def get_command_dir(self, project_root: Path) -> Path:
         return project_root / ".cody" / "commands" / self.namespace
@@ -452,7 +495,8 @@ class SupermavenCommandGenerator(CommandGenerator):
     """Supermaven 的命令生成器。"""
 
     file_format = "markdown"
-    namespace = ""
+    namespace = "cc-spec"
+    file_name_prefix = "cc-spec-"
 
     def get_command_dir(self, project_root: Path) -> Path:
         return project_root / ".supermaven" / "commands"
@@ -462,7 +506,8 @@ class KiloCodeCommandGenerator(CommandGenerator):
     """Kilo Code 的命令生成器。"""
 
     file_format = "markdown"
-    namespace = ""
+    namespace = "cc-spec"
+    file_name_prefix = "cc-spec-"
 
     def get_command_dir(self, project_root: Path) -> Path:
         return project_root / ".kilo" / "commands"
@@ -472,7 +517,7 @@ class AuggieCommandGenerator(CommandGenerator):
     """Auggie 的命令生成器。"""
 
     file_format = "markdown"
-    namespace = "speckit"
+    namespace = "cc-spec"
 
     def get_command_dir(self, project_root: Path) -> Path:
         return project_root / ".auggie" / "commands" / self.namespace
@@ -484,6 +529,7 @@ COMMAND_GENERATORS: dict[str, type[CommandGenerator]] = {
     "claude": ClaudeCommandGenerator,
     "cursor": CursorCommandGenerator,
     "gemini": GeminiCommandGenerator,
+    "codex": CodexCommandGenerator,
     "copilot": CopilotCommandGenerator,
     "amazonq": AmazonQCommandGenerator,
     "windsurf": WindsurfCommandGenerator,

@@ -25,14 +25,14 @@ class CommandTemplateContext:
 
     属性：
         command_name: 命令名称（如 specify, clarify, plan）
-        namespace: 命令命名空间（如 speckit）
+        namespace: 命令命名空间（如 cc-spec）
         config_sources: 配置文件路径列表（如 CLAUDE.md, config.yaml）
         project_root: 项目根目录
         extra: 扩展数据，用于特定模板的自定义需求
     """
 
     command_name: str
-    namespace: str = "speckit"
+    namespace: str = "cc-spec"
     config_sources: list[str] = field(default_factory=list)
     project_root: Path | None = None
     extra: dict[str, Any] = field(default_factory=dict)

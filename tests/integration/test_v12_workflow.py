@@ -111,15 +111,15 @@ class TestNewCommandGeneratorsWorkflow:
         with tempfile.TemporaryDirectory() as tmpdir:
             yield Path(tmpdir)
 
-    def test_seventeen_generators_available(self) -> None:
-        """Test that we now have 17 command generators."""
+    def test_generators_available(self) -> None:
+        """Test that we now have 18 command generators."""
         agents = get_available_agents()
 
-        assert len(agents) == 17
+        assert len(agents) == 18
 
-        # Original 9
+        # Original agents
         original = ["claude", "cursor", "gemini", "copilot", "amazonq",
-                    "windsurf", "qwen", "codeium", "continue"]
+                    "windsurf", "qwen", "codeium", "continue", "codex"]
         for agent in original:
             assert agent in agents
 
@@ -132,14 +132,14 @@ class TestNewCommandGeneratorsWorkflow:
     def test_new_generator_directory_structure(self, temp_project: Path) -> None:
         """Test new generators create correct directory structure."""
         test_cases = [
-            ("tabnine", ".tabnine/commands/speckit"),
+            ("tabnine", ".tabnine/commands/cc-spec"),
             ("aider", ".aider/commands"),
-            ("devin", ".devin/commands/speckit"),
+            ("devin", ".devin/commands/cc-spec"),
             ("replit", ".replit/commands"),
-            ("cody", ".cody/commands/speckit"),
+            ("cody", ".cody/commands/cc-spec"),
             ("supermaven", ".supermaven/commands"),
             ("kilo", ".kilo/commands"),
-            ("auggie", ".auggie/commands/speckit"),
+            ("auggie", ".auggie/commands/cc-spec"),
         ]
 
         for agent, expected_path in test_cases:
