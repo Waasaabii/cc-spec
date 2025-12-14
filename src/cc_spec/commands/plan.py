@@ -23,6 +23,7 @@ from cc_spec.core.state import (
     load_state,
     update_state,
 )
+from cc_spec.ui.banner import show_banner
 from cc_spec.ui.display import show_task_table
 from cc_spec.utils.files import find_project_root, get_cc_spec_dir
 
@@ -48,6 +49,9 @@ def plan_command(
         cc-spec plan add-oauth    # 按名称生成
         cc-spec plan C-001        # 按 ID 生成
     """
+    # 显示启动 Banner
+    show_banner(console)
+
     # 查找项目根目录
     project_root = find_project_root()
     if project_root is None:

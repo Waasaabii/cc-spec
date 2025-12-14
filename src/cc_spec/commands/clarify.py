@@ -24,6 +24,7 @@ from cc_spec.core.state import (
     load_state,
     update_state,
 )
+from cc_spec.ui.banner import show_banner
 from cc_spec.ui.display import show_status_panel, show_task_table
 from cc_spec.ui.prompts import confirm_action
 from cc_spec.utils.files import find_project_root, get_cc_spec_dir
@@ -305,6 +306,9 @@ def clarify(
         cc-spec clarify 02-MODEL            # 在当前变更中标记任务
         cc-spec clarify 02-MODEL -c C-001   # 旧用法：通过选项指定变更
     """
+    # 显示启动 Banner
+    show_banner(console)
+
     # 查找项目根目录
     project_root = find_project_root()
     if project_root is None:

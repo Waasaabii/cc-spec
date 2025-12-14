@@ -32,6 +32,7 @@ from cc_spec.core.state import (
     get_current_change,
     load_state,
 )
+from cc_spec.ui.banner import show_banner
 from cc_spec.utils.files import (
     ensure_dir,
     find_project_root,
@@ -72,6 +73,9 @@ def archive_command(
         cc-spec archive C-001        # 按 ID 归档
         cc-spec archive C-001 -f     # 跳过确认
     """
+    # 显示启动 Banner
+    show_banner(console)
+
     # 查找项目根目录
     project_root = find_project_root()
     if project_root is None:

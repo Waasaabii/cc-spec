@@ -10,6 +10,7 @@ from rich.tree import Tree
 
 from cc_spec.core.command_generator import get_generator
 from cc_spec.core.config import AgentsConfig, Config, detect_agent, save_config
+from cc_spec.ui.banner import show_banner
 from cc_spec.ui.prompts import select_option
 from cc_spec.utils.files import ensure_dir, get_cc_spec_dir, get_config_path
 
@@ -142,6 +143,9 @@ def init_command(
         cc-spec init --agent claude
         cc-spec init --force  # 覆盖现有配置
     """
+    # 显示启动 Banner
+    show_banner(console)
+
     # 获取项目根目录（当前目录）
     project_root = Path.cwd()
 

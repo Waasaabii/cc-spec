@@ -14,6 +14,7 @@ import yaml
 from rich.console import Console
 
 from cc_spec.core.config import Config, load_config
+from cc_spec.ui.banner import show_banner
 from cc_spec.utils.download import download_file, get_github_raw_url
 from cc_spec.utils.files import find_project_root, get_cc_spec_dir
 
@@ -96,6 +97,9 @@ def update_command(
         cc-spec update --templates                       # 更新模板
         cc-spec update --add-agent gemini --add-agent amazonq  # 添加多个工具
     """
+    # 显示启动 Banner
+    show_banner(console)
+
     project_root = find_project_root()
     if project_root is None:
         console.print(

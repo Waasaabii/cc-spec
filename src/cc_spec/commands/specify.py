@@ -20,6 +20,7 @@ from rich.panel import Panel
 from cc_spec.core.id_manager import IDManager
 from cc_spec.core.state import ChangeState, Stage, StageInfo, TaskStatus, update_state
 from cc_spec.core.templates import copy_template
+from cc_spec.ui.banner import show_banner
 from cc_spec.utils.files import find_project_root, get_cc_spec_dir, get_changes_dir
 
 console = Console()
@@ -88,6 +89,9 @@ def specify(
         cc-spec specify add-oauth      # 创建新变更
         cc-spec specify C-001          # 编辑已有变更
     """
+    # 显示启动 Banner
+    show_banner(console)
+
     # 查找项目根目录
     project_root = find_project_root()
     if project_root is None:

@@ -51,6 +51,7 @@ from cc_spec.subagent.task_parser import (
     TaskStatus,
     parse_tasks_yaml,
 )
+from cc_spec.ui.banner import show_banner
 from cc_spec.ui.progress import WaveProgressTracker
 from cc_spec.utils.files import find_project_root, get_cc_spec_dir
 
@@ -145,6 +146,9 @@ def apply_command(
         cc-spec apply --no-tech-check   # 禁用技术检查
         cc-spec apply --check-types lint,test  # 仅执行 lint 和 test 检查
     """
+    # 显示启动 Banner
+    show_banner(console)
+
     # 查找项目根目录
     project_root = find_project_root()
     if project_root is None:

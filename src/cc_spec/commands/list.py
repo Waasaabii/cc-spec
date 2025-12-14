@@ -14,6 +14,7 @@ from rich.table import Table
 
 from cc_spec.core.id_manager import IDManager
 from cc_spec.core.state import ChangeState, Stage, load_state
+from cc_spec.ui.banner import show_banner
 from cc_spec.ui.display import STAGE_NAMES, STATUS_ICONS, STATUS_NAMES, THEME
 from cc_spec.utils.files import find_project_root, get_cc_spec_dir
 
@@ -57,6 +58,9 @@ def list_command(
         cc-spec list changes -s pending   # 按状态过滤
         cc-spec list changes -f json      # 以 JSON 输出
     """
+    # 显示启动 Banner
+    show_banner(console)
+
     project_root = find_project_root()
     if project_root is None:
         console.print(

@@ -34,6 +34,7 @@ from cc_spec.core.state import (
     load_state,
     update_state,
 )
+from cc_spec.ui.banner import show_banner
 from cc_spec.utils.files import find_project_root, get_cc_spec_dir
 
 console = Console()
@@ -79,6 +80,9 @@ def checklist_command(
         cc-spec checklist C-001 -t 90  # 自定义阈值
         cc-spec checklist --no-v13     # 使用旧版简单打分
     """
+    # 显示启动 Banner
+    show_banner(console)
+
     # 查找项目根目录
     project_root = find_project_root()
     if project_root is None:

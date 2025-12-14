@@ -17,6 +17,7 @@ from rich.panel import Panel
 from rich.table import Table
 
 from cc_spec.core.delta import DeltaOperation
+from cc_spec.ui.banner import show_banner
 from cc_spec.utils.files import ensure_dir, get_changes_dir
 
 console = Console()
@@ -226,6 +227,9 @@ def quick_delta_command(
     参数：
         message：变更描述，应该简洁明了地说明改动内容
     """
+    # 显示启动 Banner
+    show_banner(console)
+
     # 查找项目根目录
     project_root = Path.cwd()
     cc_spec_root = project_root / ".cc-spec"

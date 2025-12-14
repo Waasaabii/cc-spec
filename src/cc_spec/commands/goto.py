@@ -16,6 +16,7 @@ from rich.prompt import Prompt
 
 from cc_spec.core.id_manager import IDManager, IDType
 from cc_spec.core.state import ChangeState, Stage, TaskStatus, load_state
+from cc_spec.ui.banner import show_banner
 from cc_spec.ui.display import STAGE_NAMES, STATUS_ICONS, THEME
 from cc_spec.utils.files import find_project_root, get_cc_spec_dir
 
@@ -53,6 +54,9 @@ def goto_command(
         cc-spec goto C-001 --force      # 强制跳转
         cc-spec goto C-001 --execute    # 跳转并直接执行所选命令
     """
+    # 显示启动 Banner
+    show_banner(console)
+
     project_root = find_project_root()
     if project_root is None:
         console.print(
