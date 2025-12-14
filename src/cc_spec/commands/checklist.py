@@ -4,6 +4,7 @@
 
 v1.1: 新增通过 ID 指定变更的支持。
 v1.3: 新增四维度打分机制 (功能/质量/测试/文档)。
+v1.4: 移除 tasks.md 支持，仅使用 tasks.yaml。
 """
 
 from datetime import datetime
@@ -21,7 +22,7 @@ from cc_spec.core.scoring import (
     ChecklistResult,
     calculate_checklist_result,
     calculate_score,
-    extract_checklists_from_tasks_md,
+    extract_checklists_from_tasks_yaml,
     format_dimension_report,
     generate_failure_report,
     generate_failure_report_v13,
@@ -66,7 +67,7 @@ def checklist_command(
     v1.3：支持四维度打分机制 (功能完整性/代码质量/测试覆盖/文档同步)。
 
     该命令会：
-    1. 读取 tasks.md 并提取所有 checklist 项
+    1. 读取 tasks.yaml 并提取所有 checklist 项
     2. 根据完成项计算得分 (v1.3 支持四维度加权)
     3. 若得分 >= threshold：将阶段标记为完成，可继续 archive
     4. 若得分 < threshold：生成失败报告并回退到 apply 阶段
@@ -125,11 +126,11 @@ def checklist_command(
         console.print(f"[red]错误：[/red] 未找到变更 '{change}'。", style="red")
         raise typer.Exit(1)
 
-    # 检查 tasks.md 是否存在
-    tasks_path = change_dir / "tasks.md"
+    # 检查 tasks.yaml 是否存在
+    tasks_path = change_dir / "tasks.yaml"
     if not tasks_path.exists():
         console.print(
-            f"[red]错误：[/red] 在 {change_dir} 中未找到 tasks.md。"
+            f"[red]错误：[/red] 在 {change_dir} 中未找到 tasks.yaml。"
             "请先运行 'cc-spec plan'。",
             style="red",
         )
@@ -142,19 +143,19 @@ def checklist_command(
     else:
         console.print("[dim]模式：简单打分[/dim]\n")
 
-    # 读取 tasks.md 并提取 checklist
-    console.print("[cyan]正在读取 tasks.md...[/cyan]")
+    # 读取 tasks.yaml 并提取 checklist
+    console.print("[cyan]正在读取 tasks.yaml...[/cyan]")
     tasks_content = tasks_path.read_text(encoding="utf-8")
 
-    # 从 tasks.md 中提取所有 checklist
-    task_checklists = extract_checklists_from_tasks_md(tasks_content)
+    # 从 tasks.yaml 中提取所有 checklist
+    task_checklists = extract_checklists_from_tasks_yaml(tasks_content)
 
     if not task_checklists:
         console.print(
-            "[yellow]警告：[/yellow] tasks.md 中未找到检查清单项",
+            "[yellow]警告：[/yellow] tasks.yaml 中未找到检查清单项",
             style="yellow",
         )
-        console.print("请先在 tasks.md 中补充检查清单项后再进行验收。\n")
+        console.print("请先在 tasks.yaml 中补充检查清单项后再进行验收。\n")
         raise typer.Exit(1)
 
     console.print(

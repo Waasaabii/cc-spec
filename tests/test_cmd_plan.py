@@ -117,8 +117,8 @@ We need this feature to improve user experience.
         assert result.exit_code == 1
         assert "proposal.md" in result.stdout  # Contains proposal.md in error message
 
-    def test_plan_creates_tasks_md(self) -> None:
-        """Test plan command creates tasks.md."""
+    def test_plan_creates_tasks_yaml(self) -> None:
+        """Test plan command creates tasks.yaml."""
         self._create_proposal()
         self._create_status()
 
@@ -131,14 +131,12 @@ We need this feature to improve user experience.
 
         assert result.exit_code == 0, f"Command failed with: {result.stdout}"
 
-        tasks_path = self.change_dir / "tasks.md"
+        tasks_path = self.change_dir / "tasks.yaml"
         assert tasks_path.exists()
 
-        content = tasks_path.read_text(encoding="utf-8")
-        # Support Chinese header: "# 任务 - " instead of "# Tasks - "
-        assert f"# Tasks - {self.change_name}" in content or f"# 任务 - {self.change_name}" in content
-        assert "## 概览" in content
-        assert "## 任务详情" in content
+        content = yaml.safe_load(tasks_path.read_text(encoding="utf-8"))
+        assert content["change"] == self.change_name
+        assert "tasks" in content
 
     def test_plan_creates_design_md(self) -> None:
         """Test plan command - design.md is no longer created in v1.2+."""
@@ -207,7 +205,7 @@ We need this feature to improve user experience.
 
         assert result.exit_code == 0, f"Command failed with: {result.stdout}"
 
-        tasks_path = self.change_dir / "tasks.md"
+        tasks_path = self.change_dir / "tasks.yaml"
         assert tasks_path.exists()
 
 
@@ -225,72 +223,92 @@ class TestPlanValidation:
 
         shutil.rmtree(self.temp_dir, ignore_errors=True)
 
-    def test_validate_tasks_with_valid_dependencies(self) -> None:
+    def test_validate_tasks_yaml_with_valid_dependencies(self) -> None:
         """Test dependency validation with valid dependencies."""
-        from cc_spec.commands.plan import _validate_tasks_dependencies
+        from cc_spec.commands.plan import _validate_tasks_yaml_dependencies
 
-        tasks_content = """# Tasks - test
-
-## 概览
-
-| Wave | Task-ID | 预估 | 状态 | 依赖 |
-|------|---------|------|------|------|
-| 0 | 01-SETUP | 30k | 🟦 空闲 | - |
-| 1 | 02-MODEL | 50k | 🟦 空闲 | 01-SETUP |
-| 1 | 03-API | 45k | 🟦 空闲 | 01-SETUP |
-| 2 | 04-FE | 60k | 🟦 空闲 | 02-MODEL, 03-API |
+        tasks_content = """version: "1.0"
+change: test
+tasks:
+  01-SETUP:
+    wave: 0
+    name: Setup
+    deps: []
+  02-MODEL:
+    wave: 1
+    name: Model
+    deps: [01-SETUP]
+  03-API:
+    wave: 1
+    name: API
+    deps: [01-SETUP]
+  04-FE:
+    wave: 2
+    name: Frontend
+    deps: [02-MODEL, 03-API]
 """
-        tasks_path = self.project_root / "tasks.md"
+        tasks_path = self.project_root / "tasks.yaml"
         tasks_path.write_text(tasks_content, encoding="utf-8")
 
-        result = _validate_tasks_dependencies(tasks_path)
+        result = _validate_tasks_yaml_dependencies(tasks_path)
         assert result["valid"] is True
         assert len(result["tasks"]) == 4
 
-    def test_validate_tasks_with_invalid_dependencies(self) -> None:
+    def test_validate_tasks_yaml_with_invalid_dependencies(self) -> None:
         """Test dependency validation with invalid dependencies."""
-        from cc_spec.commands.plan import _validate_tasks_dependencies
+        from cc_spec.commands.plan import _validate_tasks_yaml_dependencies
 
-        tasks_content = """# Tasks - test
-
-## 概览
-
-| Wave | Task-ID | 预估 | 状态 | 依赖 |
-|------|---------|------|------|------|
-| 0 | 01-SETUP | 30k | 🟦 空闲 | - |
-| 1 | 02-MODEL | 50k | 🟦 空闲 | 99-INVALID |
+        tasks_content = """version: "1.0"
+change: test
+tasks:
+  01-SETUP:
+    wave: 0
+    name: Setup
+    deps: []
+  02-MODEL:
+    wave: 1
+    name: Model
+    deps: [99-INVALID]
 """
-        tasks_path = self.project_root / "tasks.md"
+        tasks_path = self.project_root / "tasks.yaml"
         tasks_path.write_text(tasks_content, encoding="utf-8")
 
-        result = _validate_tasks_dependencies(tasks_path)
+        result = _validate_tasks_yaml_dependencies(tasks_path)
         assert result["valid"] is False
         # Support Chinese: "无效依赖" or "依赖无效"
         assert "无效" in result["message"] and "依赖" in result["message"] or "Invalid dependencies" in result["message"]
 
-    def test_parse_tasks_summary(self) -> None:
-        """Test parsing tasks.md for display."""
-        from cc_spec.commands.plan import _parse_tasks_summary
+    def test_parse_tasks_yaml_summary(self) -> None:
+        """Test parsing tasks.yaml for display."""
+        from cc_spec.commands.plan import _parse_tasks_yaml_summary
 
-        tasks_content = """# Tasks - test
-
-## 概览
-
-| Wave | Task-ID | 预估 | 状态 | 依赖 |
-|------|---------|------|------|------|
-| 0 | 01-SETUP | 30k | 🟦 空闲 | - |
-| 1 | 02-MODEL | 50k | 🟨 进行中 | 01-SETUP |
-| 2 | 03-API | 45k | 🟩 完成 | 02-MODEL |
+        tasks_content = """version: "1.0"
+change: test
+tasks:
+  01-SETUP:
+    wave: 0
+    name: Setup
+    status: idle
+  02-MODEL:
+    wave: 1
+    name: Model
+    status: in_progress
+  03-API:
+    wave: 2
+    name: API
+    status: completed
 """
-        tasks_path = self.project_root / "tasks.md"
+        tasks_path = self.project_root / "tasks.yaml"
         tasks_path.write_text(tasks_content, encoding="utf-8")
 
-        tasks = _parse_tasks_summary(tasks_path)
+        tasks = _parse_tasks_yaml_summary(tasks_path)
         assert len(tasks) == 3
-        assert tasks[0]["id"] == "01-SETUP"
-        assert tasks[0]["status"] == "pending"
-        assert tasks[1]["status"] == "in_progress"
-        assert tasks[2]["status"] == "completed"
+
+        # Find tasks by id
+        task_map = {t["id"]: t for t in tasks}
+        assert task_map["01-SETUP"]["status"] == "idle"
+        assert task_map["02-MODEL"]["status"] == "in_progress"
+        assert task_map["03-API"]["status"] == "completed"
 
 
 class TestPlanIntegration:
@@ -333,8 +351,8 @@ class TestPlanIntegration:
 
         assert result.exit_code == 0
 
-        # Step 4: Verify plan outputs - v1.2+ only creates tasks.md
-        tasks_path = change_dir / "tasks.md"
+        # Step 4: Verify plan outputs - v1.3+ only creates tasks.yaml
+        tasks_path = change_dir / "tasks.yaml"
         design_path = change_dir / "design.md"
         assert tasks_path.exists()
         # v1.2+: design.md is no longer generated

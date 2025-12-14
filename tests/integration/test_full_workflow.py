@@ -70,7 +70,7 @@ class TestFullWorkflow:
         assert (change_dir / "status.yaml").exists()
 
     def test_plan_command(self) -> None:
-        """Test plan command generates tasks.md."""
+        """Test plan command generates tasks.yaml."""
         os.chdir(str(self.project_root))
 
         # Initialize and specify
@@ -82,7 +82,7 @@ class TestFullWorkflow:
 
         assert result.exit_code == 0
         change_dir = self.project_root / ".cc-spec" / "changes" / "add-feature"
-        assert (change_dir / "tasks.md").exists()
+        assert (change_dir / "tasks.yaml").exists()
 
     def test_workflow_init_to_plan(self) -> None:
         """Test workflow from init to plan stage."""
@@ -120,18 +120,25 @@ class TestFullWorkflow:
         runner.invoke(app, ["specify", "test-feature"])
         runner.invoke(app, ["plan", "test-feature"])
 
-        # Prepare tasks.md with completed checklist
+        # 完全覆盖 tasks.yaml，确保只有一个通过的任务
         change_dir = self.project_root / ".cc-spec" / "changes" / "test-feature"
-        tasks_path = change_dir / "tasks.md"
+        tasks_path = change_dir / "tasks.yaml"
 
-        tasks_content = tasks_path.read_text(encoding="utf-8")
-        tasks_content += """
-
-### 99-TEST - Test Task
-
-**Checklist**:
-- [x] Test item 1
-- [x] Test item 2
+        # 写入只包含一个完成的任务的 tasks.yaml
+        tasks_content = """version: "1.0"
+change: test-feature
+tasks:
+  01-TEST:
+    wave: 0
+    name: Test Task
+    tokens: 30k
+    status: completed
+    deps: []
+    checklist:
+      - item: Test item 1
+        status: passed
+      - item: Test item 2
+        status: passed
 """
         tasks_path.write_text(tasks_content, encoding="utf-8")
 
@@ -300,7 +307,7 @@ class TestErrorHandling:
         assert "not found" in result.stdout.lower() or "未找到" in result.stdout
 
     def test_checklist_without_tasks(self) -> None:
-        """Test checklist fails without tasks.md."""
+        """Test checklist fails without tasks.yaml."""
         os.chdir(str(self.project_root))
 
         runner.invoke(app, ["init", "--agent", "claude"])
@@ -309,7 +316,7 @@ class TestErrorHandling:
         result = runner.invoke(app, ["checklist", "test-change"])
 
         assert result.exit_code == 1
-        assert "tasks.md" in result.stdout.lower()
+        assert "tasks.yaml" in result.stdout.lower() or "tasks" in result.stdout.lower()
 
     def test_archive_without_checklist(self) -> None:
         """Test archive fails without checklist completion."""
@@ -385,27 +392,23 @@ class TestStateTransitions:
 
         # Prepare completed tasks with proper task format
         change_dir = self.project_root / ".cc-spec" / "changes" / "test-change"
-        tasks_path = change_dir / "tasks.md"
+        tasks_path = change_dir / "tasks.yaml"
 
-        # Write a complete tasks.md with checklist
-        content = """# Tasks - test-change
-
-## 概览
-
-| Wave | Task-ID | 预估 | 状态 | 依赖 |
-|------|---------|------|------|------|
-| 0 | 01-TEST | 30k | 🟩 完成 | - |
-
-## 任务详情
-
-### 01-TEST - Test Task
-**预估上下文**: ~30k tokens
-**状态**: 🟩 完成
-**依赖**: 无
-
-**Checklist**:
-- [x] Task completed
-- [x] All items done
+        # Write a complete tasks.yaml with checklist
+        content = """version: "1.0"
+change: test-change
+tasks:
+  01-TEST:
+    wave: 0
+    name: Test Task
+    tokens: 30k
+    status: completed
+    deps: []
+    checklist:
+      - item: Task completed
+        status: passed
+      - item: All items done
+        status: passed
 """
         tasks_path.write_text(content, encoding="utf-8")
 

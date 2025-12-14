@@ -2,10 +2,11 @@
 
 Tests the SubAgent executor, task parser, and result collector
 working together in realistic scenarios.
+
+v1.2: Updated to use tasks.yaml format only.
 """
 
 import asyncio
-import os
 import shutil
 import tempfile
 from datetime import datetime
@@ -20,79 +21,58 @@ from cc_spec.subagent.task_parser import (
     TasksDocument,
     TaskStatus,
     Wave,
-    parse_tasks_md,
-    update_task_status,
+    parse_tasks_yaml,
+    update_task_status_yaml,
     validate_dependencies,
 )
 
 
 class TestTaskParserIntegration:
-    """Integration tests for task parser."""
+    """Integration tests for task parser (YAML format)."""
 
-    def test_parse_complex_tasks_md(self) -> None:
-        """Test parsing a realistic tasks.md file."""
-        content = """# Tasks - add-oauth
-
-## 概览
-
-| Wave | Task-ID | 预估 | 状态 | 依赖 |
-|------|---------|------|------|------|
-| 0 | 01-SETUP | 30k | 🟦 空闲 | - |
-| 1 | 02-MODEL | 50k | 🟦 空闲 | 01-SETUP |
-| 1 | 03-API | 45k | 🟦 空闲 | 01-SETUP |
-| 2 | 04-FE | 60k | 🟦 空闲 | 02-MODEL, 03-API |
-
-## 任务详情
-
-### 01-SETUP - Project Setup
-**预估上下文**: ~30k tokens
-**状态**: 🟦 空闲
-**依赖**: 无
-
-**必读文档**:
-- docs/plan/spec.md
-
-**核心代码入口**:
-- src/config/
-
-**Checklist**:
-- [ ] 创建配置文件
-- [ ] 添加环境变量
-
----
-
-### 02-MODEL - Data Model
-**预估上下文**: ~50k tokens
-**状态**: 🟦 空闲
-**依赖**: 01-SETUP
-
-**Checklist**:
-- [ ] 创建数据模型
-- [ ] 添加验证逻辑
-
----
-
-### 03-API - API Endpoints
-**预估上下文**: ~45k tokens
-**状态**: 🟦 空闲
-**依赖**: 01-SETUP
-
-**Checklist**:
-- [ ] 创建 API 路由
-- [ ] 添加认证
-
----
-
-### 04-FE - Frontend
-**预估上下文**: ~60k tokens
-**状态**: 🟦 空闲
-**依赖**: 02-MODEL, 03-API
-
-**Checklist**:
-- [ ] 创建组件
-- [ ] 添加样式
+    def test_parse_complex_tasks_yaml(self) -> None:
+        """Test parsing a realistic tasks.yaml file."""
+        content = """version: "1.0"
+change: add-oauth
+tasks:
+  01-SETUP:
+    wave: 0
+    name: Project Setup
+    tokens: 30k
+    deps: []
+    docs:
+      - docs/plan/spec.md
+    code:
+      - src/config/
+    checklist:
+      - 创建配置文件
+      - 添加环境变量
+  02-MODEL:
+    wave: 1
+    name: Data Model
+    tokens: 50k
+    deps: [01-SETUP]
+    checklist:
+      - 创建数据模型
+      - 添加验证逻辑
+  03-API:
+    wave: 1
+    name: API Endpoints
+    tokens: 45k
+    deps: [01-SETUP]
+    checklist:
+      - 创建 API 路由
+      - 添加认证
+  04-FE:
+    wave: 2
+    name: Frontend
+    tokens: 60k
+    deps: [02-MODEL, 03-API]
+    checklist:
+      - 创建组件
+      - 添加样式
 """
-        doc = parse_tasks_md(content)
+        doc = parse_tasks_yaml(content)
 
         assert doc.change_name == "add-oauth"
         assert len(doc.waves) == 3
@@ -109,71 +89,53 @@ class TestTaskParserIntegration:
 
     def test_validate_dependencies_valid(self) -> None:
         """Test dependency validation passes for valid dependencies."""
-        content = """# Tasks - test
-
-## 概览
-
-| Wave | Task-ID | 预估 | 状态 | 依赖 |
-|------|---------|------|------|------|
-| 0 | 01-A | 30k | 🟦 空闲 | - |
-| 1 | 02-B | 30k | 🟦 空闲 | 01-A |
-
-## 任务详情
-
-### 01-A - Task A
-**状态**: 🟦 空闲
-**依赖**: 无
-
-**Checklist**:
-- [ ] Item
-
----
-
-### 02-B - Task B
-**状态**: 🟦 空闲
-**依赖**: 01-A
-
-**Checklist**:
-- [ ] Item
+        content = """version: "1.0"
+change: test
+tasks:
+  01-A:
+    wave: 0
+    name: Task A
+    checklist:
+      - Item
+  02-B:
+    wave: 1
+    name: Task B
+    deps: [01-A]
+    checklist:
+      - Item
 """
-        doc = parse_tasks_md(content)
+        doc = parse_tasks_yaml(content)
         is_valid, errors = validate_dependencies(doc)
 
         assert is_valid
         assert len(errors) == 0
 
     def test_update_task_status_integration(self) -> None:
-        """Test updating task status in tasks.md content."""
-        content = """# Tasks - test
-
-## 概览
-
-| Wave | Task-ID | 预估 | 状态 | 依赖 |
-|------|---------|------|------|------|
-| 0 | 01-TEST | 30k | 🟦 空闲 | - |
-
-## 任务详情
-
-### 01-TEST - Test Task
-**预估上下文**: ~30k tokens
-**状态**: 🟦 空闲
-**依赖**: 无
-
-**Checklist**:
-- [ ] Item 1
+        """Test updating task status in tasks.yaml content."""
+        content = """version: "1.0"
+change: test
+tasks:
+  01-TEST:
+    wave: 0
+    name: Test Task
+    tokens: 30k
+    status: idle
+    checklist:
+      - Item 1
 """
         # Update to in progress
-        updated = update_task_status(content, "01-TEST", TaskStatus.IN_PROGRESS)
-        assert "🟨" in updated
+        updated = update_task_status_yaml(content, "01-TEST", TaskStatus.IN_PROGRESS)
+        assert "in_progress" in updated
 
         # Update to completed
-        updated = update_task_status(
+        updated = update_task_status_yaml(
             updated,
             "01-TEST",
             TaskStatus.COMPLETED,
             log={"completed_at": "2025-01-01T00:00:00Z", "subagent_id": "test-agent"},
         )
-        assert "🟩" in updated
+        assert "completed" in updated
+        assert "test-agent" in updated
 
 
 class TestSubAgentExecutorIntegration:
@@ -188,45 +150,34 @@ class TestSubAgentExecutorIntegration:
         """Clean up test environment."""
         shutil.rmtree(self.temp_dir, ignore_errors=True)
 
-    def _create_tasks_md(self, content: str = None) -> Path:
-        """Create a tasks.md file for testing."""
+    def _create_tasks_yaml(self, content: str = None) -> Path:
+        """Create a tasks.yaml file for testing."""
         if content is None:
-            content = """# Tasks - test
-
-## 概览
-
-| Wave | Task-ID | 预估 | 状态 | 依赖 |
-|------|---------|------|------|------|
-| 0 | 01-SETUP | 30k | 🟦 空闲 | - |
-| 1 | 02-MODEL | 50k | 🟦 空闲 | 01-SETUP |
-
-## 任务详情
-
-### 01-SETUP - Project Setup
-**预估上下文**: ~30k tokens
-**状态**: 🟦 空闲
-**依赖**: 无
-
-**Checklist**:
-- [ ] 创建配置文件
-
----
-
-### 02-MODEL - Data Model
-**预估上下文**: ~50k tokens
-**状态**: 🟦 空闲
-**依赖**: 01-SETUP
-
-**Checklist**:
-- [ ] 创建数据模型
+            content = """version: "1.0"
+change: test
+tasks:
+  01-SETUP:
+    wave: 0
+    name: Project Setup
+    tokens: 30k
+    deps: []
+    checklist:
+      - 创建配置文件
+  02-MODEL:
+    wave: 1
+    name: Data Model
+    tokens: 50k
+    deps: [01-SETUP]
+    checklist:
+      - 创建数据模型
 """
-        tasks_path = self.project_root / "tasks.md"
+        tasks_path = self.project_root / "tasks.yaml"
         tasks_path.write_text(content, encoding="utf-8")
         return tasks_path
 
     def test_executor_loads_document(self) -> None:
-        """Test executor loads and parses tasks.md."""
-        tasks_path = self._create_tasks_md()
+        """Test executor loads and parses tasks.yaml."""
+        tasks_path = self._create_tasks_yaml()
 
         executor = SubAgentExecutor(tasks_path)
 
@@ -236,7 +187,7 @@ class TestSubAgentExecutorIntegration:
 
     def test_executor_builds_prompt(self) -> None:
         """Test executor builds task prompt correctly."""
-        tasks_path = self._create_tasks_md()
+        tasks_path = self._create_tasks_yaml()
 
         executor = SubAgentExecutor(tasks_path)
         task = executor.doc.all_tasks["01-SETUP"]
@@ -249,7 +200,7 @@ class TestSubAgentExecutorIntegration:
 
     def test_executor_with_custom_executor(self) -> None:
         """Test executor with custom task executor."""
-        tasks_path = self._create_tasks_md()
+        tasks_path = self._create_tasks_yaml()
 
         executor = SubAgentExecutor(tasks_path)
 
@@ -275,7 +226,7 @@ class TestSubAgentExecutorIntegration:
 
     def test_executor_progress_summary(self) -> None:
         """Test executor progress summary."""
-        tasks_path = self._create_tasks_md()
+        tasks_path = self._create_tasks_yaml()
 
         executor = SubAgentExecutor(tasks_path)
         summary = executor.get_progress_summary()
@@ -421,44 +372,32 @@ class TestConcurrentExecution:
 
     def test_concurrent_tasks_in_wave(self) -> None:
         """Test multiple tasks execute concurrently within a wave."""
-        content = """# Tasks - test
-
-## 概览
-
-| Wave | Task-ID | 预估 | 状态 | 依赖 |
-|------|---------|------|------|------|
-| 0 | 01-A | 30k | 🟦 空闲 | - |
-| 0 | 02-B | 30k | 🟦 空闲 | - |
-| 0 | 03-C | 30k | 🟦 空闲 | - |
-
-## 任务详情
-
-### 01-A - Task A
-**状态**: 🟦 空闲
-**依赖**: 无
-
-**Checklist**:
-- [ ] Item
-
----
-
-### 02-B - Task B
-**状态**: 🟦 空闲
-**依赖**: 无
-
-**Checklist**:
-- [ ] Item
-
----
-
-### 03-C - Task C
-**状态**: 🟦 空闲
-**依赖**: 无
-
-**Checklist**:
-- [ ] Item
+        content = """version: "1.0"
+change: test
+tasks:
+  01-A:
+    wave: 0
+    name: Task A
+    tokens: 30k
+    deps: []
+    checklist:
+      - Item
+  02-B:
+    wave: 0
+    name: Task B
+    tokens: 30k
+    deps: []
+    checklist:
+      - Item
+  03-C:
+    wave: 0
+    name: Task C
+    tokens: 30k
+    deps: []
+    checklist:
+      - Item
 """
-        tasks_path = self.project_root / "tasks.md"
+        tasks_path = self.project_root / "tasks.yaml"
         tasks_path.write_text(content, encoding="utf-8")
 
         executor = SubAgentExecutor(tasks_path, max_concurrent=3)
@@ -490,83 +429,50 @@ class TestConcurrentExecution:
 
     def test_max_concurrent_limit(self) -> None:
         """Test max concurrent limit is respected."""
-        content = """# Tasks - test
-
-## 概览
-
-| Wave | Task-ID | 预估 | 状态 | 依赖 |
-|------|---------|------|------|------|
-| 0 | 01-A | 30k | 🟦 空闲 | - |
-| 0 | 02-B | 30k | 🟦 空闲 | - |
-| 0 | 03-C | 30k | 🟦 空闲 | - |
-| 0 | 04-D | 30k | 🟦 空闲 | - |
-| 0 | 05-E | 30k | 🟦 空闲 | - |
-
-## 任务详情
-
-### 01-A - Task A
-**状态**: 🟦 空闲
-
-**Checklist**:
-- [ ] Item
-
----
-
-### 02-B - Task B
-**状态**: 🟦 空闲
-
-**Checklist**:
-- [ ] Item
-
----
-
-### 03-C - Task C
-**状态**: 🟦 空闲
-
-**Checklist**:
-- [ ] Item
-
----
-
-### 04-D - Task D
-**状态**: 🟦 空闲
-
-**Checklist**:
-- [ ] Item
-
----
-
-### 05-E - Task E
-**状态**: 🟦 空闲
-
-**Checklist**:
-- [ ] Item
+        content = """version: "1.0"
+change: test
+tasks:
+  01-A:
+    wave: 0
+    name: Task A
+    tokens: 30k
+    deps: []
+    checklist:
+      - Item
+  02-B:
+    wave: 0
+    name: Task B
+    tokens: 30k
+    deps: []
+    checklist:
+      - Item
+  03-C:
+    wave: 0
+    name: Task C
+    tokens: 30k
+    deps: []
+    checklist:
+      - Item
+  04-D:
+    wave: 0
+    name: Task D
+    tokens: 30k
+    deps: []
+    checklist:
+      - Item
+  05-E:
+    wave: 0
+    name: Task E
+    tokens: 30k
+    deps: []
+    checklist:
+      - Item
 """
-        tasks_path = self.project_root / "tasks.md"
+        tasks_path = self.project_root / "tasks.yaml"
         tasks_path.write_text(content, encoding="utf-8")
 
         # Limit to 2 concurrent
         executor = SubAgentExecutor(tasks_path, max_concurrent=2)
-
-        concurrent_count = 0
-        max_concurrent_observed = 0
-
-        async def mock_executor_async(task: Task) -> ExecutionResult:
-            nonlocal concurrent_count, max_concurrent_observed
-
-            concurrent_count += 1
-            max_concurrent_observed = max(max_concurrent_observed, concurrent_count)
-
-            await asyncio.sleep(0.05)
-
-            concurrent_count -= 1
-
-            return ExecutionResult(
-                task_id=task.task_id,
-                success=True,
-                output="Done",
-                duration_seconds=0.05,
-            )
 
         # Can't easily test with sync mock, just verify executor initializes correctly
         assert executor.max_concurrent == 2

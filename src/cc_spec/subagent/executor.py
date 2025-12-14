@@ -22,8 +22,8 @@ from cc_spec.subagent.task_parser import (
     TasksDocument,
     TaskStatus,
     get_tasks_by_wave,
-    parse_tasks_md,
-    update_task_status,
+    parse_tasks_yaml,
+    update_task_status_yaml,
 )
 
 
@@ -132,9 +132,9 @@ class SubAgentExecutor:
         else:
             self.lock_manager = None
 
-        # 加载并解析 tasks.md
+        # 加载并解析 tasks.yaml
         self.tasks_md_content = tasks_md_path.read_text(encoding="utf-8")
-        self.doc = parse_tasks_md(self.tasks_md_content)
+        self.doc = parse_tasks_yaml(self.tasks_md_content)
 
         # 控制并发的信号量
         self._semaphore = asyncio.Semaphore(max_concurrent)
@@ -165,13 +165,13 @@ class SubAgentExecutor:
         return self.config.subagent.get_profile(profile_name)
 
     def load_document(self) -> TasksDocument:
-        """加载并解析 tasks.md。
+        """加载并解析 tasks.yaml。
 
         返回：
             解析后的 TasksDocument
         """
         self.tasks_md_content = self.tasks_md_path.read_text(encoding="utf-8")
-        self.doc = parse_tasks_md(self.tasks_md_content)
+        self.doc = parse_tasks_yaml(self.tasks_md_content)
         return self.doc
 
     def set_task_executor(self, executor: Callable[[Task], ExecutionResult]) -> None:
@@ -495,7 +495,7 @@ class SubAgentExecutor:
         # 更新任务状态为 IN_PROGRESS
         for task in idle_tasks:
             task.status = TaskStatus.IN_PROGRESS
-            self.tasks_md_content = update_task_status(
+            self.tasks_md_content = update_task_status_yaml(
                 self.tasks_md_content,
                 task.task_id,
                 TaskStatus.IN_PROGRESS,
@@ -536,13 +536,13 @@ class SubAgentExecutor:
                 # v1.3: 更新重试计数
                 self._retry_counts[result.task_id] = result.retry_count + 1
 
-            # 更新 tasks.md
+            # 更新 tasks.yaml
             log = {
                 "completed_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
                 "subagent_id": result.agent_id or f"agent_{result.task_id}",
             }
 
-            self.tasks_md_content = update_task_status(
+            self.tasks_md_content = update_task_status_yaml(
                 self.tasks_md_content,
                 result.task_id,
                 new_status,
@@ -634,15 +634,15 @@ class SubAgentExecutor:
             "completion_percentage": completion_pct,
         }
 
-    def _update_tasks_md(self, task_id: str, status: TaskStatus, log: dict | None = None) -> None:
-        """更新 tasks.md 文件中的任务状态。
+    def _update_tasks_yaml(self, task_id: str, status: str, log: dict | None = None) -> None:
+        """更新 tasks.yaml 文件中的任务状态。
 
         参数：
             task_id: 要更新的任务 ID
             status: 新状态
             log: 可选的执行日志字典，包含 completed_at, subagent_id, notes 等键
         """
-        self.tasks_md_content = update_task_status(
+        self.tasks_md_content = update_task_status_yaml(
             self.tasks_md_content,
             task_id,
             status,

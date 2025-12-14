@@ -1,9 +1,10 @@
 """cc-spec 的 plan 命令实现。
 
-根据变更提案生成执行计划（tasks.md）。
+根据变更提案生成执行计划（tasks.yaml）。
 
 v1.1：新增通过 ID 指定变更的支持。
 v1.2：移除 design.md 生成，技术决策已整合到 proposal.md。
+v1.3：只生成 tasks.yaml（移除 tasks.md 支持）。
 """
 
 from datetime import datetime
@@ -11,6 +12,7 @@ from pathlib import Path
 from typing import Any, Optional
 
 import typer
+import yaml
 from rich.console import Console
 
 from cc_spec.core.id_manager import IDManager
@@ -21,7 +23,6 @@ from cc_spec.core.state import (
     load_state,
     update_state,
 )
-from cc_spec.core.templates import copy_template
 from cc_spec.ui.display import show_task_table
 from cc_spec.utils.files import find_project_root, get_cc_spec_dir
 
@@ -34,13 +35,13 @@ def plan_command(
         help="变更名称或 ID（例如 add-oauth 或 C-001）",
     ),
 ) -> None:
-    """生成执行计划（tasks.md）。
+    """生成执行计划（tasks.yaml）。
 
     v1.1：现支持通过变更 ID（例如 C-001）。
     v1.2：移除 design.md 生成，技术决策已整合到 proposal.md。
+    v1.3：只生成 tasks.yaml（移除 tasks.md 支持）。
 
-    该命令读取 proposal.md 并生成：
-    1. tasks.md - 按 Wave 分组的任务拆解
+    该命令读取 proposal.md 并生成 tasks.yaml - 紧凑的结构化任务文件（供 SubAgent 使用）。
 
     示例：
         cc-spec plan              # 为当前激活的变更生成计划
@@ -109,38 +110,24 @@ def plan_command(
     proposal_content = proposal_path.read_text(encoding="utf-8")
     console.print(f"[dim]已读取 proposal（{len(proposal_content)} 个字符）[/dim]")
 
-    # 基于模板生成 tasks.md
-    tasks_path = change_dir / "tasks.md"
+    tasks_yaml_path = change_dir / "tasks.yaml"
 
     console.print("\n[cyan]正在生成执行计划...[/cyan]")
 
-    # 准备模板变量
-    template_vars = {
-        "change_name": change,
-        "date": datetime.now().strftime("%Y-%m-%d"),
-        "timestamp": datetime.now().isoformat(),
-    }
-
-    # 生成 tasks.md
+    # 生成 tasks.yaml
     try:
-        # 尝试使用模板
-        copy_template(
-            "tasks-template.md",
-            tasks_path,
-            variables=template_vars,
-        )
-        console.print("[green]√[/green] 已生成 tasks.md")
-    except Exception:
-        # 若模板不存在，则创建基础结构
+        _create_basic_tasks_yaml(tasks_yaml_path, change)
+        console.print("[green]√[/green] 已生成 tasks.yaml")
+    except Exception as e:
         console.print(
-            "[yellow]警告：[/yellow] 未找到模板，正在创建基础结构"
+            f"[red]错误：[/red] 无法生成 tasks.yaml：{e}",
+            style="red",
         )
-        _create_basic_tasks_md(tasks_path, change, proposal_content)
-        console.print("[green]√[/green] 已创建基础 tasks.md")
+        raise typer.Exit(1)
 
-    # 校验依赖关系（目前为基础校验）
+    # 校验依赖关系
     console.print("\n[cyan]正在校验任务依赖...[/cyan]")
-    validation_result = _validate_tasks_dependencies(tasks_path)
+    validation_result = _validate_tasks_yaml_dependencies(tasks_yaml_path)
     if validation_result["valid"]:
         console.print("[green]√[/green] 依赖关系校验通过")
     else:
@@ -173,9 +160,11 @@ def plan_command(
 
     # 展示任务概览
     console.print("\n[bold cyan]任务概览：[/bold cyan]")
-    tasks_summary = _parse_tasks_summary(tasks_path)
+    tasks_summary = _parse_tasks_yaml_summary(tasks_yaml_path)
     if tasks_summary:
         show_task_table(console, tasks_summary, show_wave=True, show_dependencies=True)
+    else:
+        console.print("[dim]（无任务可展示）[/dim]")
 
     # 展示下一步
     console.print(
@@ -183,110 +172,72 @@ def plan_command(
         style="green",
     )
     console.print("\n[bold]下一步：[/bold]")
-    console.print("1. 查看并编辑 tasks.md，完善任务拆解")
-    console.print("2. proposal.md 中的技术决策章节包含架构设计信息")
-    console.print("3. 运行 [cyan]cc-spec apply[/cyan] 执行任务")
+    console.print("1. 查看并编辑 tasks.yaml，完善任务拆解")
+    console.print("2. 运行 [cyan]cc-spec apply[/cyan] 执行任务")
 
-    console.print(
-        f"\n[dim]已生成文件：[/dim]\n"
-        f"  - {tasks_path.relative_to(Path.cwd())}"
+    # 显示生成的文件
+    try:
+        rel_path = tasks_yaml_path.relative_to(Path.cwd())
+    except ValueError:
+        rel_path = tasks_yaml_path
+    console.print(f"\n[dim]已生成文件：[/dim]\n  - {rel_path}")
+
+
+def _create_basic_tasks_yaml(tasks_yaml_path: Path, change_name: str) -> None:
+    """创建基础 tasks.yaml 结构。"""
+    data = {
+        "version": "1.0",
+        "change": change_name,
+        "tasks": {
+            "01-SETUP": {
+                "wave": 0,
+                "name": "初始化与准备",
+                "tokens": "30k",
+                "deps": [],
+                "docs": [f".cc-spec/changes/{change_name}/proposal.md"],
+                "code": [],
+                "checklist": [
+                    "分析需求",
+                    "设计方案",
+                    "实现功能",
+                    "编写测试",
+                ],
+            }
+        },
+    }
+
+    yaml_content = yaml.dump(
+        data,
+        allow_unicode=True,
+        default_flow_style=False,
+        sort_keys=False,
     )
+    tasks_yaml_path.write_text(yaml_content, encoding="utf-8")
 
 
-def _create_basic_tasks_md(
-    tasks_path: Path, change_name: str, proposal_content: str
-) -> None:
-    """当模板不可用时创建基础 tasks.md 结构。"""
-    content = f"""# 任务 - {change_name}
-
-> 根据 proposal 生成于 {datetime.now().strftime("%Y-%m-%d")}
-
-## 概览
-
-| 波次 | 任务 ID | 预估 | 状态 | 依赖 |
-|------|---------|------|------|------|
-| 0 | 01-SETUP | 30k | ○ 待执行 | - |
-
-## 任务详情
-
-### 01-SETUP - 初始化与准备
-**预估上下文**: ~30k tokens
-**状态**: ○ 待执行
-**依赖**: 无
-
-**必读文档**:
-- .cc-spec/changes/{change_name}/proposal.md
-
-**核心代码入口**:
-- (TODO: 根据需求填写)
-
-**检查清单**:
-- [ ] 分析需求
-- [ ] 设计方案
-- [ ] 实现功能
-- [ ] 编写测试
-
-**执行日志**:
-_(SubAgent 执行时填写)_
-
----
-
-## 说明
-
-此文件是从模板自动生成的基础结构。请根据实际需求：
-
-1. 在概览表格中补充更多任务
-2. 为每个任务编写更详细的检查清单
-3. 指定必读文档与核心代码入口
-4. 设置任务依赖关系与波次分组
-5. 预估每个任务的上下文消耗
-
-## 波次说明
-
-- 波次（Wave）表示任务的执行批次
-- 同一波次内的任务可以并发执行
-- 不同波次之间按顺序执行
-- 任务只能依赖更早波次的任务
-"""
-    tasks_path.write_text(content, encoding="utf-8")
-
-
-def _validate_tasks_dependencies(tasks_path: Path) -> dict[str, Any]:
-    """校验 tasks.md 中的任务依赖关系。
+def _validate_tasks_yaml_dependencies(tasks_yaml_path: Path) -> dict[str, Any]:
+    """校验 tasks.yaml 中的任务依赖关系。
 
     返回：
         包含键：valid（bool）、message（str）、tasks（list）的字典
     """
     try:
-        content = tasks_path.read_text(encoding="utf-8")
+        content = tasks_yaml_path.read_text(encoding="utf-8")
+        data = yaml.safe_load(content)
 
-        # 从概览表解析任务 ID
-        import re
-
-        table_pattern = r"\| (\d+) \| ([A-Z0-9-]+) \|.*\| ([^|]+) \|"
-        matches = re.findall(table_pattern, content)
-
-        if not matches:
+        if not data or "tasks" not in data:
             return {
                 "valid": True,
-                "message": "概览表中未找到任何任务",
+                "message": "tasks.yaml 中未找到任何任务",
                 "tasks": [],
             }
 
-        task_ids = set()
-        dependencies = {}
-
-        for wave, task_id, deps in matches:
-            task_ids.add(task_id)
-            # 解析依赖（格式："01-TASK, 02-OTHER" 或 "-"）
-            deps_clean = deps.strip()
-            if deps_clean != "-":
-                dep_list = [d.strip() for d in deps_clean.split(",")]
-                dependencies[task_id] = dep_list
-
-        # 校验依赖是否存在
+        tasks = data["tasks"]
+        task_ids = set(tasks.keys())
         invalid_deps = []
-        for task_id, deps in dependencies.items():
+
+        for task_id, task_data in tasks.items():
+            deps = task_data.get("deps", [])
             for dep in deps:
                 if dep not in task_ids:
                     invalid_deps.append((task_id, dep))
@@ -309,63 +260,33 @@ def _validate_tasks_dependencies(tasks_path: Path) -> dict[str, Any]:
         return {"valid": False, "message": f"解析任务失败：{e}", "tasks": []}
 
 
-def _parse_tasks_summary(tasks_path: Path) -> list[dict[str, Any]]:
-    """解析 tasks.md，提取用于展示的任务摘要。
+def _parse_tasks_yaml_summary(tasks_yaml_path: Path) -> list[dict[str, Any]]:
+    """解析 tasks.yaml，提取用于展示的任务摘要。
 
     返回：
         任务字典列表，包含键：id、wave、status、estimate、dependencies
     """
     try:
-        content = tasks_path.read_text(encoding="utf-8")
+        content = tasks_yaml_path.read_text(encoding="utf-8")
+        data = yaml.safe_load(content)
 
-        import re
-
-        # 解析概览表
-        # 格式：| Wave | Task-ID | 预估 | 状态 | 依赖 |
-        table_pattern = r"\| (\d+) \| ([A-Z0-9-]+) \| ([^|]+) \| ([^|]+) \| ([^|]+) \|"
-        matches = re.findall(table_pattern, content)
+        if not data or "tasks" not in data:
+            return []
 
         tasks = []
-        for wave, task_id, estimate, status_icon, deps in matches:
-            # 将状态图标映射到状态名称
-            status_map = {
-                "🟦": "pending",
-                "🟨": "in_progress",
-                "🟩": "completed",
-                "🟥": "failed",
-                "⏰": "timeout",
-                "○": "pending",
-                "…": "in_progress",
-                "√": "completed",
-                "×": "failed",
-                "!": "timeout",
-            }
-
-            # 提取状态图标（通常为首字符）
-            status = "pending"
-            for icon, status_name in status_map.items():
-                if icon in status_icon:
-                    status = status_name
-                    break
-
-            # 解析依赖
-            deps_clean = deps.strip()
-            dep_list = (
-                [d.strip() for d in deps_clean.split(",")]
-                if deps_clean != "-"
-                else []
-            )
-
+        for task_id, task_data in data["tasks"].items():
             tasks.append(
                 {
                     "id": task_id,
-                    "wave": int(wave),
-                    "status": status,
-                    "estimate": estimate.strip(),
-                    "dependencies": dep_list,
+                    "wave": task_data.get("wave", 0),
+                    "status": task_data.get("status", "pending"),
+                    "estimate": task_data.get("tokens", "N/A"),
+                    "dependencies": task_data.get("deps", []),
                 }
             )
 
+        # 按 wave 排序
+        tasks.sort(key=lambda x: (x["wave"], x["id"]))
         return tasks
 
     except Exception as e:

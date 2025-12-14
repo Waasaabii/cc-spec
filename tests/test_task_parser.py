@@ -1,4 +1,4 @@
-"""Unit tests for task_parser module."""
+"""Unit tests for task_parser module (YAML only)."""
 
 import pytest
 
@@ -6,29 +6,30 @@ from cc_spec.core.scoring import CheckItem, CheckStatus
 from cc_spec.subagent.task_parser import (
     ExecutionLog,
     Task,
-    TaskStatus,
     TasksDocument,
+    TaskStatus,
     Wave,
+    generate_tasks_yaml,
     get_pending_tasks,
     get_task_by_id,
     get_tasks_by_wave,
-    parse_tasks_md,
-    update_checklist_item,
-    update_task_status,
+    parse_tasks_yaml,
+    update_checklist_item_yaml,
+    update_task_status_yaml,
     validate_dependencies,
 )
 
 
 class TestTaskStatus:
-    """Tests for TaskStatus enum."""
+    """Tests for TaskStatus constants."""
 
-    def test_enum_values(self) -> None:
-        """Test TaskStatus enum values."""
-        assert TaskStatus.IDLE.value == "idle"
-        assert TaskStatus.IN_PROGRESS.value == "in_progress"
-        assert TaskStatus.COMPLETED.value == "completed"
-        assert TaskStatus.FAILED.value == "failed"
-        assert TaskStatus.TIMEOUT.value == "timeout"
+    def test_status_values(self) -> None:
+        """Test TaskStatus constant values."""
+        assert TaskStatus.IDLE == "idle"
+        assert TaskStatus.IN_PROGRESS == "in_progress"
+        assert TaskStatus.COMPLETED == "completed"
+        assert TaskStatus.FAILED == "failed"
+        assert TaskStatus.TIMEOUT == "timeout"
 
 
 class TestExecutionLog:
@@ -141,220 +142,6 @@ class TestTasksDocument:
         assert len(doc.waves) == 2
         assert len(doc.all_tasks) == 2
         assert doc.all_tasks["01-SETUP"] == task1
-
-
-class TestParseTasksMd:
-    """Tests for parse_tasks_md function."""
-
-    def test_parse_complete_tasks_md(self) -> None:
-        """Test parsing a complete tasks.md file."""
-        content = """# Tasks - add-feature
-
-## 概览
-
-| Wave | Task-ID | 预估 | 状态 | 依赖 |
-|------|---------|------|------|------|
-| 0 | 01-SETUP | 30k | 🟩 完成 | - |
-| 1 | 02-MODEL | 50k | 🟨 进行中 | 01-SETUP |
-| 1 | 03-API | 45k | 🟦 空闲 | 01-SETUP |
-| 2 | 04-FE | 60k | 🟦 空闲 | 03-API |
-
-## 任务详情
-
-### 01-SETUP - Project Setup
-**预估上下文**: ~30k tokens
-**状态**: 🟩 完成
-**依赖**: 无
-
-**必读文档**:
-- docs/plan/spec.md
-- .cc-spec/changes/add-feature/design.md
-
-**核心代码入口**:
-- src/config/
-
-**Checklist**:
-- [x] 创建配置文件
-- [x] 添加环境变量
-
-**执行日志**:
-- 完成时间: 2024-01-15T10:40:00Z
-- SubAgent ID: agent_abc123
-
----
-
-### 02-MODEL - Data Model
-**预估上下文**: ~50k tokens
-**状态**: 🟨 进行中
-**依赖**: 01-SETUP
-
-**必读文档**:
-- docs/plan/spec.md
-- src/models/README.md
-
-**核心代码入口**:
-- src/models/
-
-**Checklist**:
-- [ ] 创建数据模型
-- [ ] 添加验证逻辑
-- [ ] 编写单元测试
-
----
-
-### 03-API - API Implementation
-**预估上下文**: ~45k tokens
-**状态**: 🟦 空闲
-**依赖**: 01-SETUP
-
-**必读文档**:
-- docs/api/spec.md
-
-**核心代码入口**:
-- src/api/
-
-**Checklist**:
-- [ ] 实现API端点
-
----
-
-### 04-FE - Frontend
-**预估上下文**: ~60k tokens
-**状态**: 🟦 空闲
-**依赖**: 03-API
-
-**必读文档**:
-- docs/frontend/spec.md
-
-**核心代码入口**:
-- src/frontend/
-
-**Checklist**:
-- [ ] 实现前端组件
-"""
-
-        doc = parse_tasks_md(content)
-
-        # Verify document structure
-        assert doc.change_name == "add-feature"
-        assert len(doc.waves) == 3
-        assert len(doc.all_tasks) == 4
-
-        # Verify wave 0
-        wave0_tasks = doc.waves[0].tasks
-        assert len(wave0_tasks) == 1
-        assert wave0_tasks[0].task_id == "01-SETUP"
-        assert wave0_tasks[0].status == TaskStatus.COMPLETED
-
-        # Verify wave 1
-        wave1_tasks = doc.waves[1].tasks
-        assert len(wave1_tasks) == 2
-        assert {t.task_id for t in wave1_tasks} == {"02-MODEL", "03-API"}
-
-        # Verify task details
-        task1 = doc.all_tasks["01-SETUP"]
-        assert task1.name == "Project Setup"
-        assert task1.wave == 0
-        assert task1.status == TaskStatus.COMPLETED
-        assert task1.dependencies == []
-        assert task1.estimated_tokens == 30000
-        assert len(task1.required_docs) == 2
-        assert len(task1.code_entry_points) == 1
-        assert len(task1.checklist_items) == 2
-        assert task1.checklist_items[0].status == CheckStatus.PASSED
-        assert task1.execution_log is not None
-        assert task1.execution_log.completed_at == "2024-01-15T10:40:00Z"
-        assert task1.execution_log.subagent_id == "agent_abc123"
-
-        # Verify task with dependencies
-        task2 = doc.all_tasks["02-MODEL"]
-        assert task2.name == "Data Model"
-        assert task2.wave == 1
-        assert task2.status == TaskStatus.IN_PROGRESS
-        assert task2.dependencies == ["01-SETUP"]
-        assert task2.estimated_tokens == 50000
-        assert len(task2.checklist_items) == 3
-
-    def test_parse_minimal_tasks_md(self) -> None:
-        """Test parsing minimal tasks.md without optional fields."""
-        content = """# Tasks - minimal-test
-
-## 概览
-
-| Wave | Task-ID | 预估 | 状态 | 依赖 |
-|------|---------|------|------|------|
-| 0 | 01-BASIC | 10k | 🟦 空闲 | - |
-
-## 任务详情
-
-### 01-BASIC - Basic Task
-**预估上下文**: ~10k tokens
-**状态**: 🟦 空闲
-"""
-
-        doc = parse_tasks_md(content)
-
-        assert doc.change_name == "minimal-test"
-        assert len(doc.waves) == 1
-        assert len(doc.all_tasks) == 1
-
-        task = doc.all_tasks["01-BASIC"]
-        assert task.task_id == "01-BASIC"
-        assert task.name == "Basic Task"
-        assert task.status == TaskStatus.IDLE
-        assert task.dependencies == []
-        assert task.required_docs == []
-        assert task.code_entry_points == []
-        assert task.checklist_items == []
-
-    def test_parse_tasks_md_invalid_title(self) -> None:
-        """Test parsing tasks.md with invalid title."""
-        content = """# Invalid Title
-
-## 概览
-
-| Wave | Task-ID | 预估 | 状态 | 依赖 |
-|------|---------|------|------|------|
-| 0 | 01-TEST | 10k | 🟦 空闲 | - |
-"""
-
-        with pytest.raises(ValueError, match="tasks.md 标题格式无效"):
-            parse_tasks_md(content)
-
-    def test_parse_tasks_md_with_multiple_dependencies(self) -> None:
-        """Test parsing tasks with multiple dependencies."""
-        content = """# Tasks - test-deps
-
-## 概览
-
-| Wave | Task-ID | 预估 | 状态 | 依赖 |
-|------|---------|------|------|------|
-| 0 | 01-A | 10k | 🟦 空闲 | - |
-| 0 | 01-B | 10k | 🟦 空闲 | - |
-| 1 | 02-C | 10k | 🟦 空闲 | 01-A, 01-B |
-
-## 任务详情
-
-### 01-A - Task A
-**预估上下文**: ~10k tokens
-
----
-
-### 01-B - Task B
-**预估上下文**: ~10k tokens
-
----
-
-### 02-C - Task C
-**预估上下文**: ~10k tokens
-"""
-
-        doc = parse_tasks_md(content)
-
-        task_c = doc.all_tasks["02-C"]
-        assert len(task_c.dependencies) == 2
-        assert "01-A" in task_c.dependencies
-        assert "01-B" in task_c.dependencies
 
 
 class TestGetTasksByWave:
@@ -501,177 +288,320 @@ class TestValidateDependencies:
         assert any("更晚的波次" in e for e in errors)
 
 
-class TestUpdateTaskStatus:
-    """Tests for update_task_status function."""
+# ============================================================================
+# YAML 格式测试
+# ============================================================================
 
-    def test_update_task_status_basic(self) -> None:
-        """Test updating task status in overview table."""
-        content = """# Tasks - test
 
-## 概览
+class TestParseTasksYaml:
+    """Tests for parse_tasks_yaml function."""
 
-| Wave | Task-ID | 预估 | 状态 | 依赖 |
-|------|---------|------|------|------|
-| 0 | 01-SETUP | 30k | 🟦 空闲 | - |
-
-## 任务详情
-
-### 01-SETUP - Project Setup
-**预估上下文**: ~30k tokens
-**状态**: 🟦 空闲
+    def test_parse_basic_yaml(self) -> None:
+        """Test parsing basic tasks.yaml file."""
+        content = """
+version: "1.0"
+change: test-feature
+tasks:
+  01-SETUP:
+    wave: 0
+    name: Project Setup
+    tokens: 30k
+    deps: []
+    docs:
+      - docs/plan/spec.md
+    code:
+      - src/config/
+    checklist:
+      - 创建配置文件
+      - 添加环境变量
+  02-MODEL:
+    wave: 1
+    name: Data Model
+    tokens: 50k
+    deps: [01-SETUP]
+    docs:
+      - src/models/README.md
+    checklist:
+      - 创建数据模型
+      - 添加验证逻辑
 """
 
-        updated = update_task_status(content, "01-SETUP", TaskStatus.IN_PROGRESS)
+        doc = parse_tasks_yaml(content)
 
-        assert "🟨" in updated
-        assert "🟦" not in updated.split("01-SETUP")[1].split("\n")[0]
+        assert doc.change_name == "test-feature"
+        assert len(doc.waves) == 2
+        assert len(doc.all_tasks) == 2
+
+        # Verify task 01-SETUP
+        task1 = doc.all_tasks["01-SETUP"]
+        assert task1.task_id == "01-SETUP"
+        assert task1.name == "Project Setup"
+        assert task1.wave == 0
+        assert task1.status == TaskStatus.IDLE
+        assert task1.estimated_tokens == 30000
+        assert task1.dependencies == []
+        assert len(task1.required_docs) == 1
+        assert len(task1.code_entry_points) == 1
+        assert len(task1.checklist_items) == 2
+
+        # Verify task 02-MODEL
+        task2 = doc.all_tasks["02-MODEL"]
+        assert task2.wave == 1
+        assert task2.dependencies == ["01-SETUP"]
+        assert task2.estimated_tokens == 50000
+
+    def test_parse_yaml_with_status(self) -> None:
+        """Test parsing tasks.yaml with different task statuses."""
+        content = """
+version: "1.0"
+change: status-test
+tasks:
+  01-A:
+    wave: 0
+    name: Task A
+    status: completed
+  02-B:
+    wave: 0
+    name: Task B
+    status: in_progress
+  03-C:
+    wave: 0
+    name: Task C
+    status: failed
+"""
+
+        doc = parse_tasks_yaml(content)
+
+        assert doc.all_tasks["01-A"].status == TaskStatus.COMPLETED
+        assert doc.all_tasks["02-B"].status == TaskStatus.IN_PROGRESS
+        assert doc.all_tasks["03-C"].status == TaskStatus.FAILED
+
+    def test_parse_yaml_with_execution_log(self) -> None:
+        """Test parsing tasks.yaml with execution log."""
+        content = """
+version: "1.0"
+change: log-test
+tasks:
+  01-DONE:
+    wave: 0
+    name: Completed Task
+    status: completed
+    log:
+      completed_at: "2024-01-15T10:40:00Z"
+      subagent_id: agent_123
+      notes: "All tests passed"
+"""
+
+        doc = parse_tasks_yaml(content)
+
+        task = doc.all_tasks["01-DONE"]
+        assert task.execution_log is not None
+        assert task.execution_log.completed_at == "2024-01-15T10:40:00Z"
+        assert task.execution_log.subagent_id == "agent_123"
+        assert task.execution_log.notes == "All tests passed"
+
+    def test_parse_yaml_invalid_format(self) -> None:
+        """Test parsing invalid YAML content."""
+        with pytest.raises(ValueError, match="tasks.yaml"):
+            parse_tasks_yaml("not: valid: yaml: :")
+
+    def test_parse_yaml_missing_change(self) -> None:
+        """Test parsing YAML without change field."""
+        with pytest.raises(ValueError, match="'change'"):
+            parse_tasks_yaml("version: '1.0'\ntasks: {}")
+
+    def test_parse_yaml_with_profile(self) -> None:
+        """Test parsing tasks.yaml with profile field."""
+        content = """
+version: "1.0"
+change: profile-test
+tasks:
+  01-TASK:
+    wave: 0
+    name: Task with Profile
+    profile: heavy-compute
+"""
+
+        doc = parse_tasks_yaml(content)
+        assert doc.all_tasks["01-TASK"].profile == "heavy-compute"
+
+
+class TestGenerateTasksYaml:
+    """Tests for generate_tasks_yaml function."""
+
+    def test_generate_basic_yaml(self) -> None:
+        """Test generating tasks.yaml from TasksDocument."""
+        # Create a TasksDocument
+        task1 = Task(
+            task_id="01-SETUP",
+            name="Setup",
+            wave=0,
+            status=TaskStatus.IDLE,
+            estimated_tokens=30000,
+            dependencies=[],
+            required_docs=["docs/spec.md"],
+            code_entry_points=["src/config/"],
+            checklist_items=[
+                CheckItem(description="Step 1", status=CheckStatus.FAILED, score=0),
+                CheckItem(description="Step 2", status=CheckStatus.FAILED, score=0),
+            ],
+        )
+        task2 = Task(
+            task_id="02-MODEL",
+            name="Model",
+            wave=1,
+            status=TaskStatus.IDLE,
+            estimated_tokens=50000,
+            dependencies=["01-SETUP"],
+        )
+
+        doc = TasksDocument(
+            change_name="test-feature",
+            waves=[
+                Wave(wave_number=0, tasks=[task1]),
+                Wave(wave_number=1, tasks=[task2]),
+            ],
+            all_tasks={"01-SETUP": task1, "02-MODEL": task2},
+        )
+
+        yaml_content = generate_tasks_yaml(doc)
+
+        # Verify YAML contains expected content
+        assert "version: '1.0'" in yaml_content or 'version: "1.0"' in yaml_content
+        assert "change: test-feature" in yaml_content
+        assert "01-SETUP:" in yaml_content
+        assert "02-MODEL:" in yaml_content
+        assert "30k" in yaml_content
+        assert "50k" in yaml_content
+
+    def test_roundtrip_yaml(self) -> None:
+        """Test that YAML can be generated and parsed back correctly."""
+        # Create original document
+        task = Task(
+            task_id="01-TEST",
+            name="Test Task",
+            wave=0,
+            status=TaskStatus.COMPLETED,
+            estimated_tokens=25000,
+            dependencies=[],
+            required_docs=["docs/test.md"],
+            checklist_items=[
+                CheckItem(description="Check 1", status=CheckStatus.PASSED, score=10),
+            ],
+        )
+
+        original = TasksDocument(
+            change_name="roundtrip-test",
+            waves=[Wave(wave_number=0, tasks=[task])],
+            all_tasks={"01-TEST": task},
+        )
+
+        # Generate and parse back
+        yaml_content = generate_tasks_yaml(original)
+        parsed = parse_tasks_yaml(yaml_content)
+
+        # Verify
+        assert parsed.change_name == original.change_name
+        assert len(parsed.all_tasks) == len(original.all_tasks)
+        assert parsed.all_tasks["01-TEST"].name == task.name
+        assert parsed.all_tasks["01-TEST"].estimated_tokens == task.estimated_tokens
+
+
+class TestUpdateTaskStatusYaml:
+    """Tests for update_task_status_yaml function."""
+
+    def test_update_task_status_basic(self) -> None:
+        """Test updating task status in YAML."""
+        content = """version: "1.0"
+change: test
+tasks:
+  01-SETUP:
+    wave: 0
+    name: Setup
+    status: idle
+"""
+
+        updated = update_task_status_yaml(content, "01-SETUP", TaskStatus.IN_PROGRESS)
+
+        assert "status: in_progress" in updated
 
     def test_update_task_status_with_log(self) -> None:
         """Test updating task status with execution log."""
-        content = """# Tasks - test
-
-## 概览
-
-| Wave | Task-ID | 预估 | 状态 | 依赖 |
-|------|---------|------|------|------|
-| 0 | 01-SETUP | 30k | 🟦 空闲 | - |
-
-## 任务详情
-
-### 01-SETUP - Project Setup
-**预估上下文**: ~30k tokens
-
-**Checklist**:
-- [x] Done
-
+        content = """version: "1.0"
+change: test
+tasks:
+  01-SETUP:
+    wave: 0
+    name: Setup
+    status: idle
 """
 
         log = {"completed_at": "2024-01-15T10:40:00Z", "subagent_id": "agent_123"}
-        updated = update_task_status(content, "01-SETUP", TaskStatus.COMPLETED, log=log)
+        updated = update_task_status_yaml(content, "01-SETUP", TaskStatus.COMPLETED, log=log)
 
-        assert "🟩" in updated
-        assert "执行日志" in updated
-        assert "2024-01-15T10:40:00Z" in updated
+        assert "status: completed" in updated
+        assert "completed_at" in updated
         assert "agent_123" in updated
 
     def test_update_task_status_not_found(self) -> None:
         """Test updating status for non-existent task."""
-        content = """# Tasks - test
-
-## 概览
-
-| Wave | Task-ID | 预估 | 状态 | 依赖 |
-|------|---------|------|------|------|
-| 0 | 01-SETUP | 30k | 🟦 空闲 | - |
+        content = """version: "1.0"
+change: test
+tasks:
+  01-SETUP:
+    wave: 0
+    name: Setup
 """
 
-        with pytest.raises(ValueError, match="概览表中未找到任务"):
-            update_task_status(content, "99-NONE", TaskStatus.COMPLETED)
+        with pytest.raises(ValueError, match="未找到任务"):
+            update_task_status_yaml(content, "99-NONE", TaskStatus.COMPLETED)
 
 
-class TestUpdateChecklistItem:
-    """Tests for update_checklist_item function."""
+class TestUpdateChecklistItemYaml:
+    """Tests for update_checklist_item_yaml function."""
 
     def test_update_checklist_item_check(self) -> None:
         """Test checking a checklist item."""
-        content = """# Tasks - test
-
-## 概览
-
-| Wave | Task-ID | 预估 | 状态 | 依赖 |
-|------|---------|------|------|------|
-| 0 | 01-SETUP | 30k | 🟦 空闲 | - |
-
-## 任务详情
-
-### 01-SETUP - Project Setup
-**Checklist**:
-- [ ] First item
-- [ ] Second item
-- [ ] Third item
+        content = """version: "1.0"
+change: test
+tasks:
+  01-SETUP:
+    wave: 0
+    name: Setup
+    checklist:
+      - First item
+      - Second item
+      - Third item
 """
 
-        updated = update_checklist_item(content, "01-SETUP", 1, checked=True)
+        updated = update_checklist_item_yaml(content, "01-SETUP", 1, checked=True)
 
-        lines = updated.split("\n")
-        checklist_lines = [l for l in lines if "[ ]" in l or "[x]" in l]
-
-        assert "[ ] First item" in updated
-        assert "[x] Second item" in updated
-        assert "[ ] Third item" in updated
-
-    def test_update_checklist_item_uncheck(self) -> None:
-        """Test unchecking a checklist item."""
-        content = """# Tasks - test
-
-## 概览
-
-| Wave | Task-ID | 预估 | 状态 | 依赖 |
-|------|---------|------|------|------|
-| 0 | 01-SETUP | 30k | 🟦 空闲 | - |
-
-## 任务详情
-
-### 01-SETUP - Project Setup
-**Checklist**:
-- [x] First item
-- [x] Second item
-"""
-
-        updated = update_checklist_item(content, "01-SETUP", 0, checked=False)
-
-        assert "[ ] First item" in updated
-        assert "[x] Second item" in updated
+        assert "done: true" in updated
 
     def test_update_checklist_item_task_not_found(self) -> None:
         """Test updating checklist for non-existent task."""
-        content = """# Tasks - test
-
-## 概览
-
-| Wave | Task-ID | 预估 | 状态 | 依赖 |
-|------|---------|------|------|------|
-| 0 | 01-SETUP | 30k | 🟦 空闲 | - |
+        content = """version: "1.0"
+change: test
+tasks:
+  01-SETUP:
+    wave: 0
+    name: Setup
 """
 
-        with pytest.raises(ValueError, match="在内容中未找到任务"):
-            update_checklist_item(content, "99-NONE", 0, checked=True)
-
-    def test_update_checklist_item_no_checklist(self) -> None:
-        """Test updating checklist when task has no checklist."""
-        content = """# Tasks - test
-
-## 概览
-
-| Wave | Task-ID | 预估 | 状态 | 依赖 |
-|------|---------|------|------|------|
-| 0 | 01-SETUP | 30k | 🟦 空闲 | - |
-
-## 任务详情
-
-### 01-SETUP - Project Setup
-**预估上下文**: ~30k tokens
-"""
-
-        with pytest.raises(ValueError, match="未找到任务.*的检查清单"):
-            update_checklist_item(content, "01-SETUP", 0, checked=True)
+        with pytest.raises(ValueError, match="未找到任务"):
+            update_checklist_item_yaml(content, "99-NONE", 0, checked=True)
 
     def test_update_checklist_item_index_out_of_range(self) -> None:
         """Test updating checklist with invalid index."""
-        content = """# Tasks - test
-
-## 概览
-
-| Wave | Task-ID | 预估 | 状态 | 依赖 |
-|------|---------|------|------|------|
-| 0 | 01-SETUP | 30k | 🟦 空闲 | - |
-
-## 任务详情
-
-### 01-SETUP - Project Setup
-**Checklist**:
-- [ ] First item
+        content = """version: "1.0"
+change: test
+tasks:
+  01-SETUP:
+    wave: 0
+    name: Setup
+    checklist:
+      - First item
 """
 
         with pytest.raises(ValueError, match="索引.*超出范围"):
-            update_checklist_item(content, "01-SETUP", 5, checked=True)
+            update_checklist_item_yaml(content, "01-SETUP", 5, checked=True)

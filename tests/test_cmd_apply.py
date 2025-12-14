@@ -60,65 +60,49 @@ class TestApplyCommand:
         os.chdir(self.original_cwd)
         shutil.rmtree(self.temp_dir, ignore_errors=True)
 
-    def _create_tasks_md(self, content: str = None) -> Path:
-        """Helper to create tasks.md with task definitions."""
+    def _create_tasks_yaml(self, content: str = None) -> Path:
+        """Helper to create tasks.yaml with task definitions."""
         if content is None:
-            content = """# Tasks - add-feature
-
-## 概览
-
-| Wave | Task-ID | 预估 | 状态 | 依赖 |
-|------|---------|------|------|------|
-| 0 | 01-SETUP | 30k | 🟦 空闲 | - |
-| 1 | 02-MODEL | 50k | 🟦 空闲 | 01-SETUP |
-| 1 | 03-API | 45k | 🟦 空闲 | 01-SETUP |
-
-## 任务详情
-
-### 01-SETUP - Project Setup
-**预估上下文**: ~30k tokens
-**状态**: 🟦 空闲
-**依赖**: 无
-
-**必读文档**:
-- docs/plan/spec.md
-
-**核心代码入口**:
-- src/config/
-
-**Checklist**:
-- [ ] 创建配置文件
-- [ ] 添加环境变量
-
----
-
-### 02-MODEL - Data Model
-**预估上下文**: ~50k tokens
-**状态**: 🟦 空闲
-**依赖**: 01-SETUP
-
-**必读文档**:
-- docs/plan/spec.md
-
-**核心代码入口**:
-- src/models/
-
-**Checklist**:
-- [ ] 创建数据模型
-- [ ] 添加验证逻辑
-
----
-
-### 03-API - API Endpoints
-**预估上下文**: ~45k tokens
-**状态**: 🟦 空闲
-**依赖**: 01-SETUP
-
-**Checklist**:
-- [ ] 创建 API 路由
-- [ ] 添加认证中间件
+            content = """version: "1.0"
+change: add-feature
+tasks:
+  01-SETUP:
+    wave: 0
+    name: Project Setup
+    tokens: 30k
+    status: idle
+    deps: []
+    docs:
+      - docs/plan/spec.md
+    code:
+      - src/config/
+    checklist:
+      - 创建配置文件
+      - 添加环境变量
+  02-MODEL:
+    wave: 1
+    name: Data Model
+    tokens: 50k
+    status: idle
+    deps: [01-SETUP]
+    docs:
+      - docs/plan/spec.md
+    code:
+      - src/models/
+    checklist:
+      - 创建数据模型
+      - 添加验证逻辑
+  03-API:
+    wave: 1
+    name: API Endpoints
+    tokens: 45k
+    status: idle
+    deps: [01-SETUP]
+    checklist:
+      - 创建 API 路由
+      - 添加认证中间件
 """
-        tasks_path = self.change_dir / "tasks.md"
+        tasks_path = self.change_dir / "tasks.yaml"
         tasks_path.write_text(content, encoding="utf-8")
         return tasks_path
 
@@ -165,18 +149,18 @@ class TestApplyCommand:
         assert result.exit_code == 1
         assert "未找到" in result.stdout or "not found" in result.stdout
 
-    def test_apply_without_tasks_md(self) -> None:
-        """Test apply command fails when tasks.md doesn't exist."""
+    def test_apply_without_tasks_yaml(self) -> None:
+        """Test apply command fails when tasks.yaml doesn't exist."""
         self._create_status()
 
         os.chdir(str(self.project_root))
         result = runner.invoke(app, ["apply", self.change_name])
         assert result.exit_code == 1
-        assert "tasks.md" in result.stdout
+        assert "tasks.yaml" in result.stdout or "tasks" in result.stdout
 
     def test_apply_dry_run(self) -> None:
         """Test apply command dry run mode shows execution plan."""
-        self._create_tasks_md()
+        self._create_tasks_yaml()
         self._create_status()
 
         os.chdir(str(self.project_root))
@@ -189,27 +173,21 @@ class TestApplyCommand:
 
     def test_apply_with_no_pending_tasks(self) -> None:
         """Test apply command when all tasks are completed."""
-        # Create tasks.md with all completed tasks
-        tasks_content = """# Tasks - add-feature
-
-## 概览
-
-| Wave | Task-ID | 预估 | 状态 | 依赖 |
-|------|---------|------|------|------|
-| 0 | 01-SETUP | 30k | 🟩 完成 | - |
-
-## 任务详情
-
-### 01-SETUP - Project Setup
-**预估上下文**: ~30k tokens
-**状态**: 🟩 完成
-**依赖**: 无
-
-**Checklist**:
-- [x] 创建配置文件
-- [x] 添加环境变量
+        # Create tasks.yaml with all completed tasks
+        tasks_content = """version: "1.0"
+change: add-feature
+tasks:
+  01-SETUP:
+    wave: 0
+    name: Project Setup
+    tokens: 30k
+    status: completed
+    deps: []
+    checklist:
+      - 创建配置文件
+      - 添加环境变量
 """
-        self._create_tasks_md(tasks_content)
+        self._create_tasks_yaml(tasks_content)
         self._create_status()
 
         os.chdir(str(self.project_root))
@@ -220,7 +198,7 @@ class TestApplyCommand:
 
     def test_apply_displays_task_summary(self) -> None:
         """Test apply command displays task summary."""
-        self._create_tasks_md()
+        self._create_tasks_yaml()
         self._create_status()
 
         os.chdir(str(self.project_root))
@@ -234,7 +212,7 @@ class TestApplyCommand:
 
     def test_apply_with_max_concurrent_option(self) -> None:
         """Test apply command accepts max-concurrent option."""
-        self._create_tasks_md()
+        self._create_tasks_yaml()
         self._create_status()
 
         os.chdir(str(self.project_root))
@@ -246,7 +224,7 @@ class TestApplyCommand:
 
     def test_apply_without_explicit_change_name(self) -> None:
         """Test apply command uses current active change when name not provided."""
-        self._create_tasks_md()
+        self._create_tasks_yaml()
         self._create_status()
 
         os.chdir(str(self.project_root))
@@ -282,27 +260,21 @@ class TestApplyExecution:
         os.chdir(self.original_cwd)
         shutil.rmtree(self.temp_dir, ignore_errors=True)
 
-    def _create_tasks_md(self) -> Path:
-        """Helper to create tasks.md."""
-        content = """# Tasks - add-feature
-
-## 概览
-
-| Wave | Task-ID | 预估 | 状态 | 依赖 |
-|------|---------|------|------|------|
-| 0 | 01-SETUP | 30k | 🟦 空闲 | - |
-
-## 任务详情
-
-### 01-SETUP - Project Setup
-**预估上下文**: ~30k tokens
-**状态**: 🟦 空闲
-**依赖**: 无
-
-**Checklist**:
-- [ ] 创建配置文件
+    def _create_tasks_yaml(self) -> Path:
+        """Helper to create tasks.yaml."""
+        content = """version: "1.0"
+change: add-feature
+tasks:
+  01-SETUP:
+    wave: 0
+    name: Project Setup
+    tokens: 30k
+    status: idle
+    deps: []
+    checklist:
+      - 创建配置文件
 """
-        tasks_path = self.change_dir / "tasks.md"
+        tasks_path = self.change_dir / "tasks.yaml"
         tasks_path.write_text(content, encoding="utf-8")
         return tasks_path
 
@@ -329,7 +301,7 @@ class TestApplyExecution:
     @patch("cc_spec.commands.apply.SubAgentExecutor")
     def test_apply_successful_execution(self, mock_executor_class) -> None:
         """Test apply command with successful task execution."""
-        self._create_tasks_md()
+        self._create_tasks_yaml()
         status_path = self._create_status()
 
         # Mock executor
@@ -383,7 +355,7 @@ class TestApplyExecution:
     @patch("cc_spec.commands.apply.SubAgentExecutor")
     def test_apply_failed_execution(self, mock_executor_class) -> None:
         """Test apply command with failed task execution."""
-        self._create_tasks_md()
+        self._create_tasks_yaml()
         status_path = self._create_status()
 
         # Mock executor

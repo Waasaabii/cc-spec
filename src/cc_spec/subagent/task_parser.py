@@ -1,18 +1,23 @@
-"""cc-spec 的 tasks.md 解析模块。
+"""cc-spec 的任务解析模块。
 
-本模块用于解析 tasks.md 文件，提取任务信息，
+本模块用于解析 tasks.yaml 文件，提取任务信息，
 并在规格驱动工作流中管理任务状态与检查清单。
+
+v1.1: 新增 tasks.yaml 格式支持。
+v1.2: 移除 tasks.md 支持，只保留 tasks.yaml。
 """
 
 import re
 from dataclasses import dataclass, field
-from datetime import datetime
-from enum import Enum
+from pathlib import Path
+from typing import Any
 
-from cc_spec.core.scoring import CheckItem, parse_checklist
+import yaml
+
+from cc_spec.core.scoring import CheckItem, CheckStatus, parse_checklist
 
 
-class TaskStatus(Enum):
+class TaskStatus:
     """工作流中的任务状态。"""
 
     IDLE = "idle"           # 🟦 任务尚未开始
@@ -22,17 +27,14 @@ class TaskStatus(Enum):
     TIMEOUT = "timeout"      # ⏱️ 执行超时
 
 
-# 解析时使用的状态图标映射
-STATUS_ICONS = {
-    "🟦": TaskStatus.IDLE,
-    "🟨": TaskStatus.IN_PROGRESS,
-    "🟩": TaskStatus.COMPLETED,
-    "🟥": TaskStatus.FAILED,
-    "⏱️": TaskStatus.TIMEOUT,
+# 用于状态转换的映射
+STATUS_MAP = {
+    "idle": TaskStatus.IDLE,
+    "in_progress": TaskStatus.IN_PROGRESS,
+    "completed": TaskStatus.COMPLETED,
+    "failed": TaskStatus.FAILED,
+    "timeout": TaskStatus.TIMEOUT,
 }
-
-# 用于更新时的反向映射
-STATUS_TO_ICON = {v: k for k, v in STATUS_ICONS.items()}
 
 
 @dataclass
@@ -71,7 +73,7 @@ class Task:
     task_id: str
     name: str
     wave: int
-    status: TaskStatus
+    status: str
     dependencies: list[str] = field(default_factory=list)
     estimated_tokens: int = 0
     required_docs: list[str] = field(default_factory=list)
@@ -96,7 +98,7 @@ class Wave:
 
 @dataclass
 class TasksDocument:
-    """解析后的完整 tasks.md 文档。
+    """解析后的完整 tasks.yaml 文档。
 
     属性：
         change_name: 该任务列表所属的变更名称
@@ -109,66 +111,71 @@ class TasksDocument:
     all_tasks: dict[str, Task] = field(default_factory=dict)
 
 
-def parse_tasks_md(content: str) -> TasksDocument:
-    """解析 tasks.md 内容并提取所有任务信息。
+# ============================================================================
+# YAML 格式解析
+# ============================================================================
+
+TASKS_YAML_VERSION = "1.0"
+
+
+def parse_tasks_yaml(
+    content: str,
+    cc_spec_dir: Path | None = None,
+) -> TasksDocument:
+    """解析 tasks.yaml 内容并提取所有任务信息。
+
+    tasks.yaml 格式紧凑，支持 $templates/ 引用。
 
     参数：
-        content: tasks.md 的原始 Markdown 内容
+        content: tasks.yaml 的原始 YAML 内容
+        cc_spec_dir: .cc-spec 目录路径（用于解析 $templates/ 引用）
 
     返回：
         包含所有解析结果的 TasksDocument 对象
 
     异常：
-        ValueError: tasks.md 格式无效时抛出
+        ValueError: tasks.yaml 格式无效时抛出
     """
-    # 从标题中提取变更名称：# Tasks - {change_name} / # 任务 - {change_name}
-    title_match = re.search(r"^#\s+(?:Tasks|任务)\s*[-:：]\s+(.+)$", content, re.MULTILINE)
-    if not title_match:
-        raise ValueError("tasks.md 标题格式无效：需要 `# Tasks - {change-name}` 或 `# 任务 - {change-name}`")
+    try:
+        data = yaml.safe_load(content)
+    except yaml.YAMLError as e:
+        raise ValueError(f"tasks.yaml 格式无效：{e}")
 
-    change_name = title_match.group(1).strip()
+    if not isinstance(data, dict):
+        raise ValueError("tasks.yaml 必须是有效的 YAML 对象")
 
-    # 解析概览表获取基础任务信息
-    overview_tasks = _parse_overview_table(content)
+    # 提取元信息
+    version = data.get("version", "1.0")
+    if version != TASKS_YAML_VERSION:
+        # 暂时只支持 1.0 版本，但允许向后兼容
+        pass
 
-    # 根据概览信息创建 Task 对象
+    change_name = data.get("change", "")
+    if not change_name:
+        raise ValueError("tasks.yaml 必须包含 'change' 字段")
+
+    tasks_data = data.get("tasks", {})
+    if not isinstance(tasks_data, dict):
+        raise ValueError("tasks.yaml 的 'tasks' 字段必须是对象")
+
+    # 解析任务
     all_tasks: dict[str, Task] = {}
     waves_dict: dict[int, list[Task]] = {}
 
-    for task_data in overview_tasks:
-        task_id = task_data["task_id"]
-        wave_num = task_data["wave"]
-        status = task_data["status"]
-        dependencies = task_data["dependencies"]
-        estimated_tokens = task_data["estimated_tokens"]
-
-        # 解析任务详情区块
-        task_detail = _parse_task_detail(content, task_id)
-
-        # 构建 Task 对象
-        task = Task(
-            task_id=task_id,
-            name=task_detail.get("name", ""),
-            wave=wave_num,
-            status=status,
-            dependencies=dependencies,
-            estimated_tokens=estimated_tokens,
-            required_docs=task_detail.get("required_docs", []),
-            code_entry_points=task_detail.get("code_entry_points", []),
-            checklist_items=task_detail.get("checklist_items", []),
-            execution_log=task_detail.get("execution_log"),
-            profile=task_detail.get("profile"),  # v1.1：SubAgent Profile（配置）
-        )
-
+    for task_id, task_info in tasks_data.items():
+        task = _parse_yaml_task(task_id, task_info, cc_spec_dir)
         all_tasks[task_id] = task
 
-        # 按 wave 分组
+        wave_num = task.wave
         if wave_num not in waves_dict:
             waves_dict[wave_num] = []
         waves_dict[wave_num].append(task)
 
     # 创建 Wave 对象
-    waves = [Wave(wave_number=num, tasks=tasks) for num, tasks in sorted(waves_dict.items())]
+    waves = [
+        Wave(wave_number=num, tasks=tasks)
+        for num, tasks in sorted(waves_dict.items())
+    ]
 
     return TasksDocument(
         change_name=change_name,
@@ -177,187 +184,265 @@ def parse_tasks_md(content: str) -> TasksDocument:
     )
 
 
-def _parse_overview_table(content: str) -> list[dict]:
-    """解析概览表以提取基础任务信息。
+def _parse_yaml_task(
+    task_id: str,
+    task_info: dict[str, Any],
+    cc_spec_dir: Path | None = None,
+) -> Task:
+    """解析单个 YAML 格式的任务。
 
     参数：
-        content: 完整的 tasks.md 内容
+        task_id: 任务 ID
+        task_info: 任务信息字典
+        cc_spec_dir: .cc-spec 目录路径
 
     返回：
-        包含 task_id、wave、status、dependencies、estimated_tokens 的字典列表
+        Task 对象
     """
-    tasks: list[dict] = []
+    # 解析基本信息
+    wave = task_info.get("wave", 0)
+    name = task_info.get("name", task_id)
+    status_str = task_info.get("status", "idle")
 
-    # 找到概览表区块
-    table_match = re.search(
-        r"##\s+概览\s*\n\s*\|[^\n]+\|[^\n]+\n\s*\|[-:\s|]+\|\s*\n((?:\|[^\n]+\n?)+)",
-        content,
-        re.MULTILINE,
+    # 解析状态
+    status = STATUS_MAP.get(status_str, TaskStatus.IDLE)
+
+    # 解析预估 token 数
+    tokens_str = task_info.get("tokens", "0")
+    estimated_tokens = _parse_tokens_str(tokens_str)
+
+    # 解析依赖
+    deps = task_info.get("deps", [])
+    if isinstance(deps, str):
+        deps = [d.strip() for d in deps.split(",") if d.strip()]
+
+    # 解析文档和代码入口
+    docs = task_info.get("docs", [])
+    if isinstance(docs, str):
+        docs = [docs]
+
+    code = task_info.get("code", [])
+    if isinstance(code, str):
+        code = [code]
+
+    # 解析检查清单（支持 $templates/ 引用）
+    checklist_items = _parse_yaml_checklist(
+        task_info.get("checklist", []),
+        cc_spec_dir,
     )
 
-    if not table_match:
-        return tasks
-
-    table_rows = table_match.group(1).strip().split("\n")
-
-    for row in table_rows:
-        # 解析表格行：| Wave | Task-ID | 预估 | 状态 | 依赖 |
-        parts = [p.strip() for p in row.split("|")]
-        if len(parts) < 6:
-            continue
-
-        # 提取各列值（split 后第一个元素为空，需要跳过）
-        wave_str = parts[1]
-        task_id = parts[2]
-        estimated_str = parts[3]
-        status_str = parts[4]
-        dependencies_str = parts[5]
-
-        # 解析 wave 编号
-        try:
-            wave_num = int(wave_str)
-        except ValueError:
-            continue
-
-        # 解析预估 token 数（例如 "30k" -> 30000）
-        estimated_tokens = 0
-        if estimated_str:
-            token_match = re.search(r"(\d+)k?", estimated_str.lower())
-            if token_match:
-                estimated_tokens = int(token_match.group(1))
-                if "k" in estimated_str.lower():
-                    estimated_tokens *= 1000
-
-        # 根据图标解析状态
-        status = TaskStatus.IDLE  # 默认
-        for icon, status_enum in STATUS_ICONS.items():
-            if icon in status_str:
-                status = status_enum
-                break
-
-        # 解析依赖项
-        dependencies: list[str] = []
-        if dependencies_str and dependencies_str != "-" and "无" not in dependencies_str:
-            # 以逗号分隔并清理空白
-            dep_parts = [d.strip() for d in dependencies_str.split(",")]
-            dependencies = [d for d in dep_parts if d and d != "-"]
-
-        tasks.append({
-            "task_id": task_id,
-            "wave": wave_num,
-            "status": status,
-            "dependencies": dependencies,
-            "estimated_tokens": estimated_tokens,
-        })
-
-    return tasks
-
-
-def _parse_task_detail(content: str, task_id: str) -> dict:
-    """解析任务详情区块，提取完整的任务信息。
-
-    参数：
-        content: 完整的 tasks.md 内容
-        task_id: 要查找并解析的任务 ID
-
-    返回：
-        包含任务详情的字典（name、required_docs、code_entry_points、checklist_items、execution_log、profile）
-    """
-    result: dict = {
-        "name": "",
-        "required_docs": [],
-        "code_entry_points": [],
-        "checklist_items": [],
-        "execution_log": None,
-        "profile": None,  # v1.1：SubAgent Profile（配置）
-    }
-
-    # 用于匹配任务标题的模式：### XX-NAME - 描述 / ### Task: XX-NAME / ### 任务：XX-NAME
-    # 捕获内容直到下一个 ### 或 ---
-    pattern = re.compile(
-        rf"^###\s+(?:(?:Task|任务)[:：]\s+)?{re.escape(task_id)}\s*-\s*(.+?)\s*\n"
-        r"(.*?)(?=^###\s+|^---|\Z)",
-        re.MULTILINE | re.DOTALL,
-    )
-
-    match = pattern.search(content)
-    if not match:
-        return result
-
-    result["name"] = match.group(1).strip()
-    section_content = match.group(2)
-
-    # 解析必读文档
-    docs_match = re.search(
-        r"\*\*必读文档\*\*:?\s*\n((?:\s*-\s+.+\n?)+)",
-        section_content,
-        re.MULTILINE,
-    )
-    if docs_match:
-        docs_text = docs_match.group(1)
-        result["required_docs"] = [
-            line.strip("- ").strip()
-            for line in docs_text.split("\n")
-            if line.strip().startswith("-")
-        ]
-
-    # 解析核心代码入口
-    code_match = re.search(
-        r"\*\*核心代码入口\*\*:?\s*\n((?:\s*-\s+.+\n?)+)",
-        section_content,
-        re.MULTILINE,
-    )
-    if code_match:
-        code_text = code_match.group(1)
-        result["code_entry_points"] = [
-            line.strip("- ").strip()
-            for line in code_text.split("\n")
-            if line.strip().startswith("-")
-        ]
-
-    # 解析 Profile（v1.1）
-    profile_match = re.search(
-        r"\*\*(?:Profile|配置)\*\*[:：]?\s*(.+?)(?:\n|$)",
-        section_content,
-        re.MULTILINE,
-    )
-    if profile_match:
-        profile = profile_match.group(1).strip()
-        if profile and profile != "-" and profile.lower() not in {"default", "默认"}:
-            result["profile"] = profile
-
-    # 解析检查清单项
-    checklist_match = re.search(
-        r"\*\*(?:Checklist|检查清单)\*\*[:：]?\s*\n((?:\s*[-*]\s+\[[ xX\-]\].+\n?)+)",
-        section_content,
-        re.MULTILINE,
-    )
-    if checklist_match:
-        checklist_content = checklist_match.group(1)
-        result["checklist_items"] = parse_checklist(checklist_content)
+    # 解析 Profile
+    profile = task_info.get("profile")
 
     # 解析执行日志
-    log_match = re.search(
-        r"\*\*执行日志\*\*[:：]?\s*\n"
-        r"(?:-\s+完成时间[:：]\s*(.+?)\s*\n)?"
-        r"(?:-\s+SubAgent\s+(?:ID|标识)[:：]\s*(.+?)\s*\n)?",
-        section_content,
-        re.MULTILINE,
-    )
-    if log_match:
-        completed_at = log_match.group(1).strip() if log_match.group(1) else None
-        subagent_id = log_match.group(2).strip() if log_match.group(2) else None
+    execution_log = None
+    log_info = task_info.get("log")
+    if log_info and isinstance(log_info, dict):
+        execution_log = ExecutionLog(
+            completed_at=log_info.get("completed_at"),
+            subagent_id=log_info.get("subagent_id"),
+            notes=log_info.get("notes"),
+        )
 
-        if completed_at or subagent_id:
-            result["execution_log"] = ExecutionLog(
-                completed_at=completed_at,
-                subagent_id=subagent_id,
+    return Task(
+        task_id=task_id,
+        name=name,
+        wave=wave,
+        status=status,
+        dependencies=deps,
+        estimated_tokens=estimated_tokens,
+        required_docs=docs,
+        code_entry_points=code,
+        checklist_items=checklist_items,
+        execution_log=execution_log,
+        profile=profile,
+    )
+
+
+def _parse_tokens_str(tokens_str: str | int) -> int:
+    """解析 token 数量字符串。
+
+    支持格式：30k, 30K, 30000, 30
+
+    参数：
+        tokens_str: token 数量字符串或整数
+
+    返回：
+        token 数量（整数）
+    """
+    if isinstance(tokens_str, int):
+        return tokens_str
+
+    tokens_str = str(tokens_str).lower().strip()
+    if not tokens_str:
+        return 0
+
+    match = re.search(r"(\d+)k?", tokens_str)
+    if match:
+        value = int(match.group(1))
+        if "k" in tokens_str:
+            value *= 1000
+        return value
+
+    return 0
+
+
+def _parse_yaml_checklist(
+    checklist: list | str,
+    cc_spec_dir: Path | None = None,
+) -> list[CheckItem]:
+    """解析 YAML 格式的检查清单。
+
+    支持：
+    - 内联列表：["item1", "item2"]
+    - 模板引用：$templates/setup-checklist
+
+    参数：
+        checklist: 检查清单数据
+        cc_spec_dir: .cc-spec 目录路径
+
+    返回：
+        CheckItem 列表
+    """
+    if not checklist:
+        return []
+
+    # 处理模板引用
+    if isinstance(checklist, str):
+        if checklist.startswith("$templates/"):
+            if cc_spec_dir is None:
+                # 无法解析模板引用，返回空列表
+                return []
+
+            # 使用 templates.py 中的解析函数
+            from cc_spec.core.templates import TemplateError, resolve_template_ref
+
+            try:
+                template_content = resolve_template_ref(checklist, cc_spec_dir)
+                # 解析模板内容中的检查清单
+                return parse_checklist(template_content)
+            except TemplateError:
+                return []
+        else:
+            # 单个字符串项
+            return [
+                CheckItem(
+                    description=checklist,
+                    status=CheckStatus.FAILED,  # FAILED 表示未完成
+                    score=0,
+                )
+            ]
+
+    # 处理列表
+    items: list[CheckItem] = []
+    for item in checklist:
+        if isinstance(item, str):
+            # 检查是否为 Markdown 检查清单格式
+            if item.strip().startswith("- ["):
+                items.extend(parse_checklist(item))
+            else:
+                items.append(
+                    CheckItem(
+                        description=item,
+                        status=CheckStatus.FAILED,  # FAILED 表示未完成
+                        score=0,
+                    )
+                )
+        elif isinstance(item, dict):
+            # 结构化格式：{desc: "xxx", done: true}
+            desc = item.get("desc", item.get("description", ""))
+            done = item.get("done", item.get("checked", False))
+            items.append(
+                CheckItem(
+                    description=desc,
+                    status=CheckStatus.PASSED if done else CheckStatus.FAILED,
+                    score=10 if done else 0,
+                )
             )
 
-    return result
+    return items
 
 
+def generate_tasks_yaml(doc: TasksDocument) -> str:
+    """从 TasksDocument 生成 tasks.yaml 内容。
+
+    参数：
+        doc: TasksDocument 对象
+
+    返回：
+        YAML 格式的字符串
+    """
+    data: dict[str, Any] = {
+        "version": TASKS_YAML_VERSION,
+        "change": doc.change_name,
+        "tasks": {},
+    }
+
+    for task_id, task in doc.all_tasks.items():
+        task_data: dict[str, Any] = {
+            "wave": task.wave,
+            "name": task.name,
+        }
+
+        # 状态（非默认时添加）
+        if task.status != TaskStatus.IDLE:
+            task_data["status"] = task.status
+
+        # token 预估（使用紧凑格式）
+        if task.estimated_tokens > 0:
+            if task.estimated_tokens >= 1000:
+                task_data["tokens"] = f"{task.estimated_tokens // 1000}k"
+            else:
+                task_data["tokens"] = task.estimated_tokens
+
+        # 依赖
+        if task.dependencies:
+            task_data["deps"] = task.dependencies
+
+        # 文档
+        if task.required_docs:
+            task_data["docs"] = task.required_docs
+
+        # 代码入口
+        if task.code_entry_points:
+            task_data["code"] = task.code_entry_points
+
+        # 检查清单（内联格式）
+        if task.checklist_items:
+            task_data["checklist"] = [
+                item.description for item in task.checklist_items
+            ]
+
+        # Profile
+        if task.profile:
+            task_data["profile"] = task.profile
+
+        # 执行日志
+        if task.execution_log:
+            log_data: dict[str, Any] = {}
+            if task.execution_log.completed_at:
+                log_data["completed_at"] = task.execution_log.completed_at
+            if task.execution_log.subagent_id:
+                log_data["subagent_id"] = task.execution_log.subagent_id
+            if task.execution_log.notes:
+                log_data["notes"] = task.execution_log.notes
+            if log_data:
+                task_data["log"] = log_data
+
+        data["tasks"][task_id] = task_data
+
+    # 生成 YAML（使用中文友好的选项）
+    return yaml.dump(
+        data,
+        allow_unicode=True,
+        default_flow_style=False,
+        sort_keys=False,
+    )
+
+
+# ============================================================================
 # 工具函数
+# ============================================================================
 
 def get_tasks_by_wave(doc: TasksDocument, wave_num: int) -> list[Task]:
     """获取指定 wave 中的所有任务。
@@ -376,13 +461,13 @@ def get_tasks_by_wave(doc: TasksDocument, wave_num: int) -> list[Task]:
 
 
 def get_pending_tasks(doc: TasksDocument) -> list[Task]:
-    """获取所有待执行任务（status=IDLE）。
+    """获取所有待执行任务（status=idle）。
 
     参数：
         doc: 要查询的 TasksDocument
 
     返回：
-        状态为 IDLE 的任务列表
+        状态为 idle 的任务列表
     """
     return [task for task in doc.all_tasks.values() if task.status == TaskStatus.IDLE]
 
@@ -463,150 +548,93 @@ def validate_dependencies(doc: TasksDocument) -> tuple[bool, list[str]]:
     return is_valid, errors
 
 
-# 更新函数
-
-def update_task_status(
+def update_task_status_yaml(
     content: str,
     task_id: str,
-    new_status: TaskStatus,
+    new_status: str,
     log: dict | None = None,
 ) -> str:
-    """更新 tasks.md 内容中的任务状态。
-
-    会同时更新概览表，以及（若存在）任务详情区块。
+    """更新 tasks.yaml 内容中的任务状态。
 
     参数：
-        content: 原始 tasks.md 内容
+        content: 原始 tasks.yaml 内容
         task_id: 要更新的任务 ID
         new_status: 要设置的新状态
         log: 可选的执行日志字典（键：completed_at、subagent_id、notes）
 
     返回：
-        更新后的 tasks.md 内容
+        更新后的 tasks.yaml 内容
 
     异常：
         ValueError: 内容中找不到任务时抛出
     """
-    new_icon = STATUS_TO_ICON.get(new_status, "🟦")
+    data = yaml.safe_load(content)
 
-    # 更新概览表
-    # 匹配该任务的表格行
-    table_pattern = re.compile(
-        rf"(\|\s*\d+\s*\|\s*{re.escape(task_id)}\s*\|[^|]*\|)\s*([🟦🟨🟩🟥⏱️])\s*([^|]*\|[^|]*\|)",
-        re.MULTILINE,
+    if "tasks" not in data or task_id not in data["tasks"]:
+        raise ValueError(f"tasks.yaml 中未找到任务 {task_id}")
+
+    # 更新状态
+    data["tasks"][task_id]["status"] = new_status
+
+    # 更新日志
+    if log and new_status == TaskStatus.COMPLETED:
+        data["tasks"][task_id]["log"] = log
+
+    return yaml.dump(
+        data,
+        allow_unicode=True,
+        default_flow_style=False,
+        sort_keys=False,
     )
 
-    match = table_pattern.search(content)
-    if not match:
-        raise ValueError(f"概览表中未找到任务 {task_id}")
 
-    # 替换表格中的状态图标
-    replacement = rf"\g<1> {new_icon} \g<3>"
-    content = table_pattern.sub(replacement, content, count=1)
-
-    # 若提供 log，则在任务详情中更新执行日志
-    if log and new_status == TaskStatus.COMPLETED:
-        # 查找任务详情区块
-        detail_pattern = re.compile(
-            rf"(^###\s+(?:(?:Task|任务)[:：]\s+)?{re.escape(task_id)}\s*-\s*.+?$.*?)(\*\*执行日志\*\*[:：]?\s*\n(?:.*?)(?=\n\n|^###|^---|\Z))",
-            re.MULTILINE | re.DOTALL,
-        )
-
-        detail_match = detail_pattern.search(content)
-        if detail_match:
-            # 替换已有执行日志
-            completed_at = log.get("completed_at", datetime.now().isoformat())
-            subagent_id = log.get("subagent_id", "")
-
-            log_text = f"**执行日志**:\n- 完成时间: {completed_at}\n- SubAgent 标识: {subagent_id}\n"
-
-            content = detail_pattern.sub(rf"\g<1>{log_text}", content, count=1)
-        else:
-            # 若不存在执行日志则新增
-            section_pattern = re.compile(
-                rf"(^###\s+(?:(?:Task|任务)[:：]\s+)?{re.escape(task_id)}\s*-\s*.+?$.*?)(\n\n|^###|^---|\Z)",
-                re.MULTILINE | re.DOTALL,
-            )
-
-            section_match = section_pattern.search(content)
-            if section_match:
-                completed_at = log.get("completed_at", datetime.now().isoformat())
-                subagent_id = log.get("subagent_id", "")
-
-                log_text = f"\n**执行日志**:\n- 完成时间: {completed_at}\n- SubAgent 标识: {subagent_id}\n\n"
-
-                content = section_pattern.sub(rf"\g<1>{log_text}\g<2>", content, count=1)
-
-    return content
-
-
-def update_checklist_item(
+def update_checklist_item_yaml(
     content: str,
     task_id: str,
     item_index: int,
     checked: bool,
 ) -> str:
-    """更新 tasks.md 中某个检查清单项的勾选状态。
+    """更新 tasks.yaml 中某个检查清单项的勾选状态。
 
     参数：
-        content: 原始 tasks.md 内容
+        content: 原始 tasks.yaml 内容
         task_id: 包含该检查清单的任务 ID
         item_index: 检查清单项索引（从 0 开始）
         checked: 是否勾选该项（True 勾选，False 取消勾选）
 
     返回：
-        更新后的 tasks.md 内容
+        更新后的 tasks.yaml 内容
 
     异常：
         ValueError: 找不到任务或检查清单项时抛出
     """
-    # 查找任务详情区块
-    detail_pattern = re.compile(
-        rf"^###\s+(?:(?:Task|任务)[:：]\s+)?{re.escape(task_id)}\s*-\s*.+?$.*?(?=^###|^---|\Z)",
-        re.MULTILINE | re.DOTALL,
-    )
+    data = yaml.safe_load(content)
 
-    match = detail_pattern.search(content)
-    if not match:
-        raise ValueError(f"在内容中未找到任务 {task_id}")
+    if "tasks" not in data or task_id not in data["tasks"]:
+        raise ValueError(f"tasks.yaml 中未找到任务 {task_id}")
 
-    section_content = match.group(0)
+    task_data = data["tasks"][task_id]
+    checklist = task_data.get("checklist", [])
 
-    # 查找 Checklist 区块
-    checklist_pattern = re.compile(
-        r"(\*\*(?:Checklist|检查清单)\*\*[:：]?\s*\n)((?:\s*[-*]\s+\[[ xX\-]\].+\n?)+)",
-        re.MULTILINE,
-    )
-
-    checklist_match = checklist_pattern.search(section_content)
-    if not checklist_match:
-        raise ValueError(f"未找到任务 {task_id} 的检查清单")
-
-    checklist_header = checklist_match.group(1)
-    checklist_content = checklist_match.group(2)
-
-    # 解析检查清单项
-    item_pattern = re.compile(r"^(\s*[-*]\s+)\[([ xX\-])\](.+)$", re.MULTILINE)
-    items = list(item_pattern.finditer(checklist_content))
-
-    if item_index < 0 or item_index >= len(items):
+    if item_index < 0 or item_index >= len(checklist):
         raise ValueError(
-            f"检查清单项索引 {item_index} 超出范围（0-{len(items) - 1}）"
+            f"检查清单项索引 {item_index} 超出范围（0-{len(checklist) - 1}）"
         )
 
-    # 更新指定条目
-    target_item = items[item_index]
-    new_checkbox = "x" if checked else " "
+    # 如果是字符串列表，转换为结构化格式
+    if isinstance(checklist[item_index], str):
+        checklist[item_index] = {
+            "desc": checklist[item_index],
+            "done": checked,
+        }
+    else:
+        checklist[item_index]["done"] = checked
 
-    new_item = f"{target_item.group(1)}[{new_checkbox}]{target_item.group(3)}"
+    task_data["checklist"] = checklist
 
-    # 在 checklist 内容中替换
-    updated_checklist = checklist_content[: target_item.start()] + new_item + checklist_content[target_item.end():]
-
-    # 在区块内容中替换
-    updated_section = section_content[: checklist_match.start()] + checklist_header + updated_checklist + section_content[checklist_match.end():]
-
-    # 在完整内容中替换
-    updated_content = content[: match.start()] + updated_section + content[match.end():]
-
-    return updated_content
+    return yaml.dump(
+        data,
+        allow_unicode=True,
+        default_flow_style=False,
+        sort_keys=False,
+    )

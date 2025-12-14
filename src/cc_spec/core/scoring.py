@@ -268,6 +268,90 @@ def _process_task_checklist(
             result[task_id] = items
 
 
+def extract_checklists_from_tasks_yaml(tasks_content: str) -> dict[str, list[CheckItem]]:
+    """从 tasks.yaml 内容中提取各任务的检查项。
+
+    解析 tasks.yaml 文件，提取每个任务的检查项列表。
+
+    预期格式:
+        tasks:
+          01-SETUP:
+            checklist:
+              - item: 创建项目结构
+                status: passed
+              - item: 配置依赖
+                status: failed
+
+    参数：
+        tasks_content: tasks.yaml 文件的内容
+
+    返回：
+        任务 ID 到检查项列表的映射字典
+        示例: {"01-SETUP": [CheckItem(...), ...]}
+    """
+    import yaml
+
+    result: dict[str, list[CheckItem]] = {}
+
+    try:
+        data = yaml.safe_load(tasks_content)
+    except yaml.YAMLError:
+        return result
+
+    if not data or "tasks" not in data:
+        return result
+
+    tasks = data.get("tasks", {})
+    for task_id, task_data in tasks.items():
+        if not isinstance(task_data, dict):
+            continue
+
+        checklist = task_data.get("checklist", [])
+        if not checklist:
+            continue
+
+        items: list[CheckItem] = []
+        for item in checklist:
+            if isinstance(item, str):
+                # Simple string format: just the description
+                items.append(
+                    CheckItem(
+                        description=item,
+                        status=CheckStatus.FAILED,
+                        score=0,
+                        max_score=10,
+                    )
+                )
+            elif isinstance(item, dict):
+                # Dict format with item and status
+                description = item.get("item", "")
+                status_str = item.get("status", "failed").lower()
+
+                if status_str in ("passed", "pass", "done", "完成"):
+                    status = CheckStatus.PASSED
+                    score = 10
+                elif status_str in ("skipped", "skip", "跳过"):
+                    status = CheckStatus.SKIPPED
+                    score = 0
+                else:
+                    status = CheckStatus.FAILED
+                    score = 0
+
+                items.append(
+                    CheckItem(
+                        description=description,
+                        status=status,
+                        score=score,
+                        max_score=10,
+                    )
+                )
+
+        if items:
+            result[task_id] = items
+
+    return result
+
+
 # ============================================================================
 # v1.2 兼容: 简单打分函数
 # ============================================================================

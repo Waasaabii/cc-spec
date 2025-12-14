@@ -1,11 +1,12 @@
 """cc-spec 的 apply 命令实现。
 
-该命令使用 SubAgent 并行执行 tasks.md 中的任务。
+该命令使用 SubAgent 并行执行 tasks.yaml 中的任务。
 任务按 wave 分组：同一 wave 内任务并行执行，wave 之间按顺序串行执行。
 
 v1.1: 新增通过 ID 指定变更的支持。
 v1.2: 新增任务级配置的 Profile 支持。
 v1.3: 新增锁机制防止并发冲突，新增 agent_id 追踪。
+v1.4: 移除 tasks.md 支持，仅使用 tasks.yaml。
 """
 
 import asyncio
@@ -44,7 +45,7 @@ from cc_spec.subagent.result_collector import ResultCollector
 from cc_spec.subagent.task_parser import (
     TasksDocument,
     TaskStatus,
-    parse_tasks_md,
+    parse_tasks_yaml,
 )
 from cc_spec.ui.progress import WaveProgressTracker
 from cc_spec.utils.files import find_project_root, get_cc_spec_dir
@@ -115,17 +116,17 @@ def apply_command(
         help="v1.4：指定检查类型，逗号分隔（lint,type_check,test,build）",
     ),
 ) -> None:
-    """使用 SubAgent 并行执行 tasks.md 中的任务。
+    """使用 SubAgent 并行执行 tasks.yaml 中的任务。
 
     v1.1：现支持通过变更 ID（例如 C-001）。
     v1.3：支持锁机制防止并发执行冲突。
     v1.4：支持技术检查（从 CLAUDE.md 读取或自动检测技术栈）。
 
     该命令会：
-    1. 读取 tasks.md 并解析 Wave 分组
+    1. 读取 tasks.yaml 并解析 Wave 分组
     2. 在每个 Wave 内并发执行任务（受 max_concurrent 限制）
     3. 等待当前 Wave 全部完成后再开始下一 Wave
-    4. 更新 tasks.md 中的任务状态并记录执行日志
+    4. 更新 tasks.yaml 中的任务状态并记录执行日志
     5. 遇到失败时停止执行并输出报告
     6. v1.4：任务完成后由主 Agent 执行技术检查
 
@@ -191,24 +192,24 @@ def apply_command(
 
     console.print(f"[cyan]正在执行变更：[/cyan] [bold]{change}[/bold]\n")
 
-    # 检查 tasks.md 是否存在
-    tasks_path = change_dir / "tasks.md"
+    # 检查 tasks.yaml 是否存在
+    tasks_path = change_dir / "tasks.yaml"
     if not tasks_path.exists():
         console.print(
-            f"[red]错误：[/red] 在 {change_dir} 中未找到 tasks.md。"
+            f"[red]错误：[/red] 在 {change_dir} 中未找到 tasks.yaml。"
             "请先运行 'cc-spec plan'。",
             style="red",
         )
         raise typer.Exit(1)
 
-    # 读取并解析 tasks.md
-    console.print("[cyan]正在加载 tasks.md...[/cyan]")
+    # 读取并解析 tasks.yaml
+    console.print("[cyan]正在加载 tasks.yaml...[/cyan]")
     try:
         tasks_content = tasks_path.read_text(encoding="utf-8")
-        doc = parse_tasks_md(tasks_content)
+        doc = parse_tasks_yaml(tasks_content)
     except ValueError as e:
         console.print(
-            f"[red]错误：[/red] 解析 tasks.md 失败：{e}",
+            f"[red]错误：[/red] 解析 tasks.yaml 失败：{e}",
             style="red",
         )
         raise typer.Exit(1)

@@ -309,81 +309,61 @@ class TestSubAgentExecutor:
     """Tests for SubAgentExecutor class."""
 
     @pytest.fixture
-    def sample_tasks_md(self, tmp_path: Path) -> Path:
-        """Create a sample tasks.md file for testing."""
-        content = """# Tasks - test-change
-
-## 概览
-
-| Wave | Task-ID | 预估 | 状态 | 依赖 |
-|------|---------|------|------|------|
-| 0 | 01-SETUP | 30k | 🟦 空闲 | - |
-| 1 | 02-MODEL | 50k | 🟦 空闲 | 01-SETUP |
-| 1 | 03-API | 45k | 🟦 空闲 | 01-SETUP |
-
-## 任务详情
-
-### 01-SETUP - Project Setup
-**预估上下文**: ~30k tokens
-**状态**: 🟦 空闲
-
-**必读文档**:
-- docs/plan/spec.md
-
-**核心代码入口**:
-- src/config/
-
-**Checklist**:
-- [ ] 创建配置文件
-- [ ] 添加环境变量
-
----
-
-### 02-MODEL - Data Model
-**预估上下文**: ~50k tokens
-**状态**: 🟦 空闲
-**依赖**: 01-SETUP
-
-**必读文档**:
-- docs/plan/spec.md
-- src/models/README.md
-
-**核心代码入口**:
-- src/models/
-
-**Checklist**:
-- [ ] 创建数据模型
-- [ ] 编写单元测试
-
----
-
-### 03-API - API Implementation
-**预估上下文**: ~45k tokens
-**状态**: 🟦 空闲
-**依赖**: 01-SETUP
-
-**必读文档**:
-- docs/api/spec.md
-
-**核心代码入口**:
-- src/api/
-
-**Checklist**:
-- [ ] 实现API端点
+    def sample_tasks_yaml(self, tmp_path: Path) -> Path:
+        """Create a sample tasks.yaml file for testing."""
+        content = """version: "1.0"
+change: test-change
+tasks:
+  01-SETUP:
+    wave: 0
+    name: Project Setup
+    tokens: 30k
+    deps: []
+    docs:
+      - docs/plan/spec.md
+    code:
+      - src/config/
+    checklist:
+      - 创建配置文件
+      - 添加环境变量
+  02-MODEL:
+    wave: 1
+    name: Data Model
+    tokens: 50k
+    deps: [01-SETUP]
+    docs:
+      - docs/plan/spec.md
+      - src/models/README.md
+    code:
+      - src/models/
+    checklist:
+      - 创建数据模型
+      - 编写单元测试
+  03-API:
+    wave: 1
+    name: API Implementation
+    tokens: 45k
+    deps: [01-SETUP]
+    docs:
+      - docs/api/spec.md
+    code:
+      - src/api/
+    checklist:
+      - 实现API端点
 """
-        tasks_file = tmp_path / "tasks.md"
+        tasks_file = tmp_path / "tasks.yaml"
         tasks_file.write_text(content, encoding="utf-8")
         return tasks_file
 
-    def test_executor_initialization(self, sample_tasks_md: Path) -> None:
+    def test_executor_initialization(self, sample_tasks_yaml: Path) -> None:
         """Test SubAgentExecutor initialization."""
         executor = SubAgentExecutor(
-            tasks_md_path=sample_tasks_md,
+            tasks_md_path=sample_tasks_yaml,
             max_concurrent=5,
             timeout_ms=60000,
         )
 
-        assert executor.tasks_md_path == sample_tasks_md
+        assert executor.tasks_md_path == sample_tasks_yaml
         assert executor.max_concurrent == 5
         assert executor.timeout_ms == 60000
         assert executor.doc.change_name == "test-change"
@@ -392,11 +372,11 @@ class TestSubAgentExecutor:
     def test_executor_initialization_file_not_found(self, tmp_path: Path) -> None:
         """Test SubAgentExecutor initialization with non-existent file."""
         with pytest.raises(FileNotFoundError):
-            SubAgentExecutor(tasks_md_path=tmp_path / "nonexistent.md")
+            SubAgentExecutor(tasks_md_path=tmp_path / "nonexistent.yaml")
 
-    def test_build_task_prompt(self, sample_tasks_md: Path) -> None:
+    def test_build_task_prompt(self, sample_tasks_yaml: Path) -> None:
         """Test building task prompt."""
-        executor = SubAgentExecutor(tasks_md_path=sample_tasks_md)
+        executor = SubAgentExecutor(tasks_md_path=sample_tasks_yaml)
         task = executor.doc.all_tasks["01-SETUP"]
 
         prompt = executor.build_task_prompt(task, Path(".cc-spec/changes/test-change"))
@@ -411,9 +391,9 @@ class TestSubAgentExecutor:
         # Support Chinese and English prompt format
         assert "状态报告" in prompt or "Status Reporting" in prompt or "状态回报" in prompt
 
-    def test_build_task_prompt_with_dependencies(self, sample_tasks_md: Path) -> None:
+    def test_build_task_prompt_with_dependencies(self, sample_tasks_yaml: Path) -> None:
         """Test building prompt for task with dependencies."""
-        executor = SubAgentExecutor(tasks_md_path=sample_tasks_md)
+        executor = SubAgentExecutor(tasks_md_path=sample_tasks_yaml)
         task = executor.doc.all_tasks["02-MODEL"]
 
         prompt = executor.build_task_prompt(task, Path(".cc-spec/changes/test-change"))
@@ -423,9 +403,9 @@ class TestSubAgentExecutor:
         assert "01-SETUP" in prompt
 
     @pytest.mark.asyncio
-    async def test_execute_task(self, sample_tasks_md: Path) -> None:
+    async def test_execute_task(self, sample_tasks_yaml: Path) -> None:
         """Test executing a single task."""
-        executor = SubAgentExecutor(tasks_md_path=sample_tasks_md)
+        executor = SubAgentExecutor(tasks_md_path=sample_tasks_yaml)
         task = executor.doc.all_tasks["01-SETUP"]
 
         result = await executor.execute_task(task)
@@ -435,9 +415,9 @@ class TestSubAgentExecutor:
         assert result.duration_seconds >= 0
 
     @pytest.mark.asyncio
-    async def test_execute_wave(self, sample_tasks_md: Path) -> None:
+    async def test_execute_wave(self, sample_tasks_yaml: Path) -> None:
         """Test executing a wave of tasks."""
-        executor = SubAgentExecutor(tasks_md_path=sample_tasks_md)
+        executor = SubAgentExecutor(tasks_md_path=sample_tasks_yaml)
 
         results = await executor.execute_wave(0)
 
@@ -445,27 +425,27 @@ class TestSubAgentExecutor:
         assert results[0].task_id == "01-SETUP"
 
         # Verify status was updated
-        updated_content = sample_tasks_md.read_text(encoding="utf-8")
+        updated_content = sample_tasks_yaml.read_text(encoding="utf-8")
         assert "01-SETUP" in updated_content
 
     @pytest.mark.asyncio
-    async def test_execute_wave_invalid_wave(self, sample_tasks_md: Path) -> None:
+    async def test_execute_wave_invalid_wave(self, sample_tasks_yaml: Path) -> None:
         """Test executing invalid wave number."""
-        executor = SubAgentExecutor(tasks_md_path=sample_tasks_md)
+        executor = SubAgentExecutor(tasks_md_path=sample_tasks_yaml)
 
         with pytest.raises(ValueError, match="(No tasks found|未找到.*任务|不存在)"):
             await executor.execute_wave(99)
 
     @pytest.mark.asyncio
-    async def test_execute_wave_already_executed(self, sample_tasks_md: Path) -> None:
+    async def test_execute_wave_already_executed(self, sample_tasks_yaml: Path) -> None:
         """Test executing wave where all tasks already executed."""
-        executor = SubAgentExecutor(tasks_md_path=sample_tasks_md)
+        executor = SubAgentExecutor(tasks_md_path=sample_tasks_yaml)
 
         # Execute wave once
         await executor.execute_wave(0)
 
         # Reload executor to pick up status changes
-        executor = SubAgentExecutor(tasks_md_path=sample_tasks_md)
+        executor = SubAgentExecutor(tasks_md_path=sample_tasks_yaml)
 
         # Try to execute again
         results = await executor.execute_wave(0)
@@ -474,10 +454,10 @@ class TestSubAgentExecutor:
         assert len(results) == 0
 
     @pytest.mark.asyncio
-    async def test_execute_all(self, sample_tasks_md: Path) -> None:
+    async def test_execute_all(self, sample_tasks_yaml: Path) -> None:
         """Test executing all waves."""
         # Mock execute_task to always succeed
-        executor = SubAgentExecutor(tasks_md_path=sample_tasks_md)
+        executor = SubAgentExecutor(tasks_md_path=sample_tasks_yaml)
 
         async def mock_execute_success(task: Task) -> ExecutionResult:
             await asyncio.sleep(0.01)
@@ -498,9 +478,9 @@ class TestSubAgentExecutor:
         assert 1 in results
 
     @pytest.mark.asyncio
-    async def test_execute_all_stops_on_failure(self, sample_tasks_md: Path) -> None:
+    async def test_execute_all_stops_on_failure(self, sample_tasks_yaml: Path) -> None:
         """Test that execute_all stops when a task fails."""
-        executor = SubAgentExecutor(tasks_md_path=sample_tasks_md)
+        executor = SubAgentExecutor(tasks_md_path=sample_tasks_yaml)
 
         # Mock execute_task to fail on wave 0
         async def mock_execute_fail(task: Task) -> ExecutionResult:
@@ -523,9 +503,9 @@ class TestSubAgentExecutor:
         assert 1 not in results
 
     @pytest.mark.asyncio
-    async def test_execute_all_with_start_wave(self, sample_tasks_md: Path) -> None:
+    async def test_execute_all_with_start_wave(self, sample_tasks_yaml: Path) -> None:
         """Test executing from a specific start wave."""
-        executor = SubAgentExecutor(tasks_md_path=sample_tasks_md)
+        executor = SubAgentExecutor(tasks_md_path=sample_tasks_yaml)
 
         async def mock_execute_success(task: Task) -> ExecutionResult:
             await asyncio.sleep(0.01)
@@ -545,16 +525,16 @@ class TestSubAgentExecutor:
         assert 1 in results
 
     @pytest.mark.asyncio
-    async def test_execute_all_invalid_start_wave(self, sample_tasks_md: Path) -> None:
+    async def test_execute_all_invalid_start_wave(self, sample_tasks_yaml: Path) -> None:
         """Test execute_all with invalid start_wave."""
-        executor = SubAgentExecutor(tasks_md_path=sample_tasks_md)
+        executor = SubAgentExecutor(tasks_md_path=sample_tasks_yaml)
 
         with pytest.raises(ValueError, match="(start_wave must be|start_wave 必须|起始波次)"):
             await executor.execute_all(start_wave=-1)
 
-    def test_get_progress_summary(self, sample_tasks_md: Path) -> None:
+    def test_get_progress_summary(self, sample_tasks_yaml: Path) -> None:
         """Test getting progress summary."""
-        executor = SubAgentExecutor(tasks_md_path=sample_tasks_md)
+        executor = SubAgentExecutor(tasks_md_path=sample_tasks_yaml)
 
         summary = executor.get_progress_summary()
 

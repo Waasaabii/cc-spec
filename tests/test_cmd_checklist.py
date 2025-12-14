@@ -50,55 +50,48 @@ class TestChecklistCommand:
         os.chdir(self.original_cwd)
         shutil.rmtree(self.temp_dir, ignore_errors=True)
 
-    def _create_tasks_md(self, content: str = None) -> Path:
-        """Helper to create tasks.md with checklist items."""
+    def _create_tasks_yaml(self, content: str = None) -> Path:
+        """Helper to create tasks.yaml with checklist items."""
         if content is None:
-            content = """# Tasks - add-feature
-
-## 概览
-
-| Wave | Task-ID | 预估 | 状态 | 依赖 |
-|------|---------|------|------|------|
-| 0 | 01-SETUP | 30k | 🟩 完成 | - |
-| 1 | 02-MODEL | 50k | 🟩 完成 | 01-SETUP |
-
-## 任务详情
-
-### 01-SETUP - Project Setup
-**预估上下文**: ~30k tokens
-**状态**: 🟩 完成
-**依赖**: 无
-
-**必读文档**:
-- docs/plan/spec.md
-
-**核心代码入口**:
-- src/config/
-
-**Checklist**:
-- [x] 创建配置文件
-- [x] 添加环境变量
-- [x] 初始化数据库
-
----
-
-### 02-MODEL - Data Model
-**预估上下文**: ~50k tokens
-**状态**: 🟩 完成
-**依赖**: 01-SETUP
-
-**必读文档**:
-- docs/plan/spec.md
-
-**核心代码入口**:
-- src/models/
-
-**Checklist**:
-- [x] 创建数据模型
-- [x] 添加验证逻辑
-- [x] 编写单元测试
+            content = """version: "1.0"
+change: add-feature
+tasks:
+  01-SETUP:
+    wave: 0
+    name: Project Setup
+    tokens: 30k
+    status: completed
+    deps: []
+    docs:
+      - docs/plan/spec.md
+    code:
+      - src/config/
+    checklist:
+      - item: 创建配置文件
+        status: passed
+      - item: 添加环境变量
+        status: passed
+      - item: 初始化数据库
+        status: passed
+  02-MODEL:
+    wave: 1
+    name: Data Model
+    tokens: 50k
+    status: completed
+    deps: [01-SETUP]
+    docs:
+      - docs/plan/spec.md
+    code:
+      - src/models/
+    checklist:
+      - item: 创建数据模型
+        status: passed
+      - item: 添加验证逻辑
+        status: passed
+      - item: 编写单元测试
+        status: passed
 """
-        tasks_path = self.change_dir / "tasks.md"
+        tasks_path = self.change_dir / "tasks.yaml"
         tasks_path.write_text(content, encoding="utf-8")
         return tasks_path
 
@@ -145,18 +138,18 @@ class TestChecklistCommand:
         assert result.exit_code == 1
         assert "未找到" in result.stdout or "not found" in result.stdout
 
-    def test_checklist_without_tasks_md(self) -> None:
-        """Test checklist command fails when tasks.md doesn't exist."""
+    def test_checklist_without_tasks_yaml(self) -> None:
+        """Test checklist command fails when tasks.yaml doesn't exist."""
         self._create_status()
 
         os.chdir(str(self.project_root))
         result = runner.invoke(app, ["checklist", self.change_name])
         assert result.exit_code == 1
-        assert "tasks.md" in result.stdout  # Contains tasks.md in error message
+        assert "tasks.yaml" in result.stdout or "tasks" in result.stdout
 
     def test_checklist_with_all_passed(self) -> None:
         """Test checklist command with all items passed."""
-        self._create_tasks_md()
+        self._create_tasks_yaml()
         status_path = self._create_status()
 
         os.chdir(str(self.project_root))
@@ -178,28 +171,25 @@ class TestChecklistCommand:
 
     def test_checklist_with_failed_items(self) -> None:
         """Test checklist command with failed items."""
-        # Create tasks.md with some unchecked items
-        tasks_content = """# Tasks - add-feature
-
-## 概览
-
-| Wave | Task-ID | 预估 | 状态 | 依赖 |
-|------|---------|------|------|------|
-| 0 | 01-SETUP | 30k | 🟨 进行中 | - |
-
-## 任务详情
-
-### 01-SETUP - Project Setup
-**预估上下文**: ~30k tokens
-**状态**: 🟨 进行中
-**依赖**: 无
-
-**Checklist**:
-- [x] 创建配置文件
-- [ ] 添加环境变量
-- [ ] 初始化数据库
+        # Create tasks.yaml with some unchecked items
+        tasks_content = """version: "1.0"
+change: add-feature
+tasks:
+  01-SETUP:
+    wave: 0
+    name: Project Setup
+    tokens: 30k
+    status: in_progress
+    deps: []
+    checklist:
+      - item: 创建配置文件
+        status: passed
+      - item: 添加环境变量
+        status: failed
+      - item: 初始化数据库
+        status: failed
 """
-        self._create_tasks_md(tasks_content)
+        self._create_tasks_yaml(tasks_content)
         status_path = self._create_status()
 
         os.chdir(str(self.project_root))
@@ -227,17 +217,22 @@ class TestChecklistCommand:
     def test_checklist_with_custom_threshold(self) -> None:
         """Test checklist command with custom threshold."""
         # Create tasks with 50% completion
-        tasks_content = """# Tasks - add-feature
-
-## 任务详情
-
-### 01-SETUP - Project Setup
-
-**Checklist**:
-- [x] Item 1
-- [ ] Item 2
+        tasks_content = """version: "1.0"
+change: add-feature
+tasks:
+  01-SETUP:
+    wave: 0
+    name: Project Setup
+    tokens: 30k
+    status: completed
+    deps: []
+    checklist:
+      - item: Item 1
+        status: passed
+      - item: Item 2
+        status: failed
 """
-        self._create_tasks_md(tasks_content)
+        self._create_tasks_yaml(tasks_content)
         self._create_status()
 
         os.chdir(str(self.project_root))
@@ -254,16 +249,18 @@ class TestChecklistCommand:
 
     def test_checklist_with_no_checklist_items(self) -> None:
         """Test checklist command when no checklist items found."""
-        # Create tasks.md without checklist items
-        tasks_content = """# Tasks - add-feature
-
-## 任务详情
-
-### 01-SETUP - Project Setup
-
-No checklist here.
+        # Create tasks.yaml without checklist items
+        tasks_content = """version: "1.0"
+change: add-feature
+tasks:
+  01-SETUP:
+    wave: 0
+    name: Project Setup
+    tokens: 30k
+    status: completed
+    deps: []
 """
-        self._create_tasks_md(tasks_content)
+        self._create_tasks_yaml(tasks_content)
         self._create_status()
 
         os.chdir(str(self.project_root))
@@ -275,18 +272,24 @@ No checklist here.
 
     def test_checklist_with_skipped_items(self) -> None:
         """Test checklist command with skipped items."""
-        tasks_content = """# Tasks - add-feature
-
-## 任务详情
-
-### 01-SETUP - Project Setup
-
-**Checklist**:
-- [x] 创建配置文件
-- [-] 可选功能 (跳过)
-- [x] 初始化数据库
+        tasks_content = """version: "1.0"
+change: add-feature
+tasks:
+  01-SETUP:
+    wave: 0
+    name: Project Setup
+    tokens: 30k
+    status: completed
+    deps: []
+    checklist:
+      - item: 创建配置文件
+        status: passed
+      - item: 可选功能 (跳过)
+        status: skipped
+      - item: 初始化数据库
+        status: passed
 """
-        self._create_tasks_md(tasks_content)
+        self._create_tasks_yaml(tasks_content)
         self._create_status()
 
         os.chdir(str(self.project_root))
@@ -298,7 +301,7 @@ No checklist here.
 
     def test_checklist_without_explicit_change_name(self) -> None:
         """Test checklist command uses current active change when name not provided."""
-        self._create_tasks_md()
+        self._create_tasks_yaml()
         self._create_status()
 
         # Run without specifying change name
@@ -310,7 +313,7 @@ No checklist here.
 
     def test_checklist_displays_task_results(self) -> None:
         """Test checklist command displays results for each task."""
-        self._create_tasks_md()
+        self._create_tasks_yaml()
         self._create_status()
 
         os.chdir(str(self.project_root))
@@ -325,7 +328,7 @@ No checklist here.
 
     def test_checklist_shows_next_steps(self) -> None:
         """Test checklist command displays next steps."""
-        self._create_tasks_md()
+        self._create_tasks_yaml()
         self._create_status()
 
         os.chdir(str(self.project_root))
@@ -372,20 +375,26 @@ class TestChecklistIntegration:
             print("PLAN STDERR:", result.stderr)
         assert result.exit_code == 0
 
-        # Step 3: Manually add completed checklist to tasks.md
+        # Step 3: Manually add completed checklist to tasks.yaml
         changes_dir = self.cc_spec_dir / "changes"
         change_dir = changes_dir / "add-oauth"
-        tasks_path = change_dir / "tasks.md"
+        tasks_path = change_dir / "tasks.yaml"
 
-        # Read existing tasks.md and add completed checklist
-        tasks_content = tasks_path.read_text(encoding="utf-8")
-        tasks_content += """
-
-### 99-TEST - Integration Test Task
-
-**Checklist**:
-- [x] Test item 1
-- [x] Test item 2
+        # Create new tasks.yaml with completed checklist
+        tasks_content = """version: "1.0"
+change: add-oauth
+tasks:
+  99-TEST:
+    wave: 0
+    name: Integration Test Task
+    tokens: 30k
+    status: completed
+    deps: []
+    checklist:
+      - item: Test item 1
+        status: passed
+      - item: Test item 2
+        status: passed
 """
         tasks_path.write_text(tasks_content, encoding="utf-8")
 
@@ -427,20 +436,28 @@ class TestChecklistIntegration:
         result = runner.invoke(app, ["plan", "add-feature"])
         assert result.exit_code == 0
 
-        # Step 3: Add incomplete checklist to tasks.md
+        # Step 3: Add incomplete checklist to tasks.yaml
         changes_dir = self.cc_spec_dir / "changes"
         change_dir = changes_dir / "add-feature"
-        tasks_path = change_dir / "tasks.md"
+        tasks_path = change_dir / "tasks.yaml"
 
-        tasks_content = tasks_path.read_text(encoding="utf-8")
-        tasks_content += """
-
-### 99-TEST - Integration Test Task
-
-**Checklist**:
-- [x] Test item 1
-- [ ] Test item 2
-- [ ] Test item 3
+        # Create new tasks.yaml with incomplete checklist
+        tasks_content = """version: "1.0"
+change: add-feature
+tasks:
+  99-TEST:
+    wave: 0
+    name: Integration Test Task
+    tokens: 30k
+    status: completed
+    deps: []
+    checklist:
+      - item: Test item 1
+        status: passed
+      - item: Test item 2
+        status: failed
+      - item: Test item 3
+        status: failed
 """
         tasks_path.write_text(tasks_content, encoding="utf-8")
 
