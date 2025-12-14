@@ -81,7 +81,7 @@ class TestDisplayFunctions:
 
         output = console.file.getvalue()
         assert "test-change" in output
-        assert "Apply" in output
+        assert "执行" in output  # "apply" maps to "执行" in Chinese
         assert "2/5" in output
 
     def test_show_status_panel_no_progress(self, console):
@@ -94,7 +94,7 @@ class TestDisplayFunctions:
 
         output = console.file.getvalue()
         assert "simple-change" in output
-        assert "Specify" in output
+        assert "编写规格" in output  # "specify" maps to "编写规格" in Chinese
 
     def test_show_task_table(self, console):
         """Test show_task_table displays correctly."""
@@ -120,8 +120,8 @@ class TestDisplayFunctions:
         output = console.file.getvalue()
         assert "01-SETUP" in output
         assert "02-MODEL" in output
-        assert "completed" in output
-        assert "in_progress" in output
+        assert "已完成" in output  # "completed" maps to "已完成" in Chinese
+        assert "进行中" in output  # "in_progress" maps to "进行中" in Chinese
 
     def test_show_task_table_no_wave(self, console):
         """Test show_task_table without wave column."""
@@ -138,7 +138,7 @@ class TestDisplayFunctions:
 
         output = console.file.getvalue()
         assert "TASK-1" in output
-        assert "pending" in output
+        assert "待执行" in output  # "pending" maps to "待执行" in Chinese
 
     def test_show_wave_tree(self, console):
         """Test show_wave_tree displays correctly."""
@@ -153,8 +153,8 @@ class TestDisplayFunctions:
         show_wave_tree(console, waves, current_wave=1)
 
         output = console.file.getvalue()
-        assert "Wave 0" in output
-        assert "Wave 1" in output
+        assert "波次 0" in output  # "Wave 0" is displayed as "波次 0" in Chinese
+        assert "波次 1" in output  # "Wave 1" is displayed as "波次 1" in Chinese
         assert "01-SETUP" in output
         assert "02-MODEL" in output
         assert "03-API" in output
@@ -238,7 +238,7 @@ class TestProgressComponents:
         # Display progress
         tracker.display()
         output = console.file.getvalue()
-        assert "Wave Execution Progress" in output
+        assert "波次执行进度" in output  # "Wave Execution Progress" is displayed as "波次执行进度" in Chinese
 
     def test_wave_progress_tracker_time_estimation(self, console):
         """Test WaveProgressTracker time estimation."""
@@ -269,7 +269,7 @@ class TestPromptFunctions:
 
         assert result is True
         output = console.file.getvalue()
-        assert "Confirmed" in output
+        assert "已确认" in output  # "Confirmed" is displayed as "已确认" in Chinese
 
     @patch("cc_spec.ui.prompts.readchar.readkey")
     def test_confirm_action_no(self, mock_readkey, console):
@@ -282,7 +282,7 @@ class TestPromptFunctions:
 
         assert result is False
         output = console.file.getvalue()
-        assert "Cancelled" in output
+        assert "已取消" in output  # "Cancelled" is displayed as "已取消" in Chinese
 
     @patch("cc_spec.ui.prompts.readchar.readkey")
     def test_confirm_action_default(self, mock_readkey, console):
@@ -307,7 +307,7 @@ class TestPromptFunctions:
 
         assert result is True
         output = console.file.getvalue()
-        assert "Warning" in output
+        assert "警告" in output  # "Warning" is displayed as "警告" in Chinese
 
     @patch("cc_spec.ui.prompts.readchar.readkey")
     def test_select_option_single(self, mock_readkey, console):

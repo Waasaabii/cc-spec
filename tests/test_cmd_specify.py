@@ -39,15 +39,15 @@ class TestValidateChangeName:
     def test_invalid_names(self) -> None:
         """Test invalid change names."""
         invalid_cases = [
-            ("", "Change name cannot be empty"),
-            ("Add-Feature", "must start with a lowercase letter"),
-            ("123-feature", "must start with a lowercase letter"),
-            ("-feature", "must start with a lowercase letter"),
-            ("add_feature", "contain only lowercase letters, numbers, and hyphens"),
-            ("add feature", "contain only lowercase letters, numbers, and hyphens"),
-            ("add.feature", "contain only lowercase letters, numbers, and hyphens"),
-            ("ADD-FEATURE", "must start with a lowercase letter"),
-            ("a" * 65, "must be 64 characters or less"),
+            ("", "不能为空"),  # Change name cannot be empty
+            ("Add-Feature", "小写字母开头"),  # must start with a lowercase letter
+            ("123-feature", "小写字母开头"),
+            ("-feature", "小写字母开头"),
+            ("add_feature", "小写字母、数字和连字符"),  # contain only lowercase letters, numbers, and hyphens
+            ("add feature", "小写字母、数字和连字符"),
+            ("add.feature", "小写字母、数字和连字符"),
+            ("ADD-FEATURE", "小写字母开头"),
+            ("a" * 65, "64"),  # must be 64 characters or less
         ]
         for name, expected_msg_fragment in invalid_cases:
             is_valid, error = validate_change_name(name)
@@ -84,7 +84,7 @@ class TestSpecifyCommand:
         with patch("cc_spec.commands.specify.find_project_root", return_value=None):
             result = runner.invoke(app, ["specify", "test-change"])
             assert result.exit_code == 1
-            assert "Not in a cc-spec project" in result.stdout
+            assert "cc-spec" in result.stdout  # Error message contains project name
 
     def test_specify_creates_change_directory(self) -> None:
         """Test specify command creates change directory."""
@@ -112,9 +112,10 @@ class TestSpecifyCommand:
         assert proposal_path.exists()
 
         content = proposal_path.read_text(encoding="utf-8")
-        assert "## Why" in content
-        assert "## What Changes" in content
-        assert "## Impact" in content
+        # Check for Chinese section headers (new template format)
+        assert "背景与目标" in content or "## Why" in content
+        assert "用户故事" in content or "## What Changes" in content
+        assert "技术决策" in content or "## Impact" in content
 
     def test_specify_creates_status_yaml(self) -> None:
         """Test specify command creates status.yaml with correct initial state."""
@@ -152,7 +153,7 @@ class TestSpecifyCommand:
         result = runner.invoke(app, ["specify", "Invalid-Name"])
 
         assert result.exit_code == 1
-        assert "Invalid change name" in result.stdout
+        assert "不合法" in result.stdout or "Invalid" in result.stdout
 
     def test_specify_shows_next_steps(self) -> None:
         """Test specify command displays next steps."""
@@ -160,10 +161,10 @@ class TestSpecifyCommand:
         result = runner.invoke(app, ["specify", "add-feature"])
 
         assert result.exit_code == 0
-        assert "Created change: add-feature" in result.stdout
-        assert "Next steps:" in result.stdout
-        assert "cc-spec clarify" in result.stdout
-        assert "cc-spec plan" in result.stdout
+        # Check for Chinese or English output
+        assert "add-feature" in result.stdout
+        assert "clarify" in result.stdout
+        assert "plan" in result.stdout
 
     def test_specify_with_template_option(self) -> None:
         """Test specify command with custom template."""

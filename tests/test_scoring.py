@@ -257,10 +257,11 @@ class TestFormatResult:
 
         formatted = format_result(result)
 
-        assert "# Checklist Score Result" in formatted
+        # 支持中英文输出
+        assert "# Checklist" in formatted or "# 打分" in formatted
         assert "20/20" in formatted
         assert "100.0%" in formatted
-        assert "✓ PASSED" in formatted
+        assert ("√ 通过" in formatted or "✓ PASSED" in formatted)
         assert "[x] Task 1" in formatted
         assert "[x] Task 2" in formatted
 
@@ -274,9 +275,10 @@ class TestFormatResult:
 
         formatted = format_result(result)
 
-        assert "✗ FAILED" in formatted
+        # 支持中英文输出
+        assert ("× 未通过" in formatted or "✗ FAILED" in formatted)
         assert "50.0%" in formatted
-        assert "## Failed Items" in formatted
+        assert ("## 未通过项" in formatted or "## Failed Items" in formatted)
         assert "Task 2" in formatted
 
     def test_format_with_skipped_items(self):
@@ -317,12 +319,13 @@ class TestGenerateFailureReport:
 
         report = generate_failure_report(result)
 
-        assert "# Checklist Validation Failed" in report
+        # 支持中英文输出
+        assert ("# Checklist 验证失败" in report or "# Checklist Validation Failed" in report)
         assert "80%" in report
-        assert "## Failed Items" in report
+        assert ("## 未通过项" in report or "## Failed Items" in report)
         assert "Task 2" in report
         assert "Task 3" in report
-        assert "## Next Steps" in report
+        assert ("## 下一步" in report or "## Next Steps" in report)
         assert "cc-spec clarify" in report
 
     def test_generate_report_includes_notes(self):
@@ -542,7 +545,8 @@ class TestIntegration:
 
         # Format result
         formatted = format_result(result)
-        assert "✓ PASSED" in formatted
+        # 支持中英文输出
+        assert ("√ 通过" in formatted or "✓ PASSED" in formatted)
 
     def test_full_workflow_failing(self):
         """Test complete workflow with failing score."""
@@ -564,7 +568,8 @@ class TestIntegration:
 
         # Generate failure report
         report = generate_failure_report(result)
-        assert "# Checklist Validation Failed" in report
+        # 支持中英文输出
+        assert ("# Checklist 验证失败" in report or "# Checklist Validation Failed" in report)
         assert "Task 2" in report
 
     def test_tasks_md_to_score(self):

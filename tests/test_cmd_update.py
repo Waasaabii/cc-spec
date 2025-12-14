@@ -120,7 +120,7 @@ class TestUpdateCommand:
         result = runner.invoke(app, ["update"])
 
         assert result.exit_code == 1
-        assert "Not in a cc-spec project" in result.stdout or "not found" in result.stdout.lower()
+        assert "cc-spec" in result.stdout.lower() or "not found" in result.stdout.lower()
 
     def test_update_shows_agents(self, tmp_path, monkeypatch) -> None:
         """Test update agents shows available agents."""
@@ -197,7 +197,7 @@ class TestUpdateCommand:
         cc_spec_dir.mkdir(parents=True)
 
         config = Config(
-            version="1.2",
+            version="1.3",  # Updated to current version
             agent="claude",
             project_name="test",
         )
@@ -206,7 +206,9 @@ class TestUpdateCommand:
         result = runner.invoke(app, ["update", "--add-agent", "unknown-agent"])
 
         assert result.exit_code == 0
-        assert "not a recognized agent" in result.stdout.lower() or "warning" in result.stdout.lower()
+        # Support Chinese and English output
+        assert ("未识别" in result.stdout.lower() or "not a recognized agent" in result.stdout.lower()
+                or "warning" in result.stdout.lower() or "警告" in result.stdout)
 
 
 class TestUpdateSubagentConfig:

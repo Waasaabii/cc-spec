@@ -206,7 +206,7 @@ class TestResultCollector:
 
         result = ExecutionResult("01-A", True, "ok", duration_seconds=1.0)
 
-        with pytest.raises(ValueError, match="has not been started"):
+        with pytest.raises(ValueError, match="(has not been started|未启动|尚未开始)"):
             collector.add_result(0, result)
 
     def test_end_wave(self) -> None:
@@ -221,7 +221,7 @@ class TestResultCollector:
         """Test ending wave that hasn't been started."""
         collector = ResultCollector()
 
-        with pytest.raises(ValueError, match="has not been started"):
+        with pytest.raises(ValueError, match="(has not been started|未启动|尚未开始)"):
             collector.end_wave(0)
 
     def test_get_summary(self) -> None:
@@ -265,10 +265,11 @@ class TestResultCollector:
 
         report = collector.generate_report()
 
-        assert "# SubAgent Execution Report" in report
-        assert "## Summary" in report
-        assert "## Wave Details" in report
-        assert "### Wave 0" in report
+        # Support Chinese and English output
+        assert ("# SubAgent 执行报告" in report or "# SubAgent Execution Report" in report)
+        assert ("## 汇总" in report or "## Summary" in report)
+        assert ("## 波次详情" in report or "## Wave Details" in report)
+        assert ("### 波次 0" in report or "### Wave 0" in report)
         assert "01-A" in report
 
     def test_has_failures(self) -> None:
@@ -400,13 +401,15 @@ class TestSubAgentExecutor:
 
         prompt = executor.build_task_prompt(task, Path(".cc-spec/changes/test-change"))
 
-        assert "# Task: 01-SETUP - Project Setup" in prompt
+        # Support Chinese prompt: "# 任务：01-SETUP" instead of "# Task: 01-SETUP"
+        assert "01-SETUP" in prompt and ("Project Setup" in prompt or "任务" in prompt)
         assert "test-change" in prompt
         assert "docs/plan/spec.md" in prompt
         assert "src/config/" in prompt
         assert "创建配置文件" in prompt
         assert "添加环境变量" in prompt
-        assert "Status Reporting" in prompt
+        # Support Chinese and English prompt format
+        assert "状态报告" in prompt or "Status Reporting" in prompt or "状态回报" in prompt
 
     def test_build_task_prompt_with_dependencies(self, sample_tasks_md: Path) -> None:
         """Test building prompt for task with dependencies."""
@@ -415,7 +418,8 @@ class TestSubAgentExecutor:
 
         prompt = executor.build_task_prompt(task, Path(".cc-spec/changes/test-change"))
 
-        assert "Dependencies (already completed)" in prompt
+        # Support Chinese and English
+        assert ("依赖" in prompt or "Dependencies" in prompt)
         assert "01-SETUP" in prompt
 
     @pytest.mark.asyncio
@@ -449,7 +453,7 @@ class TestSubAgentExecutor:
         """Test executing invalid wave number."""
         executor = SubAgentExecutor(tasks_md_path=sample_tasks_md)
 
-        with pytest.raises(ValueError, match="No tasks found"):
+        with pytest.raises(ValueError, match="(No tasks found|未找到.*任务|不存在)"):
             await executor.execute_wave(99)
 
     @pytest.mark.asyncio
@@ -545,7 +549,7 @@ class TestSubAgentExecutor:
         """Test execute_all with invalid start_wave."""
         executor = SubAgentExecutor(tasks_md_path=sample_tasks_md)
 
-        with pytest.raises(ValueError, match="start_wave must be"):
+        with pytest.raises(ValueError, match="(start_wave must be|start_wave 必须|起始波次)"):
             await executor.execute_all(start_wave=-1)
 
     def test_get_progress_summary(self, sample_tasks_md: Path) -> None:

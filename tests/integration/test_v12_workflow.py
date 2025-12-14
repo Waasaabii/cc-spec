@@ -181,9 +181,9 @@ class TestV12Features:
     """Test v1.2 specific features integration."""
 
     def test_version_default_is_12(self) -> None:
-        """Test default version is now 1.2."""
+        """Test default version is now 1.3 (updated from 1.2)."""
         config = Config()
-        assert config.version == "1.2"
+        assert config.version == "1.3"  # Updated: current version is 1.3
 
     def test_config_migration_from_v11(self) -> None:
         """Test config migration from v1.1 to v1.2 format."""

@@ -318,7 +318,7 @@ class TestParseTasksMd:
 | 0 | 01-TEST | 10k | 🟦 空闲 | - |
 """
 
-        with pytest.raises(ValueError, match="tasks.md must have a title"):
+        with pytest.raises(ValueError, match="tasks.md 标题格式无效"):
             parse_tasks_md(content)
 
     def test_parse_tasks_md_with_multiple_dependencies(self) -> None:
@@ -468,7 +468,7 @@ class TestValidateDependencies:
         is_valid, errors = validate_dependencies(doc)
         assert is_valid is False
         assert len(errors) == 1
-        assert "non-existent task 99-NONE" in errors[0]
+        assert "依赖了不存在的任务 99-NONE" in errors[0]
 
     def test_validate_dependencies_circular(self) -> None:
         """Test validating circular dependencies."""
@@ -483,7 +483,7 @@ class TestValidateDependencies:
 
         is_valid, errors = validate_dependencies(doc)
         assert is_valid is False
-        assert any("Circular dependency" in e for e in errors)
+        assert any("循环依赖" in e for e in errors)
 
     def test_validate_dependencies_wrong_wave_order(self) -> None:
         """Test validating dependencies with wrong wave order."""
@@ -498,7 +498,7 @@ class TestValidateDependencies:
 
         is_valid, errors = validate_dependencies(doc)
         assert is_valid is False
-        assert any("later wave" in e for e in errors)
+        assert any("更晚的波次" in e for e in errors)
 
 
 class TestUpdateTaskStatus:
@@ -565,7 +565,7 @@ class TestUpdateTaskStatus:
 | 0 | 01-SETUP | 30k | 🟦 空闲 | - |
 """
 
-        with pytest.raises(ValueError, match="not found in overview table"):
+        with pytest.raises(ValueError, match="概览表中未找到任务"):
             update_task_status(content, "99-NONE", TaskStatus.COMPLETED)
 
 
@@ -634,7 +634,7 @@ class TestUpdateChecklistItem:
 | 0 | 01-SETUP | 30k | 🟦 空闲 | - |
 """
 
-        with pytest.raises(ValueError, match="not found in content"):
+        with pytest.raises(ValueError, match="在内容中未找到任务"):
             update_checklist_item(content, "99-NONE", 0, checked=True)
 
     def test_update_checklist_item_no_checklist(self) -> None:
@@ -653,7 +653,7 @@ class TestUpdateChecklistItem:
 **预估上下文**: ~30k tokens
 """
 
-        with pytest.raises(ValueError, match="No checklist found"):
+        with pytest.raises(ValueError, match="未找到任务.*的检查清单"):
             update_checklist_item(content, "01-SETUP", 0, checked=True)
 
     def test_update_checklist_item_index_out_of_range(self) -> None:
@@ -673,5 +673,5 @@ class TestUpdateChecklistItem:
 - [ ] First item
 """
 
-        with pytest.raises(ValueError, match="index .* out of range"):
+        with pytest.raises(ValueError, match="索引.*超出范围"):
             update_checklist_item(content, "01-SETUP", 5, checked=True)

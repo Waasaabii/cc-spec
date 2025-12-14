@@ -373,9 +373,10 @@ class TestResultCollectorIntegration:
 
         report = collector.generate_report()
 
-        assert "# SubAgent Execution Report" in report
-        assert "Summary" in report
-        assert "Wave 0" in report
+        # Support Chinese and English output
+        assert ("# SubAgent 执行报告" in report or "# SubAgent Execution Report" in report)
+        assert ("汇总" in report or "Summary" in report)
+        assert ("波次 0" in report or "Wave 0" in report)
         assert "01-TEST" in report
 
     def test_wave_result_properties(self) -> None:

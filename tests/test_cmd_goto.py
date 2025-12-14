@@ -27,7 +27,7 @@ class TestExecuteCommand:
             # Should print note about file, not command
             mock_console.print.assert_called()
             call_args = str(mock_console.print.call_args)
-            assert "file" in call_args.lower() or "not a command" in call_args.lower()
+            assert "file" in call_args.lower() or "not a command" in call_args.lower() or "文件" in call_args.lower()
 
     def test_execute_command_runs_cc_spec_command(self) -> None:
         """Test that cc-spec commands are executed."""
@@ -49,7 +49,7 @@ class TestExecuteCommand:
 
             # Should print warning about exit code
             calls = [str(c) for c in mock_console.print.call_args_list]
-            assert any("exit" in c.lower() or "code" in c.lower() for c in calls)
+            assert any("exit" in c.lower() or "code" in c.lower() or "退出" in c.lower() for c in calls)
 
     def test_execute_command_handles_subprocess_error(self) -> None:
         """Test handling of subprocess errors."""
@@ -90,7 +90,7 @@ class TestGotoCommand:
         cc_spec_dir.mkdir(parents=True)
 
         config = Config(
-            version="1.2",
+            version="1.3",  # Updated to current version
             agent="claude",
             project_name="test",
         )
@@ -103,7 +103,7 @@ class TestGotoCommand:
         result = runner.invoke(app, ["goto", "C-999"])
 
         assert result.exit_code == 1
-        assert "not found" in result.stdout.lower() or "error" in result.stdout.lower()
+        assert "未找到" in result.stdout.lower() or "not found" in result.stdout.lower() or "error" in result.stdout.lower()
 
     def test_goto_spec_shows_info_message(self, tmp_path, monkeypatch) -> None:
         """Test goto with spec ID shows info message."""

@@ -211,7 +211,7 @@ class TestLoadState:
         empty_file = tmp_path / "empty.yaml"
         empty_file.touch()
 
-        with pytest.raises(ValueError, match="State file is empty"):
+        with pytest.raises(ValueError, match="(State file is empty|状态文件为空|空文件)"):
             load_state(empty_file)
 
     def test_load_state_minimal(self, tmp_path: Path) -> None:

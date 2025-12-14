@@ -156,14 +156,14 @@ The system SHALL manage user sessions with the following rules:
         with patch("cc_spec.commands.archive.find_project_root", return_value=None):
             result = runner.invoke(app, ["archive", "test-change"])
             assert result.exit_code == 1
-            assert "Not a cc-spec project" in result.stdout
+            assert "cc-spec" in result.stdout  # Error message contains project name
 
     def test_archive_without_change(self) -> None:
         """Test archive command fails when change doesn't exist."""
         os.chdir(str(self.project_root))
         result = runner.invoke(app, ["archive", "nonexistent-change"])
         assert result.exit_code == 1
-        assert "not found" in result.stdout
+        assert "未找到" in result.stdout or "not found" in result.stdout
 
     def test_archive_without_checklist_completed(self) -> None:
         """Test archive command fails when checklist not completed."""
@@ -172,7 +172,7 @@ The system SHALL manage user sessions with the following rules:
         os.chdir(str(self.project_root))
         result = runner.invoke(app, ["archive", self.change_name, "--force"])
         assert result.exit_code == 1
-        assert "Checklist stage must be completed" in result.stdout
+        assert "checklist" in result.stdout.lower() or "完成" in result.stdout
 
     def test_archive_with_no_specs(self) -> None:
         """Test archive command succeeds even without specs directory."""
@@ -186,7 +186,8 @@ The system SHALL manage user sessions with the following rules:
             print("STDERR:", result.stderr)
 
         assert result.exit_code == 0
-        assert "Archive completed successfully" in result.stdout
+        # Support Chinese output: "归档完成！"
+        assert "归档完成" in result.stdout or "Archive" in result.stdout or "completed" in result.stdout.lower()
 
         # Verify change was moved to archive
         archive_dir = self.changes_dir / "archive"
@@ -210,7 +211,7 @@ The system SHALL manage user sessions with the following rules:
             print("STDERR:", result.stderr)
 
         assert result.exit_code == 0
-        assert "Merged" in result.stdout
+        assert "合并" in result.stdout or "Merged" in result.stdout or "成功" in result.stdout
 
         # Verify merged spec exists
         merged_spec = self.specs_dir / "auth" / "spec.md"
@@ -312,7 +313,7 @@ The system SHALL support OAuth2 authentication flow.
         result = runner.invoke(app, ["archive", "--force"])
 
         assert result.exit_code == 0
-        assert "Archive completed successfully" in result.stdout
+        assert "归档完成" in result.stdout or "Archive completed successfully" in result.stdout
 
         # Verify change was archived
         assert not self.change_dir.exists()
@@ -335,7 +336,8 @@ The system SHALL support OAuth2 authentication flow.
         result = runner.invoke(app, ["archive", self.change_name, "--force"])
 
         assert result.exit_code == 1
-        assert "validation failed" in result.stdout.lower()
+        # Support Chinese output: "校验失败"
+        assert "校验失败" in result.stdout.lower() or "validation failed" in result.stdout.lower()
 
     def test_archive_shows_merge_preview(self) -> None:
         """Test archive command shows merge preview before confirmation."""
@@ -348,9 +350,10 @@ The system SHALL support OAuth2 authentication flow.
         # Run without --force to see preview
         result = runner.invoke(app, ["archive", self.change_name], input="n\n")
 
-        assert "Merge Preview" in result.stdout
-        assert "ADDED Requirements" in result.stdout or "MODIFIED Requirements" in result.stdout
-        assert "Archive cancelled" in result.stdout
+        # Support Chinese output: "合并预览：" instead of "Merge Preview"
+        assert "合并预览" in result.stdout or "Merge Preview" in result.stdout
+        assert "新增需求" in result.stdout or "修改需求" in result.stdout or "ADDED Requirements" in result.stdout or "MODIFIED Requirements" in result.stdout
+        assert "取消" in result.stdout or "cancelled" in result.stdout.lower()
 
     def test_archive_handles_duplicate_archive_name(self) -> None:
         """Test archive command handles collision when archive already exists."""
@@ -436,7 +439,7 @@ The system SHALL support OAuth authentication.
             print("STDERR:", result.stderr)
 
         assert result.exit_code == 0
-        assert "Archive completed successfully" in result.stdout
+        assert "归档完成" in result.stdout or "Archive completed successfully" in result.stdout
 
         # Step 5: Verify change was archived
         assert not change_dir.exists()

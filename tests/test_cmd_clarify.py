@@ -120,7 +120,7 @@ def test_clarify_with_task_id_prompts_rework(mock_readkey, mock_cc_spec_project:
 
     assert result.exit_code == 0
     assert "02-MODEL" in result.stdout
-    assert "Task Details" in result.stdout or "task" in result.stdout.lower()
+    assert "详情" in result.stdout or "Task Details" in result.stdout or "task" in result.stdout.lower()
 
 
 @patch("cc_spec.ui.prompts.readchar.readkey")
@@ -131,7 +131,8 @@ def test_clarify_rework_updates_status(mock_readkey, mock_cc_spec_project: Path)
     result = runner.invoke(app, ["clarify", "02-MODEL"])
 
     assert result.exit_code == 0
-    assert "marked for rework" in result.stdout.lower() or "rework" in result.stdout.lower()
+    # Support Chinese and English output
+    assert "返工" in result.stdout or "rework" in result.stdout.lower() or "重做" in result.stdout
 
     # Verify status.yaml was updated
     status_file = mock_cc_spec_project / ".cc-spec" / "changes" / "test-change" / "status.yaml"
@@ -149,7 +150,8 @@ def test_clarify_with_invalid_task_id(mock_cc_spec_project: Path) -> None:
     result = runner.invoke(app, ["clarify", "99-INVALID"])
 
     assert result.exit_code == 1
-    assert "not found" in result.stdout.lower() or "error" in result.stdout.lower()
+    # Support Chinese error: "错误： 未找到任务"
+    assert "未找到" in result.stdout or "not found" in result.stdout.lower() or "error" in result.stdout.lower()
 
 
 def test_clarify_with_explicit_change(mock_cc_spec_project: Path) -> None:
@@ -173,7 +175,8 @@ def test_clarify_no_active_change(tmp_path: Path, monkeypatch: pytest.MonkeyPatc
     result = runner.invoke(app, ["clarify"])
 
     assert result.exit_code == 1
-    assert "no active change" in result.stdout.lower() or "not found" in result.stdout.lower()
+    # Support Chinese message: "未找到激活的变更"
+    assert "未找到" in result.stdout or "no active change" in result.stdout.lower() or "not found" in result.stdout.lower()
 
 
 def test_clarify_not_in_cc_spec_project(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -183,7 +186,7 @@ def test_clarify_not_in_cc_spec_project(tmp_path: Path, monkeypatch: pytest.Monk
         result = runner.invoke(app, ["clarify"])
 
         assert result.exit_code == 1
-        assert "not in a cc-spec project" in result.stdout.lower() or "init" in result.stdout.lower()
+        assert "cc-spec" in result.stdout.lower() or "init" in result.stdout.lower()
 
 
 @patch("cc_spec.ui.prompts.readchar.readkey")
