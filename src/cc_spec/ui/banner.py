@@ -7,23 +7,25 @@ from rich.console import Console
 from rich.panel import Panel
 from rich.text import Text
 
-# CC-SPEC ASCII Art Banner
-BANNER = r"""
+# CC-SPEC ASCII Art Banner (列表形式保留精确格式)
+BANNER_LINES = [
+    " ██████╗ ██████╗       ███████╗██████╗ ███████╗ ██████╗",
+    "██╔════╝██╔════╝       ██╔════╝██╔══██╗██╔════╝██╔════╝",
+    "██║     ██║     █████╗ ███████╗██████╔╝█████╗  ██║     ",
+    "██║     ██║     ╚════╝ ╚════██║██╔═══╝ ██╔══╝  ██║     ",
+    "╚██████╗╚██████╗       ███████║██║     ███████╗╚██████╗",
+    " ╚═════╝ ╚═════╝       ╚══════╝╚═╝     ╚══════╝ ╚═════╝",
+]
 
-   ██████╗ ██████╗      ███████╗██████╗ ███████╗ ██████╗
-  ██╔════╝██╔════╝      ██╔════╝██╔══██╗██╔════╝██╔════╝
-  ██║     ██║     █████╗███████╗██████╔╝█████╗  ██║
-  ██║     ██║     ╚════╝╚════██║██╔═══╝ ██╔══╝  ██║
-  ╚██████╗╚██████╗      ███████║██║     ███████╗╚██████╗
-   ╚═════╝ ╚═════╝      ╚══════╝╚═╝     ╚══════╝ ╚═════╝
-"""
+# 兼容旧代码
+BANNER = "\n".join(BANNER_LINES)
 
-# 喵娘装饰（基于 wu.jpg 的粉发紫眼喵娘形象）
-MASCOT = r"""
-       ∧＿∧
-      (｡･ω･｡)
-      |  つ♡
-      しーＪ
+# 喵娘装饰
+MASCOT = """
+  ∧＿∧
+ (｡･ω･｡)
+ |  つ♡
+ しーＪ
 """
 
 TAGLINE = "规范驱动的 AI 辅助开发工作流 CLI 喵～"
@@ -40,20 +42,18 @@ def show_banner(console: Console | None = None) -> None:
         console = Console()
 
     # Banner 颜色渐变（粉色系，呼应喵娘的粉发）
-    banner_lines = BANNER.strip().split('\n')
     colors = ["bright_magenta", "magenta", "bright_cyan", "cyan", "bright_white", "white"]
 
-    styled_banner = Text()
-    for i, line in enumerate(banner_lines):
-        color = colors[i % len(colors)]
-        styled_banner.append(line + "\n", style=color)
-
     # 吉祥物颜色（紫色眼睛风格）
-    mascot_text = Text(MASCOT, style="bright_magenta")
+    mascot_text = Text(MASCOT.strip(), style="bright_magenta")
 
     # 组合显示
     console.print()
-    console.print(Align.center(styled_banner))
+    # 直接打印 banner（使用 BANNER_LINES 保留精确格式）
+    for i, line in enumerate(BANNER_LINES):
+        color = colors[i % len(colors)]
+        console.print(f"[{color}]{line}[/{color}]")
+    console.print()
     console.print(Align.center(mascot_text))
     console.print(Align.center(Text(TAGLINE, style="italic bright_yellow")))
     console.print(Align.center(Text(VERSION_INFO, style="dim")))
@@ -144,6 +144,7 @@ __all__ = [
     "show_success_banner",
     "show_error_banner",
     "BANNER",
+    "BANNER_LINES",
     "MASCOT",
     "TAGLINE",
 ]
