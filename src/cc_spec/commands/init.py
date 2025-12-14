@@ -16,26 +16,34 @@ from cc_spec.utils.files import ensure_dir, get_cc_spec_dir, get_config_path
 console = Console()
 
 # AI工具配置（参考spec-kit的AGENT_CONFIG）
+# 首选工具放在前面：claude, codex, gemini, cursor
 AI_TOOLS_CONFIG = {
+    # === 首选工具 ===
     "claude": {
         "name": "Anthropic Claude (Claude Code / API)",
         "folder": ".claude/",
         "requires_cli": True,
     },
-    "copilot": {
-        "name": "GitHub Copilot",
-        "folder": ".github/",  # Copilot使用.github/
-        "requires_cli": False,
+    "codex": {
+        "name": "Codex CLI",
+        "folder": ".codex/",
+        "requires_cli": True,
+    },
+    "gemini": {
+        "name": "Google Gemini",
+        "folder": ".gemini/",
+        "requires_cli": True,
     },
     "cursor": {
         "name": "Cursor编辑器",
         "folder": ".cursor/",
         "requires_cli": False,
     },
-    "gemini": {
-        "name": "Google Gemini",
-        "folder": ".gemini/",
-        "requires_cli": True,
+    # === 其他工具 ===
+    "copilot": {
+        "name": "GitHub Copilot",
+        "folder": ".github/",  # Copilot使用.github/
+        "requires_cli": False,
     },
     "chatgpt": {
         "name": "OpenAI ChatGPT",
@@ -96,11 +104,6 @@ AI_TOOLS_CONFIG = {
         "name": "IBM Bob",
         "folder": ".bob/",
         "requires_cli": False,
-    },
-    "codex": {
-        "name": "Codex CLI",
-        "folder": ".codex/",
-        "requires_cli": True,
     },
     "opencode": {
         "name": "OpenCode",
