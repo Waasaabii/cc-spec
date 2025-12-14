@@ -31,6 +31,14 @@ from cc_spec.core.state import (
 from cc_spec.core.state import (
     TaskStatus as StateTaskStatus,
 )
+from cc_spec.core.tech_check import (
+    CheckResult,
+    detect_tech_stack,
+    get_default_commands,
+    read_tech_requirements,
+    run_tech_checks,
+    should_block,
+)
 from cc_spec.subagent.executor import ExecutionResult, SubAgentExecutor
 from cc_spec.subagent.result_collector import ResultCollector
 from cc_spec.subagent.task_parser import (
@@ -95,11 +103,23 @@ def apply_command(
         "--skip-locked",
         help="v1.3：跳过被锁定的任务并继续执行其他任务",
     ),
+    tech_check: bool = typer.Option(
+        True,
+        "--tech-check/--no-tech-check",
+        help="v1.4：执行完成后运行技术检查（lint/type-check/test）",
+    ),
+    check_types: Optional[str] = typer.Option(
+        None,
+        "--check-types",
+        "-C",
+        help="v1.4：指定检查类型，逗号分隔（lint,type_check,test,build）",
+    ),
 ) -> None:
     """使用 SubAgent 并行执行 tasks.md 中的任务。
 
     v1.1：现支持通过变更 ID（例如 C-001）。
     v1.3：支持锁机制防止并发执行冲突。
+    v1.4：支持技术检查（从 CLAUDE.md 读取或自动检测技术栈）。
 
     该命令会：
     1. 读取 tasks.md 并解析 Wave 分组
@@ -107,6 +127,7 @@ def apply_command(
     3. 等待当前 Wave 全部完成后再开始下一 Wave
     4. 更新 tasks.md 中的任务状态并记录执行日志
     5. 遇到失败时停止执行并输出报告
+    6. v1.4：任务完成后由主 Agent 执行技术检查
 
     示例：
         cc-spec apply                   # 应用当前激活的变更
@@ -116,6 +137,8 @@ def apply_command(
         cc-spec apply --no-lock         # 禁用锁机制
         cc-spec apply --force-unlock 01-SETUP  # 强制解锁指定任务
         cc-spec apply --skip-locked     # 跳过被锁任务继续执行
+        cc-spec apply --no-tech-check   # 禁用技术检查
+        cc-spec apply --check-types lint,test  # 仅执行 lint 和 test 检查
     """
     # 查找项目根目录
     project_root = find_project_root()
@@ -294,7 +317,7 @@ def apply_command(
         collector = ResultCollector()
 
         # 执行运行
-        results = asyncio.run(
+        asyncio.run(
             _execute_with_progress(
                 executor,
                 collector,
@@ -313,7 +336,25 @@ def apply_command(
         if collector.has_failures():
             _handle_execution_failure(status_path, change, collector)
         else:
-            _handle_execution_success(status_path, change, collector, total_waves)
+            # v1.4: 技术检查（由主 Agent 执行，非 SubAgent）
+            tech_check_passed = True
+            if tech_check:
+                # 解析检查类型
+                types_list = check_types.split(",") if check_types else None
+                tech_check_passed = _run_tech_checks_with_display(
+                    project_root,
+                    types_list,
+                )
+
+            if tech_check_passed:
+                _handle_execution_success(status_path, change, collector, total_waves)
+            else:
+                # 技术检查失败，按失败处理
+                console.print(
+                    "\n[red]技术检查失败，任务执行未通过验收[/red]",
+                    style="red",
+                )
+                _handle_execution_failure(status_path, change, collector)
 
     except Exception as e:
         console.print(
@@ -386,7 +427,11 @@ async def _execute_with_progress(
         tracker.display()
 
         # 执行 wave (v1.3：支持锁机制)
-        results = await executor.execute_wave(wave.wave_number, use_lock=use_lock, skip_locked=skip_locked)
+        results = await executor.execute_wave(
+            wave.wave_number,
+            use_lock=use_lock,
+            skip_locked=skip_locked,
+        )
 
         # 收集结果
         for result in results:
@@ -590,9 +635,12 @@ def _handle_execution_success(
     try:
         state = load_state(status_path)
 
+        existing_stage = state.stages.get(
+            Stage.APPLY, StageInfo(status=StateTaskStatus.PENDING)
+        )
         state.stages[Stage.APPLY] = StageInfo(
             status=StateTaskStatus.COMPLETED,
-            started_at=state.stages.get(Stage.APPLY, StageInfo(status=StateTaskStatus.PENDING)).started_at,
+            started_at=existing_stage.started_at,
             completed_at=datetime.now().isoformat(),
             waves_completed=total_waves,
             waves_total=total_waves,
@@ -651,12 +699,15 @@ def _handle_execution_failure(
     try:
         state = load_state(status_path)
 
+        existing_stage = state.stages.get(
+            Stage.APPLY, StageInfo(status=StateTaskStatus.PENDING)
+        )
         state.stages[Stage.APPLY] = StageInfo(
             status=StateTaskStatus.FAILED,
-            started_at=state.stages.get(Stage.APPLY, StageInfo(status=StateTaskStatus.PENDING)).started_at,
+            started_at=existing_stage.started_at,
             completed_at=datetime.now().isoformat(),
             waves_completed=len(collector.wave_results) - len(failed_waves),
-            waves_total=state.stages.get(Stage.APPLY, StageInfo(status=StateTaskStatus.PENDING)).waves_total,
+            waves_total=existing_stage.waves_total,
         )
 
         update_state(status_path, state)
@@ -682,3 +733,132 @@ def _handle_execution_failure(
     console.print(f"\n[dim]变更：{change_name}[/dim]")
 
     raise typer.Exit(1)
+
+
+def _run_tech_checks_with_display(
+    project_root: Path,
+    check_types: list[str] | None = None,
+) -> bool:
+    """执行技术检查并显示结果。
+
+    v1.4：由主 Agent 执行技术检查（非 SubAgent）。
+
+    检查逻辑：
+    1. 尝试从 CLAUDE.md 读取技术要求
+    2. 如果未找到，自动检测技术栈并使用默认命令
+    3. 执行检查并显示结果
+    4. lint/type-check 失败仅警告，test/build 失败阻断
+
+    参数：
+        project_root: 项目根目录路径
+        check_types: 要执行的检查类型，None 表示全部
+
+    返回：
+        检查是否通过（考虑 should_block 规则）
+    """
+    console.print("\n" + "=" * 60)
+    console.print("[bold cyan]技术检查[/bold cyan]")
+    console.print("=" * 60 + "\n")
+
+    # 1. 尝试从配置文件读取技术要求
+    requirements = read_tech_requirements(project_root)
+
+    if requirements:
+        console.print(f"[dim]从 {requirements.source_file} 读取检查命令[/dim]\n")
+    else:
+        # 2. 自动检测技术栈
+        tech_stack = detect_tech_stack(project_root)
+        requirements = get_default_commands(tech_stack)
+        console.print(f"[dim]自动检测技术栈：{tech_stack.value}[/dim]\n")
+
+    # 检查是否有可执行的命令
+    has_commands = any([
+        requirements.lint_commands,
+        requirements.type_check_commands,
+        requirements.test_commands,
+        requirements.build_commands,
+    ])
+
+    if not has_commands:
+        console.print("[yellow]未找到可执行的技术检查命令，跳过检查[/yellow]")
+        return True
+
+    # 3. 执行检查
+    results = run_tech_checks(requirements, project_root, check_types)
+
+    # 4. 显示结果
+    _display_tech_check_results(results)
+
+    # 5. 判断是否通过
+    # 只有 test/build 失败才算阻断性失败
+    blocking_failures = [r for r in results if not r.success and should_block(r)]
+
+    if blocking_failures:
+        console.print(
+            f"\n[bold red]技术检查未通过：{len(blocking_failures)} 个阻断性错误[/bold red]"
+        )
+        return False
+
+    # 非阻断性失败（lint/type-check）仅警告
+    non_blocking_failures = [
+        r for r in results if not r.success and not should_block(r)
+    ]
+    if non_blocking_failures:
+        msg = f"警告：{len(non_blocking_failures)} 个非阻断性问题"
+        console.print(f"\n[yellow]{msg}（lint/type-check）[/yellow]")
+
+    console.print("\n[bold green]技术检查通过[/bold green]")
+    return True
+
+
+def _display_tech_check_results(results: list[CheckResult]) -> None:
+    """显示技术检查结果。
+
+    参数：
+        results: 检查结果列表
+    """
+    # 按检查类型分组显示
+    type_labels = {
+        "lint": "代码检查 (Lint)",
+        "type_check": "类型检查 (Type Check)",
+        "test": "测试 (Test)",
+        "build": "构建 (Build)",
+    }
+
+    table = Table(title="检查结果", border_style="cyan")
+    table.add_column("类型", style="cyan")
+    table.add_column("命令", style="white")
+    table.add_column("状态", justify="center")
+    table.add_column("耗时", justify="right")
+
+    for result in results:
+        type_label = type_labels.get(result.check_type, result.check_type)
+
+        if result.success:
+            status = "[green]√ 通过[/green]"
+        elif should_block(result):
+            status = "[red]× 失败（阻断）[/red]"
+        else:
+            status = "[yellow]! 警告[/yellow]"
+
+        duration = f"{result.duration_seconds:.1f}s"
+
+        table.add_row(type_label, result.command, status, duration)
+
+    console.print(table)
+
+    # 显示失败详情
+    failed_results = [r for r in results if not r.success]
+    if failed_results:
+        console.print("\n[bold]失败详情：[/bold]")
+        for result in failed_results:
+            console.print(f"\n[cyan]{result.command}[/cyan]:")
+            if result.error:
+                # 限制输出长度
+                error_lines = result.error.strip().split("\n")
+                if len(error_lines) > 10:
+                    console.print("\n".join(error_lines[:10]))
+                    console.print(f"[dim]... 还有 {len(error_lines) - 10} 行 ...[/dim]")
+                else:
+                    console.print(result.error.strip())
+
