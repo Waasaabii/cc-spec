@@ -84,7 +84,7 @@ SubAgent 上下文（每个）:
 | 2 | T08 | CHECKLIST-TEMPLATE | ~25K | ✅ 已完成（2025-12-14 07:33） | T01 |
 | 2 | T14 | SINGLE-SOURCE | ~18K | ✅ 已完成（2025-12-14 15:03） | - |
 | 3 | T10 | GENERATOR-REFACTOR | ~15K | 🟠 执行中（Claude-Terminal-5041, 2025-12-14 15:04） | T03,T04,T05,T07,T08 |
-| 3 | T11 | CLARIFY-INTEGRATION | ~10K | 空闲 | T06 |
+| 3 | T11 | CLARIFY-INTEGRATION | ~10K | 🟠 执行中（Claude-Terminal-8842, 2025-12-14 15:05） | T06 |
 | 3 | T12 | APPLY-TECH-CHECK | ~15K | 空闲 | T09 |
 | 3 | T15 | TASKS-YAML | ~22K | 空闲 | T14 |
 | 4 | T16 | CONTEXT-OPTIMIZE | ~30K | 空闲 | T15 |
@@ -482,7 +482,9 @@ Wave-4 (单任务)
 #### Task T11: CLARIFY-INTEGRATION
 
 **预估上下文**: ~10K tokens
-**状态**: 空闲
+**状态**: 🟠 执行中（Claude-Terminal-8842, 2025-12-14 15:05）
+**执行实例**: Claude-Terminal-8842
+**开始时间**: 2025-12-14 15:05
 **依赖**: T06
 
 **必读文件**:
