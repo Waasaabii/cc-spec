@@ -182,14 +182,14 @@ class TestCodexCommandGenerator:
     """Tests for Codex command generator."""
 
     def test_command_dir_path(self, monkeypatch) -> None:
-        """Test Codex command directory path (defaults to user prompts dir)."""
+        """Test Codex command directory path (global, via CODEX_HOME)."""
         generator = CodexCommandGenerator()
         with tempfile.TemporaryDirectory() as tmpdir:
             project_root = Path(tmpdir)
-            prompts_dir = project_root / "codex-prompts"
-            monkeypatch.setenv("CC_SPEC_CODEX_PROMPTS_DIR", str(prompts_dir))
+            codex_home = project_root / ".codex-home"
+            monkeypatch.setenv("CODEX_HOME", str(codex_home))
             cmd_dir = generator.get_command_dir(project_root)
-            assert cmd_dir == prompts_dir
+            assert cmd_dir == codex_home / "prompts"
 
 
 class TestCursorCommandGenerator:

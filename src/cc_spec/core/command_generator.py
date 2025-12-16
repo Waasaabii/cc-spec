@@ -6,8 +6,8 @@ v1.2：新增 8 个命令生成器（总计 17+）。
 v0.1.4：集成命令模板系统，主要命令使用结构化模板生成内容。
 """
 
-from abc import ABC, abstractmethod
 import os
+from abc import ABC, abstractmethod
 from pathlib import Path
 
 from cc_spec.core.command_templates import (
@@ -349,22 +349,22 @@ class GeminiCommandGenerator(CommandGenerator):
 class CodexCommandGenerator(CommandGenerator):
     """Codex CLI 的命令生成器。
 
-    Codex CLI 的自定义 prompts 默认从用户目录加载：`~/.codex/prompts/`。
+    Codex CLI 会从全局 prompts 目录发现命令：
 
-    参考 Codex 官方文档：Slash commands in Codex CLI。
-    cc-spec 为避免与其他 prompt 冲突，使用文件名前缀：`cc-spec-`。
+    - 默认：`~/.codex/prompts/`
+    - 若设置了 `CODEX_HOME`：`$CODEX_HOME/prompts/`
+
+    cc-spec 在该目录下生成 `<namespace>.<command>.md`（例如 `cc-spec.specify.md`）。
     """
 
     file_format = "markdown"
     namespace = "cc-spec"
-    file_name_prefix = "cc-spec-"
+    file_name_prefix = "cc-spec."
 
     def get_command_dir(self, project_root: Path) -> Path:
-        # 可通过环境变量覆盖，便于测试或自定义安装位置
-        override = os.getenv("CC_SPEC_CODEX_PROMPTS_DIR")
-        if override:
-            return Path(override).expanduser()
-
+        codex_home = (os.environ.get("CODEX_HOME") or "").strip()
+        if codex_home:
+            return Path(codex_home) / "prompts"
         return Path.home() / ".codex" / "prompts"
 
 

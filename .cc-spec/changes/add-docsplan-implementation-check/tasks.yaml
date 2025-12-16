@@ -1,0 +1,244 @@
+version: "1.0"
+change: add-docsplan-implementation-check
+
+# 说明：
+# - 本 tasks.yaml 同时兼容 cc-spec 执行器所需的字段（change/tasks/...）
+# - 并额外提供 meta/waves/execution_order 便于人类审阅（执行器会忽略未知字段）
+
+meta:
+  change_id: C-001
+  change_name: docsplan 落地验证检查
+  max_concurrent: 10
+  total_tasks: 9
+  estimated_lines: ~900
+
+waves:
+  - id: 0
+    type: gate
+    tasks: [T01]
+  - id: 1
+    type: wave
+    tasks: [T02, T03]
+  - id: 2
+    type: wave
+    tasks: [T04, T05]
+  - id: 3
+    type: wave
+    tasks: [T06]
+  - id: 4
+    type: wave
+    tasks: [T07, T08, T09]
+
+tasks:
+  T01:
+    wave: 0
+    name: DOCSPLAN-SPEC-AND-CORE
+    status: idle
+    tokens: 30k
+    deps: []
+    docs:
+      - .cc-spec/changes/add-docsplan-implementation-check/proposal.md
+      - docs/plan/cc-spec/03-设计方案.md
+      - docs/cc-spec/commands.md
+      - CLAUDE.md
+    code:
+      - src/cc_spec/core/docsplan_check/__init__.py
+      - src/cc_spec/core/docsplan_check/model.py
+      - src/cc_spec/core/docsplan_check/fingerprint.py
+    files:
+      - src/cc_spec/core/docsplan_check/__init__.py
+      - src/cc_spec/core/docsplan_check/model.py
+      - src/cc_spec/core/docsplan_check/fingerprint.py
+      - docs/cc-spec/commands.md
+    estimate: ~120
+    checklist:
+      - 明确并记录 docsplan “可验证项”约定（推荐：在指定章节下使用 Markdown 复选框）
+      - 定义验证项的最小数据模型（描述、来源定位、稳定指纹、可选证据/状态）
+      - 约定检查结论的持久化文件位置与格式（与 docsplan 文档分离存放）
+      - 新增模块通过 `uv run ruff check src/` 与 `uv run mypy src/cc_spec/`
+
+  T02:
+    wave: 1
+    name: DOCSPLAN-EXTRACTOR
+    status: idle
+    tokens: 35k
+    deps: [T01]
+    docs:
+      - .cc-spec/changes/add-docsplan-implementation-check/proposal.md
+      - docs/plan/cc-spec/03-设计方案.md
+    code:
+      - src/cc_spec/core/docsplan_check/extractor.py
+      - src/cc_spec/core/docsplan_check/model.py
+    files:
+      - src/cc_spec/core/docsplan_check/extractor.py
+      - src/cc_spec/core/docsplan_check/model.py
+    estimate: ~180
+    checklist:
+      - 支持从 `docs/plan/`（可配置）递归读取 `.md` 并提取可验证项
+      - 为每条验证项保留来源定位（文件路径 + 行号 + 标题层级/章节路径）
+      - 输出顺序稳定（同一输入重复执行结果一致）
+      - 代码通过 `uv run ruff check src/` 与 `uv run mypy src/cc_spec/`
+
+  T03:
+    wave: 1
+    name: DOCSPLAN-REVIEW-STORE
+    status: idle
+    tokens: 35k
+    deps: [T01]
+    docs:
+      - .cc-spec/changes/add-docsplan-implementation-check/proposal.md
+    code:
+      - src/cc_spec/core/docsplan_check/store.py
+      - src/cc_spec/core/docsplan_check/model.py
+      - src/cc_spec/core/docsplan_check/fingerprint.py
+    files:
+      - src/cc_spec/core/docsplan_check/store.py
+      - src/cc_spec/core/docsplan_check/model.py
+      - src/cc_spec/core/docsplan_check/fingerprint.py
+    estimate: ~200
+    checklist:
+      - 定义 review 文件 schema（状态：todo/in_progress/done/blocked/na + 可选证据）
+      - 支持读取旧 review 文件并与新提取结果合并（以指纹为主键）
+      - 当来源内容发生变化时，能标记“需要复核”（避免静默复用旧结论）
+      - 代码通过 `uv run ruff check src/` 与 `uv run mypy src/cc_spec/`
+
+  T04:
+    wave: 2
+    name: DOCSPLAN-CHECKLIST-RENDER
+    status: idle
+    tokens: 30k
+    deps: [T02, T03]
+    docs:
+      - .cc-spec/changes/add-docsplan-implementation-check/proposal.md
+    code:
+      - src/cc_spec/core/docsplan_check/renderer.py
+      - src/cc_spec/core/docsplan_check/model.py
+    files:
+      - src/cc_spec/core/docsplan_check/renderer.py
+      - src/cc_spec/core/docsplan_check/model.py
+    estimate: ~160
+    checklist:
+      - 生成集中式“设计落地验证清单”并按文档/章节分组
+      - 每条验证项展示来源定位（至少文件路径；可选包含行号/标题路径）
+      - 引入 review 状态与证据的展示（不要求修改原 docsplan 文档）
+      - 当无任何验证项时输出明确提示（而非静默成功）
+
+  T05:
+    wave: 2
+    name: DOCSPLAN-COVERAGE-REPORT
+    status: idle
+    tokens: 30k
+    deps: [T02, T03]
+    docs:
+      - .cc-spec/changes/add-docsplan-implementation-check/proposal.md
+    code:
+      - src/cc_spec/core/docsplan_check/report.py
+      - src/cc_spec/core/docsplan_check/model.py
+    files:
+      - src/cc_spec/core/docsplan_check/report.py
+      - src/cc_spec/core/docsplan_check/model.py
+    estimate: ~160
+    checklist:
+      - 输出覆盖率汇总（总项数、done/blocked/na/todo 等分类与百分比）
+      - 输出“差距列表”（未通过/阻塞项）并附带来源定位信息
+      - 报告结构稳定，重复执行便于对比差异
+
+  T06:
+    wave: 3
+    name: DOCSPLAN-CHECK-CLI
+    status: idle
+    tokens: 45k
+    deps: [T04, T05]
+    docs:
+      - .cc-spec/changes/add-docsplan-implementation-check/proposal.md
+      - docs/cc-spec/commands.md
+      - CLAUDE.md
+    code:
+      - src/cc_spec/commands/docsplan_check.py
+      - src/cc_spec/__init__.py
+      - src/cc_spec/core/docsplan_check/extractor.py
+      - src/cc_spec/core/docsplan_check/store.py
+      - src/cc_spec/core/docsplan_check/renderer.py
+      - src/cc_spec/core/docsplan_check/report.py
+    files:
+      - src/cc_spec/commands/docsplan_check.py
+      - src/cc_spec/__init__.py
+    estimate: ~220
+    checklist:
+      - 新增 CLI 入口（例如 `cc-spec docsplan-check`），可指定 docsplan 路径与输出路径
+      - 运行后产出：清单文件 + 报告文件 + review 文件（用于保存结论/证据）
+      - 支持基于结果的退出码（便于 CI：例如存在阻塞/未完成时非 0）
+      - 命令通过 `uv run ruff check src/`、`uv run mypy src/cc_spec/`、`uv run pytest`
+
+  T07:
+    wave: 4
+    name: DOCSPLAN-DOCS-AND-TEMPLATES
+    status: idle
+    tokens: 25k
+    deps: [T06]
+    docs:
+      - docs/cc-spec/commands.md
+      - docs/plan/cc-spec/03-设计方案.md
+    code:
+      - .cc-spec/templates/docsplan-verification-template.md
+    files:
+      - docs/cc-spec/commands.md
+      - .cc-spec/templates/docsplan-verification-template.md
+    estimate: ~80
+    checklist:
+      - 更新命令参考文档，说明该检查的输入约定与产出文件
+      - 提供最小示例（docsplan 文档片段 + 对应清单/报告示例）
+      - 新增可复用模板，便于在 docsplan 中写入可验证项
+
+  T08:
+    wave: 4
+    name: DOCSPLAN-UNIT-TESTS
+    status: idle
+    tokens: 40k
+    deps: [T02, T03, T04, T05]
+    docs:
+      - CLAUDE.md
+    code:
+      - tests/core/test_docsplan_extractor.py
+      - tests/core/test_docsplan_store.py
+      - tests/core/test_docsplan_report.py
+    files:
+      - tests/core/test_docsplan_extractor.py
+      - tests/core/test_docsplan_store.py
+      - tests/core/test_docsplan_report.py
+    estimate: ~220
+    checklist:
+      - extractor/store/renderer/report 的关键行为有单测覆盖（含无验证项场景）
+      - 覆盖“来源变化需复核”的合并逻辑
+      - 测试通过 `uv run pytest`
+
+  T09:
+    wave: 4
+    name: DOCSPLAN-INTEGRATION-TESTS
+    status: idle
+    tokens: 40k
+    deps: [T06]
+    docs:
+      - CLAUDE.md
+    code:
+      - tests/integration/test_docsplan_check_command.py
+    files:
+      - tests/integration/test_docsplan_check_command.py
+    estimate: ~180
+    checklist:
+      - 端到端测试：构造临时 docsplan，执行命令，校验产物文件与退出码
+      - 回归测试：重复执行检查时保留 review 结论；来源变化时提示复核
+      - 测试通过 `uv run pytest tests/integration/`
+
+tests:
+  - tests/core/test_docsplan_extractor.py: ~120
+  - tests/core/test_docsplan_store.py: ~140
+  - tests/core/test_docsplan_report.py: ~120
+  - tests/integration/test_docsplan_check_command.py: ~160
+
+execution_order:
+  - "Gate-0: T01 (串行)"
+  - "Wave-1: T02, T03 (并行)"
+  - "Wave-2: T04, T05 (并行)"
+  - "Wave-3: T06 (串行)"
+  - "Wave-4: T07, T08, T09 (并行)"

@@ -198,11 +198,14 @@ def test_init_creates_agent_folder(tmp_path, monkeypatch):
 def test_init_creates_codex_prompts_when_selected(tmp_path, monkeypatch):
     """Test that init generates Codex CLI prompts when codex is selected."""
     monkeypatch.chdir(tmp_path)
-    codex_prompts_dir = tmp_path / ".codex-user" / "prompts"
-    monkeypatch.setenv("CC_SPEC_CODEX_PROMPTS_DIR", str(codex_prompts_dir))
+
+    codex_home = tmp_path / "codex-home"
+    monkeypatch.setenv("CODEX_HOME", str(codex_home))
 
     result = runner.invoke(app, ["init", "test-project", "--agent", "codex"])
 
     assert result.exit_code == 0
-    assert codex_prompts_dir.exists()
-    assert (codex_prompts_dir / "cc-spec-specify.md").exists()
+    prompts_dir = codex_home / "prompts"
+    assert prompts_dir.exists()
+    assert (prompts_dir / "cc-spec.specify.md").exists()
+    assert (tmp_path / ".codex" / "README.md").exists()

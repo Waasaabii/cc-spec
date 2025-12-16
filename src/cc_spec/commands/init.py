@@ -1,5 +1,6 @@
 """cc-spec 的 init 命令实现。"""
 
+import os
 from pathlib import Path
 from typing import Optional
 
@@ -107,7 +108,7 @@ AI_TOOLS_CONFIG = {
         "folder": ".auggie/",
         "requires_cli": True,
     },
-    # 预留：Codex CLI（当前未实现命令生成器，仍可用于放置配置）
+    # Codex CLI：prompts 写入全局目录（~/.codex/prompts 或 $CODEX_HOME/prompts）
     "codex": {
         "name": "Codex CLI",
         "folder": ".codex/",
@@ -117,6 +118,18 @@ AI_TOOLS_CONFIG = {
 
 # 用于选择界面的简化显示
 AI_TOOLS_DISPLAY = {key: config["name"] for key, config in AI_TOOLS_CONFIG.items()}
+
+
+def _get_codex_prompts_dir() -> Path:
+    """Codex CLI prompts 的全局目录。
+
+    Codex 默认从 `~/.codex/prompts/` 发现 prompts；若设置了 `CODEX_HOME`，则为
+    `$CODEX_HOME/prompts/`。
+    """
+    codex_home = (os.environ.get("CODEX_HOME") or "").strip()
+    if codex_home:
+        return (Path(codex_home) / "prompts").resolve()
+    return (Path.home() / ".codex" / "prompts").resolve()
 
 
 def init_command(
@@ -261,13 +274,6 @@ def init_command(
     console.print("[cyan]正在创建AI工具配置目录...[/cyan]")
     for agent_key in selected_agents:
         agent_config = AI_TOOLS_CONFIG[agent_key]
-        # Codex CLI 的配置/Prompts 默认在用户目录 `~/.codex/`，不需要在项目内创建 `.codex/`
-        if agent_key == "codex":
-            console.print(
-                f"[green]✓[/green] 已选择 codex（prompts 输出到用户目录 ~/.codex/prompts）"
-            )
-            continue
-
         agent_folder = project_root / agent_config["folder"]
 
         # 创建AI工具文件夹
@@ -276,7 +282,28 @@ def init_command(
         # 创建基础README文件
         readme_path = agent_folder / "README.md"
         if not readme_path.exists():
-            readme_content = f"""# {agent_config["name"]} 配置
+            if agent_key == "codex":
+                prompts_dir = _get_codex_prompts_dir()
+
+                readme_content = f"""# {agent_config["name"]}
+
+cc-spec 会为 Codex CLI 生成 prompts，但 **Codex 只会从全局目录发现 prompts**：
+
+- 默认：`~/.codex/prompts/`
+- 若设置了 `CODEX_HOME`：`$CODEX_HOME/prompts/`
+
+本次初始化生成/更新的 prompts 位置：
+
+- `{prompts_dir}`
+
+重启 Codex CLI 后，用 `/prompts:` 查看并调用（例如 `/prompts:cc-spec.specify`）。
+
+## 安全提示
+
+- `.codex/` 可能包含认证令牌、凭证等敏感信息，建议加入 `.gitignore` 或仅提交 prompts 相关文件
+"""
+            else:
+                readme_content = f"""# {agent_config["name"]} 配置
 
 此目录包含 {agent_config["name"]} 的配置文件。
 
@@ -351,7 +378,7 @@ def init_command(
 | Claude Code | `/cc-spec:specify` | `/cc-spec:specify add-oauth` |
 | Cursor | `/cc-spec-specify` | `/cc-spec-specify add-oauth` |
 | Gemini CLI | `/cc-spec:specify` | `/cc-spec:specify add-oauth` |
-| Codex CLI | `/prompts:cc-spec-specify` | `/prompts:cc-spec-specify add-oauth` |
+| Codex CLI | `/prompts:cc-spec.specify` | `/prompts:cc-spec.specify add-oauth` |
 | GitHub Copilot | 提示库选择 | 选择 `cc-spec-specify` |
 | Amazon Q | `@cc-spec-specify` | `@cc-spec-specify add-oauth` |
 | 其他工具 | 自然语言 | “帮我执行 cc-spec specify …” |
@@ -573,5 +600,23 @@ cc-spec quick-delta \"<description>\"
                 title="[yellow]安全提示[/yellow]",
                 border_style="yellow",
                 padding=(1, 2)
+            )
+        )
+
+    # Codex CLI: prompts 仅从全局目录发现
+    if "codex" in selected_agents:
+        prompts_dir = _get_codex_prompts_dir()
+
+        console.print()
+        console.print(
+            Panel(
+                f"你选择了 [bold]Codex CLI[/bold]。\n\n"
+                "Codex CLI 只会从全局目录发现 prompts。\n\n"
+                "cc-spec 已生成/更新 prompts 到：\n"
+                f"  - [cyan]{prompts_dir}[/cyan]\n\n"
+                "重启 Codex CLI 后，用 `/prompts:` 查看并调用（例如 `/prompts:cc-spec.specify`）。",
+                title="[cyan]Codex 设置[/cyan]",
+                border_style="cyan",
+                padding=(1, 2),
             )
         )
