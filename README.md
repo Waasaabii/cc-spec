@@ -4,13 +4,13 @@
 
 [English](./docs/README.en.md) | 中文
 
-[![Version](https://img.shields.io/badge/version-0.1.0-blue.svg)](https://github.com/Waasaabii/cc-spec)
+[![Version](https://img.shields.io/badge/version-0.1.5-blue.svg)](https://github.com/Waasaabii/cc-spec)
 
 ---
 
 ## 简介
 
-cc-spec 是一个整合了 [OpenSpec](https://github.com/hannesrudolph/openspec) 和 [Spec-Kit](https://github.com/github/spec-kit) 精华的规范驱动开发 CLI 工具，专为 Claude Code 的 SubAgent 并发执行能力设计。
+cc-spec 是一个整合了 [OpenSpec](https://github.com/hannesrudolph/openspec) 和 [Spec-Kit](https://github.com/github/spec-kit) 精华的规范驱动开发 CLI 工具，面向 **Claude Code 编排 + Codex 执行** 的规格驱动开发工作流。
 
 ## ps
 ```typescript
@@ -23,8 +23,8 @@ openspec缺少打分环节。speckit又对模型的改造太大，完全忽略�
 ### 核心特性
 
 - **7 步标准工作流**: `init → specify → clarify → plan → apply → checklist → archive`
-- **SubAgent 并发执行**: apply 阶段支持最多 10 个 SubAgent 并发（仅 Claude Code）
-- **多 AI 工具支持**: 17+ AI 工具的命令集成（Claude、Cursor、Gemini、Copilot 等）
+- **Claude 编排 / Codex 执行（v0.1.5）**: Claude 只负责编排，Codex CLI 负责产出代码/文件
+- **RAG 知识库（v0.1.5）**: ChromaDB 向量库 + fastembed embeddings + workflow records
 - **Delta 变更追踪**: ADDED / MODIFIED / REMOVED / RENAMED 格式
 - **打分验收机制**: checklist 打分 ≥80 通过，否则打回 apply
 - **超简单模式**: `quick-delta` 一步生成变更记录
@@ -51,25 +51,28 @@ uv tool install cc-spec --force --from git+https://github.com/Waasaabii/cc-spec.
 ## 快速开始
 
 ```bash
-# 1. 初始化项目（选择要支持的 AI 工具）
-cc-spec init --ai claude,cursor
+# 1. 初始化项目（生成 Claude Code 的 /cc-spec:* 命令）
+cc-spec init
 
-# 2. 创建变更规格
+# 2. （推荐）先构建/更新知识库（在 Claude Code 中执行）
+# /cc-spec:init
+
+# 3. 创建变更规格
 cc-spec specify add-user-auth
 
-# 3. 澄清需求
+# 4. 澄清需求
 cc-spec clarify
 
-# 4. 生成执行计划
+# 5. 生成执行计划
 cc-spec plan
 
-# 5. 执行任务（SubAgent 并发，仅 Claude Code）
+# 6. 执行任务（SubAgent 并发）
 cc-spec apply
 
-# 6. 验收打分
+# 7. 验收打分
 cc-spec checklist
 
-# 7. 归档变更
+# 8. 归档变更
 cc-spec archive
 ```
 
@@ -84,16 +87,10 @@ cc-spec quick-delta "修复登录页面样式问题"
 
 ## 在 AI 工具中使用
 
-cc-spec init 会为选中的 AI 工具生成命令文件，用户可以在各工具的输入框中直接调用：
+cc-spec init 会生成 Claude Code 的命令文件到 `.claude/commands/cc-spec/`，在 Claude Code 中可直接调用：
 
-| 工具 | 调用方式 | 示例 |
-|------|----------|------|
-| Claude Code | `/cc-spec:specify` | `/cc-spec:specify add-oauth` |
-| Cursor | `/cc-spec-specify` | `/cc-spec-specify add-oauth` |
-| Gemini CLI | `/cc-spec:specify` | `/cc-spec:specify add-oauth` |
-| GitHub Copilot | 提示库选择 | 选择 "cc-spec-specify" |
-| Amazon Q | `@cc-spec-specify` | `@cc-spec-specify add-oauth` |
-| 其他工具 | 自然语言 | "帮我执行 cc-spec specify" |
+- `/cc-spec:init`（构建/更新 KB：先 scan，再入库）
+- `/cc-spec:specify` / `/cc-spec:clarify` / `/cc-spec:plan` / `/cc-spec:apply` / `/cc-spec:checklist` / `/cc-spec:archive`
 
 ---
 

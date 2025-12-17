@@ -1,9 +1,5 @@
-"""Tests for the init command (v1.2)."""
+"""Tests for the init command (v0.1.5)."""
 
-from pathlib import Path
-from unittest.mock import patch
-
-import pytest
 from typer.testing import CliRunner
 
 from cc_spec import app
@@ -17,23 +13,21 @@ def test_init_creates_directory_structure(tmp_path, monkeypatch):
     """Test that init creates the correct directory structure."""
     monkeypatch.chdir(tmp_path)
 
-    # Mock select_option to avoid interactive prompts
-    with patch("cc_spec.commands.init.select_option", return_value="claude"):
-        result = runner.invoke(app, ["init", "test-project", "--agent", "claude"])
+    result = runner.invoke(app, ["init", "test-project"])
 
     assert result.exit_code == 0
     assert (tmp_path / ".cc-spec").exists()
     assert (tmp_path / ".cc-spec" / "templates").exists()
     assert (tmp_path / ".cc-spec" / "changes").exists()
     assert (tmp_path / ".cc-spec" / "specs").exists()
+    assert (tmp_path / ".cc-spec" / "archive").exists()
 
 
 def test_init_creates_config_file(tmp_path, monkeypatch):
     """Test that init creates a valid config.yaml file."""
     monkeypatch.chdir(tmp_path)
 
-    with patch("cc_spec.commands.init.select_option", return_value="claude"):
-        result = runner.invoke(app, ["init", "test-project", "--agent", "claude"])
+    result = runner.invoke(app, ["init", "test-project"])
 
     assert result.exit_code == 0
 
@@ -43,40 +37,17 @@ def test_init_creates_config_file(tmp_path, monkeypatch):
     # Load and verify config
     config = load_config(config_path)
     assert config.project_name == "test-project"
-    assert config.version == "1.2"  # v1.2 default
+    assert config.version == "1.3"  # Current default schema
     assert config.agents.default == "claude"
 
 
-def test_init_with_specified_agent(tmp_path, monkeypatch):
-    """Test init with --agent option."""
+def test_init_rejects_non_claude_agent(tmp_path, monkeypatch):
+    """Test init rejects non-claude --agent (deprecated flag)."""
     monkeypatch.chdir(tmp_path)
 
     result = runner.invoke(app, ["init", "test-project", "--agent", "cursor"])
 
-    assert result.exit_code == 0
-
-    config_path = get_config_path(tmp_path)
-    config = load_config(config_path)
-    assert config.agents.default == "cursor"
-    assert "cursor" in config.agents.enabled
-
-
-def test_init_detects_existing_agent(tmp_path, monkeypatch):
-    """Test that init detects existing AI agent directories."""
-    monkeypatch.chdir(tmp_path)
-
-    # Create .claude directory to simulate Claude Code presence
-    (tmp_path / ".claude").mkdir()
-
-    # Mock select_option to simulate user accepting detected agent
-    with patch("cc_spec.commands.init.select_option", return_value="use_detected"):
-        result = runner.invoke(app, ["init", "test-project"])
-
-    assert result.exit_code == 0
-
-    config_path = get_config_path(tmp_path)
-    config = load_config(config_path)
-    assert config.agents.default == "claude"
+    assert result.exit_code == 1
 
 
 def test_init_fails_if_already_initialized(tmp_path, monkeypatch):
@@ -111,7 +82,7 @@ def test_init_with_force_overwrites_existing(tmp_path, monkeypatch):
     save_config(old_config, config_path)
 
     result = runner.invoke(
-        app, ["init", "new-project", "--agent", "gemini", "--force"]
+        app, ["init", "new-project", "--force"]
     )
 
     assert result.exit_code == 0
@@ -119,7 +90,7 @@ def test_init_with_force_overwrites_existing(tmp_path, monkeypatch):
     # Verify config was overwritten
     config = load_config(config_path)
     assert config.project_name == "new-project"
-    assert config.agents.default == "gemini"
+    assert config.agents.default == "claude"
 
 
 def test_init_uses_directory_name_as_default_project_name(tmp_path, monkeypatch):
@@ -128,9 +99,7 @@ def test_init_uses_directory_name_as_default_project_name(tmp_path, monkeypatch)
     project_dir.mkdir()
     monkeypatch.chdir(project_dir)
 
-    # Mock select_option to avoid interactive prompts
-    with patch("cc_spec.commands.init.select_option", return_value="claude"):
-        result = runner.invoke(app, ["init", "--agent", "claude"])
+    result = runner.invoke(app, ["init"])
 
     assert result.exit_code == 0
 
@@ -147,8 +116,10 @@ def test_init_handles_template_copy_failure_gracefully(tmp_path, monkeypatch):
     def mock_copy_fail(*args, **kwargs):
         raise Exception("Copy error")
 
+    from unittest.mock import patch
+
     with patch("shutil.copy2", side_effect=mock_copy_fail):
-        result = runner.invoke(app, ["init", "test-project", "--agent", "claude"])
+        result = runner.invoke(app, ["init", "test-project"])
 
     # Should still succeed (with warning) even if template copy fails
     assert result.exit_code == 0
@@ -162,20 +133,20 @@ def test_init_displays_success_message(tmp_path, monkeypatch):
     """Test that init displays a success message with next steps."""
     monkeypatch.chdir(tmp_path)
 
-    result = runner.invoke(app, ["init", "test-project", "--agent", "claude"])
+    result = runner.invoke(app, ["init", "test-project"])
 
     assert result.exit_code == 0
     # Check for Chinese success message
     assert "初始化完成" in result.stdout or "成功初始化" in result.stdout
     assert "test-project" in result.stdout
-    assert "cc-spec specify" in result.stdout
+    assert "/cc-spec:specify" in result.stdout
 
 
 def test_init_creates_agents_md(tmp_path, monkeypatch):
     """Test that init creates AGENTS.md file."""
     monkeypatch.chdir(tmp_path)
 
-    result = runner.invoke(app, ["init", "test-project", "--agent", "claude"])
+    result = runner.invoke(app, ["init", "test-project"])
 
     assert result.exit_code == 0
     agents_md = tmp_path / "AGENTS.md"
@@ -188,24 +159,33 @@ def test_init_creates_agent_folder(tmp_path, monkeypatch):
     """Test that init creates the AI tool folder."""
     monkeypatch.chdir(tmp_path)
 
-    result = runner.invoke(app, ["init", "test-project", "--agent", "claude"])
+    result = runner.invoke(app, ["init", "test-project"])
 
     assert result.exit_code == 0
     # Claude uses .claude folder
     assert (tmp_path / ".claude").exists()
 
 
-def test_init_creates_codex_prompts_when_selected(tmp_path, monkeypatch):
-    """Test that init generates Codex CLI prompts when codex is selected."""
+def test_init_creates_cc_specignore(tmp_path, monkeypatch):
+    """Test that init creates .cc-specignore for KB scanning rules."""
     monkeypatch.chdir(tmp_path)
 
-    codex_home = tmp_path / "codex-home"
-    monkeypatch.setenv("CODEX_HOME", str(codex_home))
-
-    result = runner.invoke(app, ["init", "test-project", "--agent", "codex"])
+    result = runner.invoke(app, ["init", "test-project"])
 
     assert result.exit_code == 0
-    prompts_dir = codex_home / "prompts"
-    assert prompts_dir.exists()
-    assert (prompts_dir / "cc-spec.specify.md").exists()
-    assert (tmp_path / ".codex" / "README.md").exists()
+    ignore_file = tmp_path / ".cc-specignore"
+    assert ignore_file.exists()
+    content = ignore_file.read_text(encoding="utf-8")
+    assert "KB scanning ignore rules" in content
+
+
+def test_init_creates_claude_commands(tmp_path, monkeypatch):
+    """Test that init generates Claude Code slash command files."""
+    monkeypatch.chdir(tmp_path)
+
+    result = runner.invoke(app, ["init", "test-project"])
+
+    assert result.exit_code == 0
+    cmd_dir = tmp_path / ".claude" / "commands" / "cc-spec"
+    assert cmd_dir.exists()
+    assert (cmd_dir / "specify.md").exists()

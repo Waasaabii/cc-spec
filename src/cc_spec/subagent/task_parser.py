@@ -44,11 +44,15 @@ class ExecutionLog:
     属性：
         completed_at: 任务完成的 ISO 时间戳
         subagent_id: 执行该任务的 SubAgent ID
+        session_id: Codex 线程/会话 ID（用于 resume）
+        exit_code: Codex CLI 退出码（可选）
         notes: 可选的执行备注
     """
 
     completed_at: str | None = None
     subagent_id: str | None = None
+    session_id: str | None = None
+    exit_code: int | None = None
     notes: str | None = None
 
 
@@ -238,9 +242,18 @@ def _parse_yaml_task(
     execution_log = None
     log_info = task_info.get("log")
     if log_info and isinstance(log_info, dict):
+        exit_code_raw = log_info.get("exit_code")
+        exit_code: int | None = None
+        try:
+            if exit_code_raw is not None:
+                exit_code = int(exit_code_raw)
+        except (TypeError, ValueError):
+            exit_code = None
         execution_log = ExecutionLog(
             completed_at=log_info.get("completed_at"),
             subagent_id=log_info.get("subagent_id"),
+            session_id=log_info.get("session_id"),
+            exit_code=exit_code,
             notes=log_info.get("notes"),
         )
 
@@ -424,6 +437,10 @@ def generate_tasks_yaml(doc: TasksDocument) -> str:
                 log_data["completed_at"] = task.execution_log.completed_at
             if task.execution_log.subagent_id:
                 log_data["subagent_id"] = task.execution_log.subagent_id
+            if task.execution_log.session_id:
+                log_data["session_id"] = task.execution_log.session_id
+            if task.execution_log.exit_code is not None:
+                log_data["exit_code"] = task.execution_log.exit_code
             if task.execution_log.notes:
                 log_data["notes"] = task.execution_log.notes
             if log_data:
@@ -576,8 +593,8 @@ def update_task_status_yaml(
     # 更新状态
     data["tasks"][task_id]["status"] = new_status
 
-    # 更新日志
-    if log and new_status == TaskStatus.COMPLETED:
+    # 更新日志（允许失败/进行中也写入，便于 resume/debug）
+    if log:
         data["tasks"][task_id]["log"] = log
 
     return yaml.dump(

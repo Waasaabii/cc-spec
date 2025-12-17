@@ -1,383 +1,242 @@
-"""plan 命令的模板实现。
+"""plan 命令模板。
 
-该模板为 plan 命令提供完整的执行指令，包括：
-- 九段大纲规划流程
-- Gate/Wave 并行任务结构
-- 技术硬要求提取
-- tasks.yaml 结构化输出
+该模板用于在 Claude Code 中编排 `cc-spec plan` 工作流，核心目标是产出可执行的
+`.cc-spec/changes/<change>/tasks.yaml`（Gate/Wave 分解，九段大纲）。
+
+定位（v0.1.5 兼容）：
+- Claude Code：只负责编排（Bash/Read/Glob/Grep/AskUserQuestion/TodoWrite），不直接写文件。
+- Codex：产出/修改文件（主要是 tasks.yaml，必要时补充最小文档）。
+- KB：作为上下文与追溯来源（records/chunks），避免在 prompt 里塞大段全文。
 """
 
 from .base import CommandTemplate, CommandTemplateContext
 
 
 class PlanTemplate(CommandTemplate):
-    """plan 命令的模板实现。
-
-    该模板实现 Gate/Wave 结构化任务规划，将 proposal.md 转化为可执行的 tasks.yaml。
-
-    核心功能：
-    - 分析 proposal.md 并识别技术硬要求
-    - 根据依赖关系将任务拆分为 Gate-0（串行）和 Wave-N（并行）
-    - 生成结构化的 tasks.yaml（体积降低 80%）
-    - 校验依赖关系并提供执行顺序
-    """
-
     def get_outline(self, ctx: CommandTemplateContext) -> str:
-        """获取 plan 命令的大纲描述。"""
-        return """根据 proposal.md 生成结构化的执行计划（tasks.yaml）。
+        return """
+为当前变更生成**可执行的** `.cc-spec/changes/<change>/tasks.yaml`（Gate/Wave 结构）。
 
-**核心目标：**
-- 将变更需求拆解为可并行执行的任务组
-- 创建 Gate-0（基础设施，串行执行）
-- 创建 Wave-1~N（功能任务，并行执行）
-- 为每个任务定义检查清单和预估上下文
-- 生成 tasks.yaml（结构化，体积降低 80%）
+**核心目标**
+- 读取 `proposal.md`，把“需求/约束/验收”转成可执行任务。
+- 抽取**技术硬要求**（尤其是 `CLAUDE.md` / repo 规范 / CI 约束），避免后续返工。
+- 用 **Gate-0**（串行）处理全局前置条件，再用 **Wave-1..N**（并行/并发）推进实现。
+- 生成 `tasks.yaml`，包含 `meta`、`waves`、任务 `deps`、以及每个任务的 `checklist`。
 
-**输入：** proposal.md（变更提案）
-**输出：** tasks.yaml（结构化任务定义）
+**输入**
+- `.cc-spec/changes/<change>/proposal.md`（proposal.md）
 
-**任务结构：**
+**输出**
+- `.cc-spec/changes/<change>/tasks.yaml`（tasks.yaml）
+
+**tasks.yaml 结构要求（摘要）**
 ```yaml
+version: "1.0"
+change: <change-name>
+
 meta:
-  change_id: <change-name>
-  change_name: <描述性名称>
-  max_concurrent: 10
-  total_tasks: N
-  estimated_lines: ~XXXX
+  change_id: C-XXX
+  change_name: <human readable>
+  max_concurrent: 4
 
 waves:
   - id: 0
-    type: gate  # 串行执行
-    tasks: [...]
+    type: gate   # type: gate
+    tasks: [T01]
   - id: 1
-    type: wave  # 并行执行
-    tasks: [...]
-```"""
+    type: wave   # type: wave
+    tasks: [T02, T03]
+
+tasks:
+  T01:
+    name: <action-noun>
+    status: idle
+    deps: []
+    docs: [proposal.md, CLAUDE.md]
+    code: [src/...]
+    estimate: ~200
+    checklist:
+      - 可验证的验收点（避免空话）
+```
+
+**分工（必须遵守）**
+- Claude Code：编排（不 Write/Edit）
+- Codex：生成/修改 `tasks.yaml`
+""".strip()
 
     def get_execution_steps(self, ctx: CommandTemplateContext) -> list[str]:
-        """获取 plan 命令的执行步骤列表（九段大纲）。"""
         return [
-            "读取并分析 proposal.md，理解变更的背景、目标、技术决策和成功标准",
+            """**1) 读取输入：proposal.md**
 
-            (
-                "识别技术硬要求：从 .claude/CLAUDE.md（或 CLAUDE.md）、AGENTS.md、"
-                "pyproject.toml 中提取测试命令、lint 工具、类型检查要求"
-            ),
+- 打开并通读：
+  - `.cc-spec/changes/<change>/proposal.md`（proposal.md）
+- 把内容按：Why / What Changes / Impact / Success Criteria 做摘要笔记（不写文件也行）。
+""",
+            """**2) 识别技术硬要求（技术硬要求）**
 
-            (
-                "分析依赖关系，确定任务顺序：识别哪些任务必须串行（基础设施）、"
-                "哪些可以并行（功能实现）"
-            ),
+- 必须读取并提取约束：
+  - `CLAUDE.md`（代码规范/流程约束/命令约束）
+  - `pyproject.toml`（Python 版本、依赖、lint/test 工具）
+  - CI/脚本（如 `script/`、GitHub Actions 等，若存在）
+- 输出：一份“硬要求清单”，用于驱动任务拆分与检查清单编写。
+""",
+            """**3) 分析依赖关系（依赖关系）**
 
-            (
-                "创建 Gate-0（串行门控任务）：包含基础设施任务，如数据模型、核心接口、"
-                "环境配置。这些任务必须在所有其他任务之前完成"
-            ),
+- 识别下列依赖并记录到 tasks.yaml：
+  - 任务间依赖：先基础设施/接口，再功能实现，再收尾（测试/文档/迁移）
+  - 外部依赖：新包/新服务/向量库/本地进程（若有）
+  - 目录依赖：哪些模块必须先改，哪些可以并行
+- 原则：同一个 Wave 内尽量无 deps；有 deps 的拆到后续 Wave。
+""",
+            """**4) 建立 Gate-0（串行）**
 
-            (
-                "创建 Wave-1~N（并行波次任务）：将功能任务按依赖关系分组到不同 Wave。"
-                "同一 Wave 内任务互不依赖，可并发执行。跨 Wave 依赖只能指向更早 Wave"
-            ),
+- 创建 **Gate-0**：必须**串行**完成、且能阻断后续实现的前置任务，例如：
+  - 建新目录/配置骨架
+  - 定义核心数据结构/协议
+  - 跑通最小示例或 smoke test
+- Gate-0 的 `checklist` 必须可验证（命令/文件/行为）。
+""",
+            """**5) 划分 Wave-1..N（并行/并发）**
 
-            (
-                "为每个任务生成预估上下文：根据涉及的文件、引用的代码、检查清单等估算代码行数"
-                "（estimate 字段）。确保单个任务不超过 150K tokens"
-            ),
+- 将实现任务拆到 **Wave-1** 起的多个 Wave：
+  - Wave 内任务尽量**并行/并发**执行（无互相 deps）
+  - 每个 Wave 完成后应能给出一个“可验证里程碑”
+- 如果任务很多：优先拆“按模块/按垂直切片”的 Wave，而不是按文件类型拆。
+""",
+            """**6) 预估上下文与工作量（预估上下文 / estimate）**
 
-            (
-                "定义检查清单和验收标准：为每个任务创建 checklist 字段，"
-                "列出 3-5 条可验证的完成标准。检查清单必须具体、可测试"
-            ),
+- 给每个任务填写 `estimate`（大致行数/复杂度/风险点）与 `tokens`（可选）。
+- 标记需要额外上下文的任务（例如需要扫描 reference/、需要读取外部协议等）。
+- 原则：estimate 用于并发度与分 Wave 的权衡，不追求精确。
+""",
+            """**7) 为每个任务编写检查清单（检查清单 / checklist）**
 
-            (
-                "生成 tasks.yaml：使用 YAML 格式输出，包含 meta 元信息、waves 波次定义、"
-                "execution_order 执行顺序说明。确保结构清晰、易于解析"
-            ),
+- 每个任务必须有 `checklist`，且每一条都满足：
+  - 可验证：能通过测试/命令/文件存在/行为变化来确认
+  - 颗粒度适中：避免“完成 XXX”这种空话
+  - 覆盖：功能 + 质量（lint/类型）+ 测试 + 文档（如需要）
+""",
+            """**8) 生成/更新 tasks.yaml（由 Codex 产出）**
 
-            (
-                "校验依赖关系并报告：检查是否有循环依赖、Wave 分组是否合理、任务 ID 是否唯一。"
-                "生成执行顺序摘要（Gate-0: T01, T02 (串行) → Wave-1: T03, T04, T05 (并行)）"
-            )
+- Claude 不写文件；用 Bash 调用 Codex，仅允许改：
+  - `.cc-spec/changes/<change>/tasks.yaml`（tasks.yaml）
+
+```bash
+codex exec --skip-git-repo-check --cd . --json - <<'EOF'
+目标：只编辑 .cc-spec/changes/<change>/tasks.yaml
+输入：读取 proposal.md + CLAUDE.md 等硬要求
+要求：
+- 必须包含 meta / waves / tasks 三段，并按 Gate-0 + Wave-1..N 组织
+- waves: Gate-0 用 type: gate；后续用 type: wave
+- deps 不允许循环；同 Wave 内尽量无 deps
+- 每个任务包含 docs/code/checklist/estimate（尽量短但可执行）
+EOF
+```
+""",
+            """**9) 校验计划可执行性（校验 / 依赖）**
+
+- 本地校验 tasks.yaml：
+  ```bash
+  cc-spec apply $ARGUMENTS --dry-run
+  ```
+- 校验点：
+  - Gate/Wave 分组是否符合 deps
+  - deps 是否存在、是否循环
+  - 关键任务是否覆盖了技术硬要求
+- （可选）写入追溯 record：
+  ```bash
+  cc-spec kb record --step plan --change "<change>" --notes "tasks.yaml generated"
+  ```
+""",
         ]
 
     def get_validation_checklist(self, ctx: CommandTemplateContext) -> list[str]:
-        """获取 plan 命令完成后的验证检查清单。"""
         return [
-            "tasks.yaml 已生成并包含完整的 meta 和 waves 字段",
-            "Gate-0 包含基础设施任务（数据模型、核心接口、环境配置），标记为 type: gate",
-            "Wave 分组正确：同 Wave 内任务互不依赖，跨 Wave 依赖只指向更早 Wave，无循环依赖",
-            "每个任务有明确的检查清单（checklist 字段，3-5 条具体、可测试的标准）",
-            "预估上下文在合理范围内（estimate 字段，单个任务 <150K tokens，约 <500 行代码）",
-            "任务 ID 唯一且连续（T01, T02, T03...），deps 字段引用的任务 ID 均存在",
-            "execution_order 字段准确反映 Gate/Wave 执行顺序",
-            "tasks.yaml 体积相比传统 tasks.md 降低约 80%（通过结构化和 $templates/ 引用）"
+            "tasks.yaml 已生成，且 `cc-spec apply --dry-run` 可解析",
+            "Gate-0 已存在且符合串行前置（type: gate）",
+            "Wave-1..N 分组合理，可并行/并发推进（type: wave）",
+            "依赖关系 deps 无循环且只指向已存在任务",
+            "每个任务都有可验证的检查清单 checklist 与 estimate",
+            "Claude 未直接 Write/Edit 任何文件（文件产出来自 Codex/CLI）",
         ]
 
     def get_guidelines(self, ctx: CommandTemplateContext) -> str:
-        """获取 plan 命令的指南。"""
-        return """## Gate/Wave 规划原则
+        return """
+### Gate/Wave 规划原则（Gate/Wave）
 
-### Gate-0（串行执行）
+**Gate-0（串行）**
+- 只放“阻断项”：不做完就无法安全开始并行实现的内容。
+- 常见内容：关键数据结构/协议、项目骨架、最小可运行路径、关键配置。
+- Gate-0 必须标注为 `type: gate`，并放在 Wave 0；严格串行。
 
-**定义：** 基础设施任务，必须先于所有功能任务完成。
+**Wave-1..N（并行/并发）**
+- Wave 是并行执行单元：同一个 Wave 内尽量不互相依赖（deps）。
+- 若存在明确依赖关系：拆到后续 Wave，而不是靠同 Wave 内排序“碰运气”。
+- 每个 Wave 应该有一个“可验证里程碑”（例如某条命令可跑、某个 API 可用）。
 
-**包含内容：**
-- 数据模型定义（如 SQLAlchemy models、Pydantic schemas）
-- 核心接口/抽象基类（如 CommandTemplate, AmbiguityDetector）
-- 环境配置（如 config.yaml 结构、环境变量）
-- 项目初始化脚本
+**依赖（deps）**
+- deps 只能指向已定义的任务 ID（如 T01、T02）。
+- 不允许循环依赖；避免长链依赖（会拖慢并行效率）。
+- 依赖关系要反映真实技术顺序：先基础设施/契约，再功能实现，再测试与收尾。
 
-**特点：**
-- 串行执行（一个任务完成后才能开始下一个）
-- 通常涉及核心架构和共享组件
-- 其他任务通常会依赖 Gate-0 的产出
+---
 
-**示例：**
-```yaml
-- id: 0
-  type: gate
-  tasks:
-    - id: T01
-      name: TEMPLATE-BASE
-      desc: 创建命令模板基础设施
-      files:
-        - src/cc_spec/core/command_templates/base.py
-```
+### 技术硬要求提取（技术硬要求）
 
-### Wave-N（并行执行）
+计划阶段必须抽取“硬约束”，否则是高返工风险：
+- `CLAUDE.md`：流程/编排限制、质量门槛、工具使用边界。
+- `pyproject.toml` / `uv.lock`：Python 版本、依赖、测试框架、lint 工具（如 ruff）。
+- 现有脚本/CI：测试命令、格式化、静态检查要求。
 
-**定义：** 可并发执行的任务组，同一 Wave 内任务互不依赖。
+**至少写进 checklist 的硬项（示例）**
+- 运行测试：`pytest`（或项目约定的 test 命令）
+- 运行 lint：`ruff`（或项目约定的 lint 命令）
+- 若有类型检查：mypy/pyright（按项目约定）
 
-**分组原则：**
-1. **Wave-1**：直接依赖 Gate-0 的核心功能（如各命令的模板实现）
-2. **Wave-2**：依赖 Wave-1 的扩展功能（如检测器、高级模板）
-3. **Wave-N**：依赖前序 Wave 的集成任务
+---
 
-**依赖规则：**
-- 同一 Wave 内任务不能相互依赖
-- 跨 Wave 依赖只能指向更早的 Wave（如 Wave-2 可依赖 Wave-1，但不能依赖 Wave-3）
-- 避免循环依赖（A 依赖 B，B 依赖 A）
+### tasks.yaml 结构规范（tasks.yaml）
 
-**示例：**
-```yaml
-- id: 1
-  type: wave
-  tasks:
-    - id: T03
-      name: SPECIFY-TEMPLATE
-      deps: [T01]  # 依赖 Gate-0 的 T01
-    - id: T04
-      name: CLARIFY-TEMPLATE
-      deps: [T01]  # 依赖 Gate-0 的 T01
-    - id: T05
-      name: PLAN-TEMPLATE
-      deps: [T01]  # 依赖 Gate-0 的 T01
-```
+tasks.yaml 必须“可读 + 可执行 + 可追溯”，建议包含：
 
-## 技术硬要求提取
+**meta**
+- `change_id` / `change_name`：用于人读与追踪
+- `max_concurrent`：apply 并发度
+- 其他：规模预估、默认模型等（可选）
 
-从以下位置提取技术要求并在 tasks.yaml 中体现：
+**waves**
+- 每个 wave 至少包含：`id`、`type`、`tasks`
+- `type: gate` 只用于 Gate-0；`type: wave` 用于并行 Wave
 
-### 1. .claude/CLAUDE.md 或 CLAUDE.md
+**tasks**
+- 任务字段建议包含：`name`、`status`、`deps`、`docs`、`code`、`estimate`、`checklist`
+- 字段示例（不是固定 schema）：
+  - `id:`（隐含为键名，如 T01）
+  - `name:`（action-noun）
+  - `desc:`（可选，1-2 句）
 
-**关注内容：**
-- 测试命令（如 `uv run pytest`、`pnpm test`）
-- Lint 工具（如 `uv run ruff check`、`pnpm lint`）
-- 类型检查（如 `uv run mypy`、`pnpm type-check`）
-- 构建命令（如 `pnpm build`、`uv build`）
+---
 
-**应用方式：** 在每个任务的 checklist 中加入技术检查项（如"代码通过 ruff check"）
+### 预估上下文（预估上下文 / estimate）
 
-### 2. AGENTS.md
+- `estimate` 不是精确工时，是复杂度/风险标签：用于分 Wave 与控并发。
+- 哪些任务需要“额外上下文”（大量 repo 扫描、参考资料、协议）要提前标注。
+- 如果引入向量库/RAG：把“入库/更新/compact”作为可执行任务或 checklist 条目。
 
-**关注内容：**
-- 多 AI 工具支持要求
-- 命令生成规范
-- 工具特定的约束
+---
 
-### 3. pyproject.toml / package.json
+### 检查清单编写规范（检查清单 / checklist）
 
-**关注内容：**
-- Python 版本要求（如 `requires-python = ">=3.10"`）
-- 依赖包版本约束
-- 开发工具配置（如 ruff、mypy 配置）
+- checklist 写“验收点”，不是写“要做什么”。
+- 优先使用可运行命令/可观察行为作为验收（测试、lint、输出文件、CLI 返回）。
+- 覆盖四类：功能 / 质量 / 测试 / 文档（按项目需要取舍）。
 
-### 提取示例
+---
 
-```yaml
-# 从 CLAUDE.md 提取
-checklist:
-  - 代码通过 ruff check 和 mypy 检查
-  - 所有测试通过（uv run pytest）
-  - 文档注释使用中文
+### 常见陷阱（避免/错误/陷阱）
 
-# 从 pyproject.toml 提取
-estimate: ~250  # 基于 Python 3.10+ 特性的代码量
-```
-
-## tasks.yaml 结构说明
-
-### meta 字段
-
-```yaml
-meta:
-  change_id: cc-spec-v0.1.4       # 变更 ID
-  change_name: 四源融合 + 单一真相源  # 变更名称
-  max_concurrent: 10               # 最大并发数（SubAgent）
-  total_tasks: 17                  # 总任务数
-  estimated_lines: ~3765           # 预估总代码行数
-```
-
-### waves 字段
-
-```yaml
-waves:
-  - id: 0                    # Wave ID（0 表示 Gate-0）
-    type: gate               # gate（串行）或 wave（并行）
-    tasks:
-      - id: T01              # 任务 ID（全局唯一）
-        name: TEMPLATE-BASE  # 任务名称（简短描述）
-        desc: 创建命令模板基础设施  # 详细描述
-        deps: []             # 依赖的任务 ID 列表（Gate-0 通常为空）
-        files:               # 涉及的文件路径
-          - src/cc_spec/core/command_templates/base.py
-        refs:                # 参考文件/代码（可选）
-          - reference/test-project/...
-        estimate: ~80        # 预估代码行数
-        checklist:           # 验收标准（3-5 条）
-          - CommandTemplateContext 包含必要字段
-          - CommandTemplate 定义核心接口
-          - render() 支持 markdown 和 toml 格式
-```
-
-### execution_order 字段（可选但推荐）
-
-```yaml
-execution_order:
-  - "Gate-0: T01, T02 (串行)"
-  - "Wave-1: T03, T04, T05 (并行)"
-  - "Wave-2: T06, T07, T08 (并行)"
-```
-
-## 预估上下文计算
-
-**目标：** 确保单个 SubAgent 任务的上下文不超过 150K tokens（约 500 行代码）
-
-**计算要素：**
-- 任务描述和检查清单：~200 tokens
-- 引用文档（refs）：根据文件大小估算
-- 涉及文件（files）：根据需要修改的代码量
-- 变更摘要：~200-500 tokens
-
-**estimate 字段指南：**
-- 新增单个小模块：~80-150 行
-- 实现完整功能/命令：~200-300 行
-- 复杂集成/重构：~400-500 行（接近上限）
-
-**示例：**
-```yaml
-- id: T05
-  name: PLAN-TEMPLATE
-  estimate: ~280  # 完整命令模板，九段大纲 + 指南
-```
-
-## 检查清单编写规范
-
-**原则：** 具体、可测试、可验证
-
-**好的检查清单：**
-- ✅ "代码通过 ruff check 和 mypy 检查"（可执行命令验证）
-- ✅ "包含 9 个完整执行步骤"（可数数验证）
-- ✅ "tasks.yaml 体积 ≤ 原 tasks.md 的 20%"（可测量验证）
-
-**差的检查清单：**
-- ❌ "代码质量良好"（主观、无法验证）
-- ❌ "功能基本完成"（模糊、无标准）
-- ❌ "测试覆盖充分"（没有具体阈值）
-
-**示例：**
-```yaml
-checklist:
-  - 九段大纲完整（9 个 execution_steps）
-  - Gate/Wave 规划格式正确（包含 type 和 deps 字段）
-  - 技术硬要求说明清晰（从 CLAUDE.md 提取）
-  - 无循环依赖（通过依赖图校验）
-  - 单个任务上下文 <150K tokens（estimate 字段 <500）
-```
-
-## 常见陷阱与避免方法
-
-### 陷阱 1：Wave 分组不当
-
-**错误示例：**
-```yaml
-- id: 1
-  type: wave
-  tasks:
-    - id: T03
-      deps: [T02]
-    - id: T04
-      deps: [T03]  # ❌ T04 依赖 T03，但它们在同一 Wave
-```
-
-**正确做法：** 将 T04 移到 Wave-2
-
-### 陷阱 2：循环依赖
-
-**错误示例：**
-```yaml
-- id: T05
-  deps: [T06]
-- id: T06
-  deps: [T05]  # ❌ T05 和 T06 相互依赖
-```
-
-**正确做法：** 重新分析依赖，拆分任务或调整顺序
-
-### 陷阱 3：检查清单过于笼统
-
-**错误示例：**
-```yaml
-checklist:
-  - 功能正常  # ❌ 无法验证
-```
-
-**正确做法：**
-```yaml
-checklist:
-  - tasks.yaml 包含 meta 和 waves 字段
-  - 所有任务 ID 唯一且连续（T01-TNN）
-  - deps 引用的任务 ID 均存在
-```
-
-### 陷阱 4：预估上下文过大
-
-**错误示例：**
-```yaml
-- id: T10
-  name: REFACTOR-ALL
-  estimate: ~2000  # ❌ 远超 500 行上限
-```
-
-**正确做法：** 拆分为多个任务，每个 <500 行
-
-## 公共模板引用（v0.1.4+）
-
-**语法：** `$templates/<template-name>`
-
-**用途：** 避免在 tasks.yaml 中重复定义检查清单
-
-**示例：**
-```yaml
-# tasks.yaml
-- id: T03
-  name: SPECIFY-TEMPLATE
-  checklist: $templates/feature-checklist  # 引用公共模板
-
-# .cc-spec/templates/feature-checklist.md
-- 代码通过 ruff check 和 mypy 检查
-- 所有测试通过（uv run pytest）
-- 文档注释完整
-```
-
-**注意：** 引用机制在 v0.1.4 中实现，当前版本可暂时使用完整 checklist 字段。"""
+- **陷阱：** 把大段文档塞进 tasks.yaml → 应把上下文放到 KB，tasks.yaml 只保留索引与验收点。
+- **错误：** Gate-0 放了太多实现细节 → Gate-0 只做阻断项，其余放 Wave。
+- **错误：** deps 写“想当然”导致循环 → 生成后必须 `cc-spec apply --dry-run` 校验。
+- **避免：** 只写“完成 XXX”这种空 checklist → 改为可验证的命令/行为验收。
+""".strip()

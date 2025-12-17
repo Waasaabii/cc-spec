@@ -15,7 +15,10 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
+from typing import Any
 
+from cc_spec.codex.client import CodexClient
+from cc_spec.codex.models import CodexResult
 from cc_spec.core.config import Config, SubAgentProfile
 from cc_spec.core.lock import LockManager
 from cc_spec.subagent.task_parser import (
@@ -58,6 +61,57 @@ def _estimate_tokens(text: str) -> int:
 
     # 中文每字符约 1.5 tokens，其他每 4 字符约 1 token
     return int(chinese_chars * 1.5 + other_chars / 4)
+
+
+def _infer_project_root(tasks_path: Path) -> Path:
+    """从 tasks.yaml 路径推断项目根目录。
+
+    约定：
+    - tasks.yaml 位于 `.cc-spec/changes/<change>/tasks.yaml`
+    - 项目根目录为 `.cc-spec/` 的父目录
+    """
+    resolved = tasks_path.resolve()
+    for parent in resolved.parents:
+        if parent.name == ".cc-spec":
+            return parent.parent
+    # 兜底：使用 tasks.yaml 所在目录
+    return resolved.parent
+
+
+def _format_kb_query_result(query: str, res: dict[str, Any]) -> str:
+    """将 KB.query 结果格式化为可直接塞进 prompt 的 Markdown。"""
+    ids = (res.get("ids") or [[]])[0]
+    docs = (res.get("documents") or [[]])[0]
+    metas = (res.get("metadatas") or [[]])[0]
+
+    if not isinstance(ids, list) or not isinstance(docs, list) or not isinstance(metas, list):
+        return ""
+
+    max_items = 6
+    max_chars = 800
+
+    lines: list[str] = []
+    lines.append(f"Query: {query}\n")
+
+    for i in range(min(len(ids), max_items)):
+        meta = metas[i] if i < len(metas) and isinstance(metas[i], dict) else {}
+        source = str(meta.get("source_path", ""))
+        typ = str(meta.get("type", ""))
+        summary = str(meta.get("summary", ""))
+
+        lines.append(f"### {i + 1}) {source} ({typ})")
+        if summary and summary != "None":
+            lines.append(f"Summary: {summary}")
+
+        content = docs[i] if i < len(docs) else ""
+        snippet = str(content)[:max_chars].rstrip()
+        if snippet:
+            lines.append("```text")
+            lines.append(snippet)
+            lines.append("```")
+        lines.append("")
+
+    return "\n".join(lines).strip()
 
 
 @dataclass
@@ -208,6 +262,8 @@ class ExecutionResult:
         agent_id: v1.3 - 执行该任务的 SubAgent ID
         wave: v1.3 - 任务所属的 Wave 编号
         retry_count: v1.3 - 重试次数
+        session_id: Codex 线程/会话 ID（用于 resume）
+        exit_code: Codex CLI 退出码
     """
 
     task_id: str
@@ -221,6 +277,8 @@ class ExecutionResult:
     agent_id: str | None = None
     wave: int = 0
     retry_count: int = 0
+    session_id: str | None = None
+    exit_code: int | None = None
 
 
 class SubAgentExecutor:
@@ -250,6 +308,8 @@ class SubAgentExecutor:
         max_concurrent: int = 10,
         timeout_ms: int = 300000,  # 5 分钟
         config: Config | None = None,
+        project_root: Path | None = None,
+        codex: CodexClient | None = None,
         lock_manager: LockManager | None = None,  # v1.3 新增
         cc_spec_root: Path | None = None,  # v1.3 新增
         change_summary: ChangeSummary | None = None,  # v1.4 新增
@@ -276,6 +336,8 @@ class SubAgentExecutor:
         self.max_concurrent = max_concurrent
         self.timeout_ms = timeout_ms
         self.config = config
+        self.project_root = project_root or _infer_project_root(tasks_md_path)
+        self.codex = codex or CodexClient()
 
         # v1.4: 变更摘要
         self.change_summary = change_summary
@@ -306,6 +368,9 @@ class SubAgentExecutor:
 
         # v1.3: 任务重试计数器
         self._retry_counts: dict[str, int] = {}
+
+        # v0.1.5: 懒加载 KB（用于为 Codex prompt 提供 RAG 上下文）
+        self._kb: Any | None = None
 
     def get_task_profile(self, task: Task) -> SubAgentProfile:
         """获取任务的 Profile 配置。
@@ -344,7 +409,7 @@ class SubAgentExecutor:
         """
         self._task_executor = executor
 
-    def build_task_prompt(self, task: Task) -> str:
+    def build_task_prompt(self, task: Task, *, kb_context: str | None = None) -> str:
         """v1.4: 构建精简的任务提示词（目标 ~500 tokens）。
 
         使用预处理的变更摘要 + 任务定义 + 检查清单，
@@ -378,9 +443,20 @@ class SubAgentExecutor:
             entries = task.code_entry_points[:3]
             prompt_lines.append(f"**入口**: {', '.join(entries)}")
 
+        # 参考文档（最多 3 个）
+        if task.required_docs:
+            docs = task.required_docs[:3]
+            prompt_lines.append(f"**参考文档**: {', '.join(docs)}")
+
         prompt_lines.append("")
 
-        # 3. 检查清单（~100 tokens）
+        # 3. KB 上下文（RAG，尽量精简）
+        if kb_context:
+            prompt_lines.append("## KB Context")
+            prompt_lines.append(kb_context.strip())
+            prompt_lines.append("")
+
+        # 4. 检查清单（~100 tokens）
         if task.checklist_items:
             prompt_lines.append("**Checklist**:")
             for item in task.checklist_items[:5]:  # 最多 5 项
@@ -388,8 +464,8 @@ class SubAgentExecutor:
                 prompt_lines.append(f"- [{mark}] {item.description[:60]}")
             prompt_lines.append("")
 
-        # 4. 执行说明（~50 tokens）
-        prompt_lines.append("**执行**: 完成 checklist 所有项，更新 tasks.yaml 状态。")
+        # 5. 执行说明（~50 tokens）
+        prompt_lines.append("**执行**: 完成 checklist 所有项。不要修改 tasks.yaml（状态由执行器更新）。")
 
         return "\n".join(prompt_lines)
 
@@ -411,14 +487,57 @@ class SubAgentExecutor:
             ),
         }
 
+    def _run_codex_for_task(self, task: Task, prompt: str, timeout_ms: int) -> CodexResult:
+        """在当前项目根目录下调用 Codex（支持 resume）。"""
+        workdir = self.project_root
+        session_id = None
+        if task.execution_log and task.execution_log.session_id:
+            session_id = task.execution_log.session_id
+
+        if session_id:
+            return self.codex.resume(session_id, prompt, workdir, timeout_ms=timeout_ms)
+        return self.codex.execute(prompt, workdir, timeout_ms=timeout_ms)
+
+    def _get_kb_context_for_task(self, task: Task) -> str | None:
+        """为任务构建最小 KB 上下文片段（失败则返回 None）。"""
+        try:
+            from cc_spec.rag.knowledge_base import KnowledgeBase  # type: ignore[import-not-found]
+        except Exception:
+            return None
+
+        try:
+            if self._kb is None:
+                self._kb = KnowledgeBase(self.project_root)
+            kb: Any = self._kb
+        except Exception:
+            return None
+
+        query_parts: list[str] = [task.name, task.task_id]
+        if self.change_summary and self.change_summary.objective:
+            query_parts.append(self.change_summary.objective)
+        query_parts.extend(task.code_entry_points[:3])
+        query_parts.extend(task.required_docs[:3])
+        query = " ".join([p for p in query_parts if p]).strip()
+        if not query:
+            return None
+
+        try:
+            res = kb.query(query, n=6, collection="chunks")
+        except Exception:
+            return None
+
+        return _format_kb_query_result(query, res)
+
     async def execute_task(self, task: Task, wave_num: int = 0) -> ExecutionResult:
-        """执行单个任务 (模拟 SubAgent 执行)。
+        """执行单个任务（真实调用 Codex CLI）。
 
         v1.2: 使用 task.profile 选择配置。
         v1.3: 添加 agent_id、wave、retry_count 字段。
 
-        在实际实现中，这会启动一个 Claude Code SubAgent。
-        目前是模拟执行，返回模拟结果。
+        执行策略：
+        - 默认使用 CodexClient.execute()
+        - 若 tasks.yaml 中已记录 session_id，则优先使用 CodexClient.resume()
+        - 由执行器负责更新 tasks.yaml 状态；Codex 只负责代码/文档产出
 
         参数：
             task: 要执行的任务
@@ -446,50 +565,44 @@ class SubAgentExecutor:
         profile = self.get_task_profile(task)
         task_timeout_ms = profile.timeout if profile.timeout != 300000 else self.timeout_ms
 
-        # 默认模拟实现
         started_at = datetime.now()
         start_time = time.time()
 
         try:
             async with self._semaphore:
-                # 模拟任务执行延迟
-                await asyncio.sleep(0.1)
+                kb_context = self._get_kb_context_for_task(task)
+                prompt = self.build_task_prompt(task, kb_context=kb_context)
 
-                # 模拟执行逻辑
-                # 实际实现中: 启动 SubAgent, 监控执行, 收集结果
-
-                # 模拟 80% 成功率
-                import random
-                success = random.random() > 0.2
+                codex_result: CodexResult = await asyncio.to_thread(
+                    self._run_codex_for_task,
+                    task,
+                    prompt,
+                    task_timeout_ms,
+                )
 
                 duration = time.time() - start_time
                 completed_at = datetime.now()
 
-                if success:
-                    return ExecutionResult(
-                        task_id=task.task_id,
-                        success=True,
-                        output=f"任务 {task.task_id} 执行成功",
-                        duration_seconds=duration,
-                        started_at=started_at,
-                        completed_at=completed_at,
-                        agent_id=agent_id,
-                        wave=wave_num,
-                        retry_count=retry_count,
-                    )
-                else:
-                    return ExecutionResult(
-                        task_id=task.task_id,
-                        success=False,
-                        output=f"任务 {task.task_id} 执行输出",
-                        error="模拟执行失败",
-                        duration_seconds=duration,
-                        started_at=started_at,
-                        completed_at=completed_at,
-                        agent_id=agent_id,
-                        wave=wave_num,
-                        retry_count=retry_count,
-                    )
+                error: str | None = None
+                output = codex_result.message
+                if not codex_result.success:
+                    stderr = codex_result.stderr or ""
+                    error = stderr.strip() or f"Codex 执行失败（exit_code={codex_result.exit_code}）"
+
+                return ExecutionResult(
+                    task_id=task.task_id,
+                    success=codex_result.success,
+                    output=output,
+                    error=error,
+                    duration_seconds=duration,
+                    started_at=started_at,
+                    completed_at=completed_at,
+                    agent_id=agent_id,
+                    wave=wave_num,
+                    retry_count=retry_count,
+                    session_id=codex_result.session_id,
+                    exit_code=codex_result.exit_code,
+                )
 
         except asyncio.TimeoutError:
             duration = time.time() - start_time
@@ -505,6 +618,8 @@ class SubAgentExecutor:
                 agent_id=agent_id,
                 wave=wave_num,
                 retry_count=retry_count,
+                session_id=None,
+                exit_code=124,
             )
         except Exception as e:
             duration = time.time() - start_time
@@ -520,6 +635,8 @@ class SubAgentExecutor:
                 agent_id=agent_id,
                 wave=wave_num,
                 retry_count=retry_count,
+                session_id=None,
+                exit_code=None,
             )
 
     async def _execute_task_with_lock(
@@ -597,6 +714,7 @@ class SubAgentExecutor:
         wave_num: int,
         use_lock: bool = True,
         skip_locked: bool = False,
+        resume: bool = False,
     ) -> list[ExecutionResult]:
         """并发执行 Wave 内的所有任务。
 
@@ -625,17 +743,18 @@ class SubAgentExecutor:
         if not tasks:
             raise ValueError(f"未找到波次 {wave_num} 的任务")
 
-        # 过滤 IDLE 任务 (只执行未开始的任务)
-        idle_tasks = [t for t in tasks if t.status == TaskStatus.IDLE]
+        # 过滤可执行任务
+        runnable_statuses = (TaskStatus.IDLE, TaskStatus.FAILED, TaskStatus.IN_PROGRESS) if resume else (TaskStatus.IDLE,)
+        runnable_tasks = [t for t in tasks if t.status in runnable_statuses]
 
-        if not idle_tasks:
+        if not runnable_tasks:
             # 该 Wave 的所有任务已处理
             return []
 
         results: list[ExecutionResult] = []
 
         # 更新任务状态为 IN_PROGRESS
-        for task in idle_tasks:
+        for task in runnable_tasks:
             task.status = TaskStatus.IN_PROGRESS
             self.tasks_md_content = update_task_status_yaml(
                 self.tasks_md_content,
@@ -650,12 +769,12 @@ class SubAgentExecutor:
         if use_lock and self.lock_manager is not None:
             execution_tasks = [
                 self._execute_task_with_lock(task, wave_num, skip_locked)
-                for task in idle_tasks
+                for task in runnable_tasks
             ]
         else:
             execution_tasks = [
                 self.execute_task(task)
-                for task in idle_tasks
+                for task in runnable_tasks
             ]
 
         results = await asyncio.gather(*execution_tasks)
@@ -676,19 +795,26 @@ class SubAgentExecutor:
                 new_status = TaskStatus.FAILED
                 task.status = TaskStatus.FAILED
                 # v1.3: 更新重试计数
-                self._retry_counts[result.task_id] = result.retry_count + 1
+                self._retry_counts[result.task_id] = self._retry_counts.get(result.task_id, 0) + 1
 
             # 更新 tasks.yaml
             log = {
                 "completed_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
                 "subagent_id": result.agent_id or f"agent_{result.task_id}",
             }
+            if result.session_id:
+                log["session_id"] = result.session_id
+            if result.exit_code is not None:
+                log["exit_code"] = result.exit_code
+            if result.error:
+                # 仅保留简短错误，避免 tasks.yaml 膨胀
+                log["notes"] = str(result.error)[:200]
 
             self.tasks_md_content = update_task_status_yaml(
                 self.tasks_md_content,
                 result.task_id,
                 new_status,
-                log=log if result.success else None,
+                log=log,
             )
 
         # 写入最终状态

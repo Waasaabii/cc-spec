@@ -1,9 +1,10 @@
-"""cc-spec v1.2 的 update 命令。
+"""cc-spec v0.1.5 的 update 命令。
 
-该模块提供 update 命令，用于管理配置、slash 命令与模板。
-
-v1.2：新增在线下载模板并提供本地兜底。
+v0.1.5：只面向 Claude Code 生成/更新 `/cc-spec:*` 命令文件；
+Codex CLI 作为执行层由 cc-spec 调用，不再生成 Codex prompts。
 """
+
+from __future__ import annotations
 
 import asyncio
 import shutil
@@ -13,48 +14,19 @@ import typer
 import yaml
 from rich.console import Console
 
-from cc_spec.core.config import Config, load_config
 from cc_spec.core.command_generator import CC_SPEC_COMMANDS, get_generator
+from cc_spec.core.config import Config, load_config
 from cc_spec.ui.banner import show_banner
 from cc_spec.utils.download import download_file, get_github_raw_url
 from cc_spec.utils.files import find_project_root, get_cc_spec_dir
 
 console = Console()
 
-# 可用 AI 工具/agent 列表（v1.2：与 command_generator.py 同步）
-AVAILABLE_AGENTS = [
-    # 原始 9 个工具
-    "claude",
-    "cursor",
-    "gemini",
-    "codex",
-    "copilot",
-    "amazonq",
-    "windsurf",
-    "qwen",
-    "codeium",
-    "continue",
-    # v1.2：新增 8 个工具
-    "tabnine",
-    "aider",
-    "devin",
-    "replit",
-    "cody",
-    "supermaven",
-    "kilo",
-    "auggie",
-]
-
-# 受管理区块标记
-MANAGED_START = "<!-- CC-SPEC:START -->"
-MANAGED_END = "<!-- CC-SPEC:END -->"
-
-# v1.2：模板配置
+# v1.2：模板配置（沿用；若下载失败则使用内置模板兜底）
 TEMPLATE_REPO = "anthropics/cc-spec"  # TODO：更新为实际仓库
 TEMPLATE_BRANCH = "main"
 TEMPLATE_PATH_PREFIX = "templates"
 
-# 需要下载/更新的模板文件
 TEMPLATE_FILES = [
     "spec-template.md",
     "plan-template.md",
@@ -67,13 +39,7 @@ TEMPLATE_FILES = [
 def update_command(
     target: str = typer.Argument(
         None,
-        help="更新目标：commands、subagent、agents、all",
-    ),
-    add_agent: list[str] = typer.Option(
-        None,
-        "--add-agent",
-        "-a",
-        help="添加 AI 工具（可多次使用）",
+        help="更新目标：commands、subagent、all",
     ),
     templates: bool = typer.Option(
         False,
@@ -88,25 +54,12 @@ def update_command(
         help="强制覆盖（不二次确认）",
     ),
 ) -> None:
-    """更新配置、slash 命令或模板。
-
-    \b
-    示例：
-        cc-spec update                                   # 全量更新（commands、subagent）
-        cc-spec update commands                          # 仅更新 slash 命令
-        cc-spec update subagent                          # 仅更新 subagent 配置
-        cc-spec update --add-agent gemini                # 添加 Gemini 支持
-        cc-spec update --templates                       # 更新模板
-        cc-spec update --add-agent gemini --add-agent amazonq  # 添加多个工具
-    """
-    # 显示启动 Banner
+    """更新配置、slash 命令或模板。"""
     show_banner(console)
 
     project_root = find_project_root()
     if project_root is None:
-        console.print(
-            "[red]错误：[/red] 当前目录不是 cc-spec 项目，请先运行 'cc-spec init'。"
-        )
+        console.print("[red]错误：[/red] 当前目录不是 cc-spec 项目，请先运行 `cc-spec init`。")
         raise typer.Exit(1)
 
     cc_spec_root = get_cc_spec_dir(project_root)
@@ -115,39 +68,24 @@ def update_command(
     try:
         config = load_config(config_path)
     except FileNotFoundError:
-        console.print(
-            "[red]错误：[/red] 未找到配置文件，请先运行 'cc-spec init'。"
-        )
+        console.print("[red]错误：[/red] 未找到配置文件，请先运行 `cc-spec init`。")
         raise typer.Exit(1)
 
     updated = False
 
-    # 处理 --add-agent 选项
-    if add_agent:
-        for agent in add_agent:
-            result = _add_agent(project_root, cc_spec_root, config, agent, force)
-            if result:
-                updated = True
-
-    # 处理 --templates 选项
     if templates:
         _update_templates(cc_spec_root, force)
         updated = True
 
-    # 根据 target 执行更新
     target_lower = (target or "all").lower()
 
     if target_lower in ("commands", "all"):
-        _update_slash_commands(project_root, cc_spec_root, config, force)
+        _update_slash_commands(project_root, config, force)
         updated = True
 
     if target_lower in ("subagent", "all"):
-        _update_subagent_config(cc_spec_root, config, force)
+        _update_subagent_config(cc_spec_root, force)
         updated = True
-
-    if target_lower == "agents":
-        _show_agents(config)
-        return
 
     if updated:
         console.print("\n[green]√[/green] 更新完成。")
@@ -155,349 +93,56 @@ def update_command(
         console.print("[dim]Nothing to update.[/dim]")
 
 
-def _add_agent(
-    project_root: Path,
-    cc_spec_root: Path,
-    config: Config,
-    agent: str,
-    force: bool,
-) -> bool:
-    """向项目添加一个 AI 工具。
+def _update_slash_commands(project_root: Path, config: Config, force: bool) -> None:
+    """更新 Claude Code slash 命令。"""
+    _ = config  # 预留：后续可能从 config 读取命令策略
+    _ = force
 
-    参数：
-        project_root：项目根目录
-        cc_spec_root：.cc-spec 目录
-        config：当前配置
-        agent：要添加的 agent 名称
-        force：是否强制覆盖
+    console.print("[cyan]正在更新 Claude Code slash 命令...[/cyan]")
 
-    返回：
-        如果成功添加则返回 True，否则返回 False
-    """
-    agent_lower = agent.lower()
-
-    if agent_lower not in AVAILABLE_AGENTS:
-        console.print(
-            f"[yellow]警告：[/yellow] '{agent}' 不是已识别的 agent。"
-            f"可选：{', '.join(AVAILABLE_AGENTS)}"
-        )
-        if not force:
-            return False
-
-    # 检查是否已启用
-    # 注意：需要扩展 Config 来跟踪已启用的 agents
-    # 目前先只生成命令文件
-
-    console.print(f"[cyan]正在添加 agent：[/cyan] {agent}")
-
-    # 为该 agent 生成 slash 命令目录
-    agent_dir = _get_agent_command_dir(project_root, agent_lower)
-    if agent_dir:
-        agent_dir.mkdir(parents=True, exist_ok=True)
-        _generate_agent_commands(project_root, agent_lower)
-        try:
-            agent_dir_display = str(agent_dir.relative_to(project_root))
-        except ValueError:
-            agent_dir_display = str(agent_dir)
-        console.print(f"  [green]√[/green] 已创建 {agent_dir_display}")
-        return True
-
-    return False
-
-
-def _get_agent_command_dir(project_root: Path, agent: str) -> Path | None:
-    """获取某个 agent 的命令目录路径。
-
-    参数：
-        project_root：项目根目录
-        agent：agent 名称
-
-    返回：
-        命令目录路径；未知 agent 则返回 None
-    """
-    generator = get_generator(agent)
+    generator = get_generator("claude")
     if not generator:
-        return None
-    return generator.get_command_dir(project_root)
-
-
-def _generate_agent_commands(project_root: Path, agent: str) -> None:
-    """为某个 agent 生成 slash 命令文件。
-
-    参数：
-        project_root：项目根目录
-        agent：agent 名称
-    """
-    # v0.1.4+: 统一复用 core.command_generator 的生成逻辑
-    generator = get_generator(agent)
-    if not generator:
-        return
-
-    for cmd_name, description in CC_SPEC_COMMANDS:
-        generator.update_command(cmd_name, description, project_root)
-
-
-def _write_md_command(cmd_dir: Path, cmd_name: str, description: str) -> None:
-    """写入 Markdown 格式的 slash 命令文件。
-
-    参数：
-        cmd_dir：写入目录
-        cmd_name：命令名称
-        description：命令描述
-    """
-    file_path = cmd_dir / f"{cmd_name}.md"
-
-    content = f"""---
-description: {description}
-allowed-tools: Bash, Read, Write, Edit, Glob, Grep
----
-
-{MANAGED_START}
-## 工作流：cc-spec {cmd_name}
-
-用户需求：$ARGUMENTS
-
-**执行步骤**：
-1. 解析用户参数
-2. 运行 `cc-spec {cmd_name} $ARGUMENTS`
-3. 展示结果并给出下一步建议
-
-**命令参考**：
-```
-cc-spec {cmd_name} --help
-```
-{MANAGED_END}
-"""
-
-    # 仅在文件不存在或包含受管理区块时更新
-    if file_path.exists():
-        existing = file_path.read_text(encoding="utf-8")
-        if MANAGED_START in existing:
-            # 只更新受管理区块
-            content = _update_managed_block(existing, content)
-        else:
-            # 不覆盖未包含受管理区块的用户文件
-            return
-
-    file_path.write_text(content, encoding="utf-8")
-
-
-def _write_toml_command(cmd_dir: Path, cmd_name: str, description: str) -> None:
-    """写入 TOML 格式的 slash 命令文件。
-
-    参数：
-        cmd_dir：写入目录
-        cmd_name：命令名称
-        description：命令描述
-    """
-    file_path = cmd_dir / f"{cmd_name}.toml"
-
-    content = f'''description = "{description}"
-
-[prompt]
-content = """
-{MANAGED_START}
-## 工作流：cc-spec {cmd_name}
-
-用户需求：{{{{args}}}}
-
-**执行步骤**：
-1. 解析用户参数
-2. 运行 `cc-spec {cmd_name} {{{{args}}}}`
-3. 展示结果并给出下一步建议
-{MANAGED_END}
-"""
-'''
-
-    # 仅在文件不存在或包含受管理区块时更新
-    if file_path.exists():
-        existing = file_path.read_text(encoding="utf-8")
-        if MANAGED_START in existing:
-            content = _update_managed_block(existing, content)
-        else:
-            return
-
-    file_path.write_text(content, encoding="utf-8")
-
-
-def _update_managed_block(existing: str, new_content: str) -> str:
-    """仅更新现有内容中的受管理区块。
-
-    参数：
-        existing：现有文件内容
-        new_content：包含受管理区块的新内容
-
-    返回：
-        保留用户区块后的更新内容
-    """
-    import re
-
-    # 提取新的受管理区块
-    new_match = re.search(
-        rf"{re.escape(MANAGED_START)}.*?{re.escape(MANAGED_END)}",
-        new_content,
-        re.DOTALL,
-    )
-    if not new_match:
-        return existing
-
-    new_block = new_match.group(0)
-
-    # 替换现有内容中的受管理区块
-    updated = re.sub(
-        rf"{re.escape(MANAGED_START)}.*?{re.escape(MANAGED_END)}",
-        new_block,
-        existing,
-        flags=re.DOTALL,
-    )
-
-    return updated
-
-
-def _update_templates(cc_spec_root: Path, force: bool) -> None:
-    """将模板更新到最新版本。
-
-    v1.2：支持在线下载并提供本地兜底。
-
-    参数：
-        cc_spec_root：.cc-spec 目录
-        force：是否强制覆盖
-    """
-    templates_dir = cc_spec_root / "templates"
-    templates_dir.mkdir(parents=True, exist_ok=True)
-
-    console.print("[cyan]正在更新模板...[/cyan]")
-
-    # 获取内置模板目录（本地兜底）
-    bundled_templates_dir = Path(__file__).parent.parent / "templates"
+        console.print("[red]错误：[/red] 未找到 Claude 的命令生成器。")
+        raise typer.Exit(1)
 
     updated_count = 0
-    skipped_count = 0
+    created_count = 0
+    cmd_dir = generator.get_command_dir(project_root)
 
-    for template_file in TEMPLATE_FILES:
-        dest_path = templates_dir / template_file
-
-        # 如果文件已存在且未设置 force，则按策略跳过覆盖
-        if dest_path.exists() and not force:
-            # 通过与内置模板对比判断文件是否被修改
-            bundled_path = bundled_templates_dir / template_file
-            if bundled_path.exists():
-                bundled_content = bundled_path.read_text(encoding="utf-8")
-                current_content = dest_path.read_text(encoding="utf-8")
-                if bundled_content == current_content:
-                    console.print(f"  [dim]- {template_file}（未变更）[/dim]")
-                    skipped_count += 1
-                    continue
-                else:
-                    console.print(
-                        f"  [yellow]![/yellow] {template_file} 本地有修改，"
-                        f"使用 --force 覆盖"
-                    )
-                    skipped_count += 1
-                    continue
-            else:
-                skipped_count += 1
-                continue
-
-        # 优先尝试从远端下载
-        downloaded = False
-        try:
-            url = get_github_raw_url(
-                TEMPLATE_REPO,
-                f"{TEMPLATE_PATH_PREFIX}/{template_file}",
-                TEMPLATE_BRANCH,
-            )
-            downloaded = asyncio.run(download_file(url, dest_path))
-        except Exception:
-            # 下载失败，将使用本地兜底
-            downloaded = False
-
-        if downloaded:
-            console.print(f"  [green]√[/green] {template_file}（已下载）")
+    for cmd_name, description in CC_SPEC_COMMANDS:
+        before_exists = (cmd_dir / f"{cmd_name}.md").exists()
+        path = generator.update_command(cmd_name, description, project_root)
+        if not path:
+            continue
+        if before_exists:
             updated_count += 1
         else:
-            # 使用内置模板作为兜底
-            bundled_path = bundled_templates_dir / template_file
-            if bundled_path.exists():
-                shutil.copy2(bundled_path, dest_path)
-                console.print(f"  [green]√[/green] {template_file}（来自内置模板）")
-                updated_count += 1
-            else:
-                console.print(
-                    f"  [red]×[/red] {template_file}（不可用）"
-                )
+            created_count += 1
 
-    # 汇总
-    if updated_count > 0:
-        console.print(f"\n[green]√[/green] 已更新 {updated_count} 个模板")
-    if skipped_count > 0:
-        console.print(f"[dim]已跳过 {skipped_count} 个模板[/dim]")
+    console.print(
+        f"  [green]√[/green] Claude 命令已生成/更新：created={created_count} updated={updated_count}"
+    )
 
 
-def _update_slash_commands(
-    project_root: Path,
-    cc_spec_root: Path,
-    config: Config,
-    force: bool,
-) -> None:
-    """为已配置的 agents 更新 slash 命令。
-
-    参数：
-        project_root：项目根目录
-        cc_spec_root：.cc-spec 目录
-        config：当前配置
-        force：是否强制覆盖
-    """
-    console.print("[cyan]正在更新 slash 命令...[/cyan]")
-
-    # v1.2+: 若配置了 agents.enabled，则为全部启用的 agent 更新命令；
-    # 否则为 legacy 的 config.agent 更新命令
-    if config.agents and config.agents.enabled:
-        agents_to_update = config.agents.enabled
-    else:
-        agents_to_update = [config.agent]
-
-    for agent in agents_to_update:
-        agent_dir = _get_agent_command_dir(project_root, agent)
-        if not agent_dir:
-            continue
-        agent_dir.mkdir(parents=True, exist_ok=True)
-        _generate_agent_commands(project_root, agent)
-        console.print(f"  [green]√[/green] 已更新 {agent} 的命令")
-
-
-def _update_subagent_config(
-    cc_spec_root: Path,
-    config: Config,
-    force: bool,
-) -> None:
-    """用 v1.1 功能更新 subagent 配置。
-
-    参数：
-        cc_spec_root：.cc-spec 目录
-        config：当前配置
-        force：是否强制覆盖
-    """
+def _update_subagent_config(cc_spec_root: Path, force: bool) -> None:
+    """用 v1.1 结构更新 subagent 配置。"""
+    _ = force
     console.print("[cyan]正在更新 subagent 配置...[/cyan]")
 
     config_path = cc_spec_root / "config.yaml"
 
-    # 以原始 YAML 形式读取当前配置以保留结构
     try:
         with open(config_path, encoding="utf-8") as f:
             data = yaml.safe_load(f) or {}
     except (OSError, yaml.YAMLError):
         data = {}
 
-    # 检查 v1.1 的 subagent 配置是否已存在
     subagent = data.get("subagent", {})
-
     updated = False
 
-    # 若缺失则添加 common 配置
     if "common" not in subagent:
         subagent["common"] = {
-            "model": "sonnet[1m]",
+            "model": "sonnet",
             "timeout": 300000,
             "permissionMode": "acceptEdits",
             "tools": "Read,Write,Edit,Glob,Grep,Bash",
@@ -505,7 +150,6 @@ def _update_subagent_config(
         updated = True
         console.print("  [green]+[/green] Added common configuration")
 
-    # 若缺失则添加 profiles
     if "profiles" not in subagent:
         subagent["profiles"] = {
             "quick": {
@@ -519,7 +163,7 @@ def _update_subagent_config(
                 "description": "Heavy tasks: complex refactoring",
             },
             "explore": {
-                "model": "sonnet[1m]",
+                "model": "sonnet",
                 "timeout": 180000,
                 "tools": "Read,Glob,Grep,WebFetch,WebSearch",
                 "description": "Exploration tasks: code research",
@@ -530,7 +174,7 @@ def _update_subagent_config(
 
     if updated:
         data["subagent"] = subagent
-        data["version"] = "1.1"
+        data["version"] = data.get("version", "1.3")
 
         with open(config_path, "w", encoding="utf-8") as f:
             yaml.safe_dump(
@@ -541,29 +185,57 @@ def _update_subagent_config(
                 allow_unicode=True,
             )
 
-        console.print("  [green]√[/green] 已将 config.yaml 更新到 v1.1")
+        console.print("  [green]√[/green] 已更新 subagent 配置")
     else:
         console.print("  [dim]Subagent configuration is already up to date[/dim]")
 
 
-def _show_agents(config: Config) -> None:
-    """展示可用与已配置的 agents。
+def _update_templates(cc_spec_root: Path, force: bool) -> None:
+    """更新模板文件（在线下载；失败则使用内置模板兜底）。"""
+    console.print("[cyan]正在更新模板文件...[/cyan]")
 
-    参数：
-        config：当前配置
-    """
-    console.print("[bold]Available AI Tools:[/bold]")
-    console.print()
+    templates_dir = cc_spec_root / "templates"
+    templates_dir.mkdir(parents=True, exist_ok=True)
 
-    current = config.agent
+    bundled_templates_dir = Path(__file__).parent.parent / "templates"
 
-    for agent in AVAILABLE_AGENTS:
-        if agent == current:
-            console.print(f"  [green]●[/green] {agent} [dim](current)[/dim]")
+    updated_count = 0
+    skipped_count = 0
+
+    for template_file in TEMPLATE_FILES:
+        dest_path = templates_dir / template_file
+
+        if dest_path.exists() and not force:
+            skipped_count += 1
+            continue
+
+        url = get_github_raw_url(
+            TEMPLATE_REPO,
+            TEMPLATE_BRANCH,
+            f"{TEMPLATE_PATH_PREFIX}/{template_file}",
+        )
+
+        downloaded = False
+        try:
+            downloaded = asyncio.run(download_file(url, dest_path))
+        except Exception:
+            downloaded = False
+
+        if downloaded:
+            console.print(f"  [green]√[/green] {template_file}（已下载）")
+            updated_count += 1
+            continue
+
+        bundled_path = bundled_templates_dir / template_file
+        if bundled_path.exists():
+            shutil.copy2(bundled_path, dest_path)
+            console.print(f"  [green]√[/green] {template_file}（来自内置模板）")
+            updated_count += 1
         else:
-            console.print(f"  [dim]○[/dim] {agent}")
+            console.print(f"  [red]×[/red] {template_file}（不可用）")
 
-    console.print()
-    console.print(
-        "[dim]Add agents with: cc-spec update --add-agent <name>[/dim]"
-    )
+    if updated_count > 0:
+        console.print(f"\n[green]√[/green] 已更新 {updated_count} 个模板")
+    if skipped_count > 0:
+        console.print(f"[dim]已跳过 {skipped_count} 个模板[/dim]")
+

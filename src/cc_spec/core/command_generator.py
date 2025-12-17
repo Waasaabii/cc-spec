@@ -1,12 +1,15 @@
-"""cc-spec v1.2 的 slash 命令生成模块。
+"""cc-spec 的 slash 命令生成模块（v0.1.5）。
 
-该模块为不同 AI 工具生成对应的命令文件。
+v0.1.5 的定位是：
+- Claude Code：只负责编排（不直接写文件）
+- Codex CLI：执行层，由 cc-spec 在 apply 阶段调用
 
-v1.2：新增 8 个命令生成器（总计 17+）。
-v0.1.4：集成命令模板系统，主要命令使用结构化模板生成内容。
+因此，命令生成器只需要为 Claude Code 生成 `/cc-spec:*` 命令文件。
 """
 
-import os
+from __future__ import annotations
+
+import re
 from abc import ABC, abstractmethod
 from pathlib import Path
 
@@ -16,6 +19,7 @@ from cc_spec.core.command_templates import (
     ClarifyTemplate,
     CommandTemplate,
     CommandTemplateContext,
+    InitTemplate,
     PlanTemplate,
     SpecifyTemplate,
 )
@@ -24,8 +28,9 @@ from cc_spec.core.command_templates import (
 MANAGED_START = "<!-- CC-SPEC:START -->"
 MANAGED_END = "<!-- CC-SPEC:END -->"
 
-# 所有 cc-spec 命令
+# 所有 cc-spec 命令（与 CLI 子命令对齐）
 CC_SPEC_COMMANDS = [
+    ("init", "初始化/更新知识库（RAG）"),
     ("specify", "创建或编辑变更规格"),
     ("clarify", "审查任务并标记返工"),
     ("plan", "根据提案生成执行计划"),
@@ -40,6 +45,7 @@ CC_SPEC_COMMANDS = [
 
 # 命令到模板的映射（主要命令使用结构化模板）
 COMMAND_TEMPLATES: dict[str, type[CommandTemplate]] = {
+    "init": InitTemplate,
     "specify": SpecifyTemplate,
     "clarify": ClarifyTemplate,
     "plan": PlanTemplate,
@@ -49,31 +55,19 @@ COMMAND_TEMPLATES: dict[str, type[CommandTemplate]] = {
 
 
 class CommandGenerator(ABC):
-    """命令生成器的抽象基类。
-
-    不同 AI 工具的命令文件格式与目录位置各不相同。
-    """
+    """命令生成器抽象基类。"""
 
     file_format: str = "markdown"
     folder: str = "commands"
-    # 命令命名空间（与 README / docs/plan 对齐）
     namespace: str = "cc-spec"
-    # 某些工具不支持 namespace 子目录时，通过文件名前缀实现命名空间
     file_name_prefix: str = ""
+    allowed_tools: str = "Bash, Read, Glob, Grep, TodoWrite, AskUserQuestion"
 
-    # v0.1.4: 跟踪当前项目根目录，用于模板上下文
     _current_project_root: Path | None = None
 
     @abstractmethod
     def get_command_dir(self, project_root: Path) -> Path:
-        """获取命令文件应创建到的目录。
-
-        参数：
-            project_root：项目根目录
-
-        返回：
-            命令目录路径
-        """
+        """获取命令文件应创建到的目录。"""
         ...
 
     def generate_command(
@@ -82,17 +76,7 @@ class CommandGenerator(ABC):
         description: str,
         project_root: Path,
     ) -> Path | None:
-        """生成单个命令文件。
-
-        参数：
-            cmd_name：命令名称
-            description：命令描述
-            project_root：项目根目录
-
-        返回：
-            创建的文件路径；失败则返回 None
-        """
-        # v0.1.4: 保存当前项目根目录，供模板使用
+        """生成单个命令文件。"""
         self._current_project_root = project_root
 
         cmd_dir = self.get_command_dir(project_root)
@@ -100,19 +84,11 @@ class CommandGenerator(ABC):
 
         if self.file_format == "toml":
             return self._write_toml_command(cmd_dir, cmd_name, description)
-        else:
-            return self._write_md_command(cmd_dir, cmd_name, description)
+        return self._write_md_command(cmd_dir, cmd_name, description)
 
     def generate_all(self, project_root: Path) -> list[Path]:
-        """生成全部命令文件。
-
-        参数：
-            project_root：项目根目录
-
-        返回：
-            创建的文件路径列表
-        """
-        created = []
+        """生成全部命令文件。"""
+        created: list[Path] = []
         for cmd_name, description in CC_SPEC_COMMANDS:
             path = self.generate_command(cmd_name, description, project_root)
             if path:
@@ -125,19 +101,8 @@ class CommandGenerator(ABC):
         description: str,
         project_root: Path,
     ) -> Path | None:
-        """更新已有命令文件，并保留用户自定义内容。
-
-        参数：
-            cmd_name：命令名称
-            description：命令描述
-            project_root：项目根目录
-
-        返回：
-            更新后的文件路径；未更新则返回 None
-        """
-        # v0.1.4: 保存当前项目根目录，供模板使用
+        """更新已有命令文件，并保留用户自定义内容（受管理区块外）。"""
         self._current_project_root = project_root
-
         cmd_dir = self.get_command_dir(project_root)
 
         file_stem = self._get_command_file_stem(cmd_name)
@@ -149,25 +114,20 @@ class CommandGenerator(ABC):
         if not file_path.exists():
             return self.generate_command(cmd_name, description, project_root)
 
-        # 读取已有内容
         existing = file_path.read_text(encoding="utf-8")
-
-        # 仅在包含受管理区块时才更新
         if MANAGED_START not in existing:
             return None
 
-        # 生成新内容并更新受管理区块
-        if self.file_format == "toml":
-            new_content = self._get_toml_content(cmd_name, description)
-        else:
-            new_content = self._get_md_content(cmd_name, description)
-
+        new_content = (
+            self._get_toml_content(cmd_name, description)
+            if self.file_format == "toml"
+            else self._get_md_content(cmd_name, description)
+        )
         updated = self._update_managed_block(existing, new_content)
         file_path.write_text(updated, encoding="utf-8")
         return file_path
 
     def _get_command_file_stem(self, cmd_name: str) -> str:
-        """获取命令文件名（不含扩展名）。"""
         return f"{self.file_name_prefix}{cmd_name}"
 
     def _write_md_command(
@@ -176,10 +136,8 @@ class CommandGenerator(ABC):
         cmd_name: str,
         description: str,
     ) -> Path:
-        """写入 Markdown 格式的命令文件。"""
         file_path = cmd_dir / f"{self._get_command_file_stem(cmd_name)}.md"
-        content = self._get_md_content(cmd_name, description)
-        file_path.write_text(content, encoding="utf-8")
+        file_path.write_text(self._get_md_content(cmd_name, description), encoding="utf-8")
         return file_path
 
     def _write_toml_command(
@@ -188,22 +146,13 @@ class CommandGenerator(ABC):
         cmd_name: str,
         description: str,
     ) -> Path:
-        """写入 TOML 格式的命令文件。"""
         file_path = cmd_dir / f"{self._get_command_file_stem(cmd_name)}.toml"
-        content = self._get_toml_content(cmd_name, description)
-        file_path.write_text(content, encoding="utf-8")
+        file_path.write_text(self._get_toml_content(cmd_name, description), encoding="utf-8")
         return file_path
 
     def _get_md_content(self, cmd_name: str, description: str) -> str:
-        """获取 Markdown 命令内容。
-
-        v0.1.4: 主要命令（specify/clarify/plan/apply/checklist）
-        使用结构化模板生成详细内容，简单命令保持原有简洁格式。
-        """
-        # 检查是否有对应的结构化模板
         template_cls = COMMAND_TEMPLATES.get(cmd_name)
         if template_cls:
-            # 使用模板生成详细内容
             ctx = CommandTemplateContext(
                 command_name=cmd_name,
                 namespace=self.namespace,
@@ -211,89 +160,51 @@ class CommandGenerator(ABC):
             )
             template = template_cls()
             template_content = template.render(ctx)
+            body = f"{MANAGED_START}\n{template_content}\n{MANAGED_END}"
+        else:
+            body = (
+                f"{MANAGED_START}\n"
+                f"## 工作流: cc-spec {cmd_name}\n\n"
+                "用户请求: $ARGUMENTS\n\n"
+                "**执行步骤**:\n"
+                "1. 解析用户参数\n"
+                f"2. 运行 `cc-spec {cmd_name} $ARGUMENTS`\n"
+                "3. 显示结果并建议下一步操作\n\n"
+                "**命令参考**:\n"
+                f"```\ncc-spec {cmd_name} --help\n```\n"
+                f"{MANAGED_END}"
+            )
 
-            return f"""---
-description: {description}
-allowed-tools: Bash, Read, Write, Edit, Glob, Grep
----
-
-{MANAGED_START}
-{template_content}
-{MANAGED_END}
-"""
-
-        # 简单命令保持原有简洁格式
         return f"""---
 description: {description}
-allowed-tools: Bash, Read, Write, Edit, Glob, Grep
+allowed-tools: {self.allowed_tools}
 ---
 
-{MANAGED_START}
-## 工作流: cc-spec {cmd_name}
-
-用户请求: $ARGUMENTS
-
-**执行步骤**:
-1. 解析用户参数
-2. 运行 `cc-spec {cmd_name} $ARGUMENTS`
-3. 显示结果并建议下一步操作
-
-**命令参考**:
-```
-cc-spec {cmd_name} --help
-```
-{MANAGED_END}
+{body}
 """
 
     def _get_toml_content(self, cmd_name: str, description: str) -> str:
-        """获取 TOML 命令内容。
-
-        v0.1.4: 主要命令使用结构化模板生成详细内容。
-        """
-        # 检查是否有对应的结构化模板
         template_cls = COMMAND_TEMPLATES.get(cmd_name)
         if template_cls:
-            # 使用模板生成详细内容
-            from cc_spec.core.command_templates.base import RenderFormat
-
             ctx = CommandTemplateContext(
                 command_name=cmd_name,
                 namespace=self.namespace,
                 project_root=self._current_project_root,
             )
             template = template_cls()
-            template_content = template.render(ctx, fmt=RenderFormat.TOML)
+            content = template.render(ctx)
+        else:
+            content = f"运行 `cc-spec {cmd_name} $ARGUMENTS`"
 
-            return f'''description = "{description}"
+        return f"""description = "{description}"
+allowed_tools = "{self.allowed_tools}"
 
-{MANAGED_START}
-{template_content}
-{MANAGED_END}
-'''
-
-        # 简单命令保持原有简洁格式
-        return f'''description = "{description}"
-
-[prompt]
-content = """
-{MANAGED_START}
-## 工作流: cc-spec {cmd_name}
-
-用户请求: {{{{args}}}}
-
-**执行步骤**:
-1. 解析用户参数
-2. 运行 `cc-spec {cmd_name} {{{{args}}}}`
-3. 显示结果并建议下一步操作
-{MANAGED_END}
+# {MANAGED_START}
+{content}
+# {MANAGED_END}
 """
-'''
 
     def _update_managed_block(self, existing: str, new_content: str) -> str:
-        """仅更新现有内容中的受管理区块。"""
-        import re
-
-        # 提取新的受管理区块
         new_match = re.search(
             rf"{re.escape(MANAGED_START)}.*?{re.escape(MANAGED_END)}",
             new_content,
@@ -303,16 +214,12 @@ content = """
             return existing
 
         new_block = new_match.group(0)
-
-        # 替换现有内容中的受管理区块
-        updated = re.sub(
+        return re.sub(
             rf"{re.escape(MANAGED_START)}.*?{re.escape(MANAGED_END)}",
             new_block,
             existing,
             flags=re.DOTALL,
         )
-
-        return updated
 
 
 class ClaudeCommandGenerator(CommandGenerator):
@@ -320,253 +227,24 @@ class ClaudeCommandGenerator(CommandGenerator):
 
     file_format = "markdown"
     namespace = "cc-spec"
+    allowed_tools = "Bash, Read, Glob, Grep, TodoWrite, AskUserQuestion"
 
     def get_command_dir(self, project_root: Path) -> Path:
         return project_root / ".claude" / "commands" / self.namespace
 
 
-class CursorCommandGenerator(CommandGenerator):
-    """Cursor 的命令生成器。"""
-
-    file_format = "markdown"
-    namespace = "cc-spec"
-    file_name_prefix = "cc-spec-"
-
-    def get_command_dir(self, project_root: Path) -> Path:
-        return project_root / ".cursor" / "commands"
-
-
-class GeminiCommandGenerator(CommandGenerator):
-    """Gemini CLI 的命令生成器。"""
-
-    file_format = "toml"
-    namespace = "cc-spec"
-
-    def get_command_dir(self, project_root: Path) -> Path:
-        return project_root / ".gemini" / "commands" / self.namespace
-
-
-class CodexCommandGenerator(CommandGenerator):
-    """Codex CLI 的命令生成器。
-
-    Codex CLI 会从全局 prompts 目录发现命令：
-
-    - 默认：`~/.codex/prompts/`
-    - 若设置了 `CODEX_HOME`：`$CODEX_HOME/prompts/`
-
-    cc-spec 在该目录下生成 `<namespace>.<command>.md`（例如 `cc-spec.specify.md`）。
-    """
-
-    file_format = "markdown"
-    namespace = "cc-spec"
-    file_name_prefix = "cc-spec."
-
-    def get_command_dir(self, project_root: Path) -> Path:
-        codex_home = (os.environ.get("CODEX_HOME") or "").strip()
-        if codex_home:
-            return Path(codex_home) / "prompts"
-        return Path.home() / ".codex" / "prompts"
-
-
-class CopilotCommandGenerator(CommandGenerator):
-    """GitHub Copilot 的命令生成器。"""
-
-    file_format = "markdown"
-    namespace = "cc-spec"
-    file_name_prefix = "cc-spec-"
-
-    def get_command_dir(self, project_root: Path) -> Path:
-        # 与 README / docs/plan 对齐：Copilot 使用 prompts/
-        return project_root / ".github" / "prompts"
-
-
-class AmazonQCommandGenerator(CommandGenerator):
-    """Amazon Q 的命令生成器。"""
-
-    file_format = "markdown"
-    namespace = "cc-spec"
-    file_name_prefix = "cc-spec-"
-
-    def get_command_dir(self, project_root: Path) -> Path:
-        # 与 README / docs/plan 对齐：Amazon Q 使用 prompts/
-        return project_root / ".amazonq" / "prompts"
-
-
-class WindsurfCommandGenerator(CommandGenerator):
-    """Windsurf 的命令生成器。"""
-
-    file_format = "markdown"
-    namespace = "cc-spec"
-    file_name_prefix = "cc-spec-"
-
-    def get_command_dir(self, project_root: Path) -> Path:
-        # 与 README / docs/plan 对齐：Windsurf 使用 workflows/
-        return project_root / ".windsurf" / "workflows"
-
-
-class QwenCommandGenerator(CommandGenerator):
-    """Qwen 的命令生成器。"""
-
-    # 与 docs/plan/cc-spec/03-设计方案.md 中 AGENT_CONFIG 对齐：Qwen 使用 TOML
-    file_format = "toml"
-    namespace = "cc-spec"
-
-    def get_command_dir(self, project_root: Path) -> Path:
-        return project_root / ".qwen" / "commands" / self.namespace
-
-
-class CodeiumCommandGenerator(CommandGenerator):
-    """Codeium 的命令生成器。"""
-
-    file_format = "markdown"
-    namespace = "cc-spec"
-    file_name_prefix = "cc-spec-"
-
-    def get_command_dir(self, project_root: Path) -> Path:
-        return project_root / ".codeium" / "commands"
-
-
-class ContinueCommandGenerator(CommandGenerator):
-    """Continue.dev 的命令生成器。"""
-
-    file_format = "markdown"
-    namespace = "cc-spec"
-    file_name_prefix = "cc-spec-"
-
-    def get_command_dir(self, project_root: Path) -> Path:
-        return project_root / ".continue" / "commands"
-
-
-# v1.2：新的命令生成器
-
-class TabnineCommandGenerator(CommandGenerator):
-    """Tabnine 的命令生成器。"""
-
-    file_format = "markdown"
-    namespace = "cc-spec"
-
-    def get_command_dir(self, project_root: Path) -> Path:
-        return project_root / ".tabnine" / "commands" / self.namespace
-
-
-class AiderCommandGenerator(CommandGenerator):
-    """Aider 的命令生成器。"""
-
-    file_format = "markdown"
-    namespace = "cc-spec"
-    file_name_prefix = "cc-spec-"
-
-    def get_command_dir(self, project_root: Path) -> Path:
-        return project_root / ".aider" / "commands"
-
-
-class DevinCommandGenerator(CommandGenerator):
-    """Devin 的命令生成器。"""
-
-    file_format = "markdown"
-    namespace = "cc-spec"
-
-    def get_command_dir(self, project_root: Path) -> Path:
-        return project_root / ".devin" / "commands" / self.namespace
-
-
-class ReplitCommandGenerator(CommandGenerator):
-    """Replit AI 的命令生成器。"""
-
-    file_format = "markdown"
-    namespace = "cc-spec"
-    file_name_prefix = "cc-spec-"
-
-    def get_command_dir(self, project_root: Path) -> Path:
-        return project_root / ".replit" / "commands"
-
-
-class CodyCommandGenerator(CommandGenerator):
-    """Sourcegraph Cody 的命令生成器。"""
-
-    file_format = "markdown"
-    namespace = "cc-spec"
-
-    def get_command_dir(self, project_root: Path) -> Path:
-        return project_root / ".cody" / "commands" / self.namespace
-
-
-class SupermavenCommandGenerator(CommandGenerator):
-    """Supermaven 的命令生成器。"""
-
-    file_format = "markdown"
-    namespace = "cc-spec"
-    file_name_prefix = "cc-spec-"
-
-    def get_command_dir(self, project_root: Path) -> Path:
-        return project_root / ".supermaven" / "commands"
-
-
-class KiloCodeCommandGenerator(CommandGenerator):
-    """Kilo Code 的命令生成器。"""
-
-    file_format = "markdown"
-    namespace = "cc-spec"
-    file_name_prefix = "cc-spec-"
-
-    def get_command_dir(self, project_root: Path) -> Path:
-        return project_root / ".kilo" / "commands"
-
-
-class AuggieCommandGenerator(CommandGenerator):
-    """Auggie 的命令生成器。"""
-
-    file_format = "markdown"
-    namespace = "cc-spec"
-
-    def get_command_dir(self, project_root: Path) -> Path:
-        return project_root / ".auggie" / "commands" / self.namespace
-
-
-# 所有命令生成器的注册表
 COMMAND_GENERATORS: dict[str, type[CommandGenerator]] = {
-    # 原始 9 个生成器
     "claude": ClaudeCommandGenerator,
-    "cursor": CursorCommandGenerator,
-    "gemini": GeminiCommandGenerator,
-    "codex": CodexCommandGenerator,
-    "copilot": CopilotCommandGenerator,
-    "amazonq": AmazonQCommandGenerator,
-    "windsurf": WindsurfCommandGenerator,
-    "qwen": QwenCommandGenerator,
-    "codeium": CodeiumCommandGenerator,
-    "continue": ContinueCommandGenerator,
-    # v1.2：新增 8 个生成器
-    "tabnine": TabnineCommandGenerator,
-    "aider": AiderCommandGenerator,
-    "devin": DevinCommandGenerator,
-    "replit": ReplitCommandGenerator,
-    "cody": CodyCommandGenerator,
-    "supermaven": SupermavenCommandGenerator,
-    "kilo": KiloCodeCommandGenerator,
-    "auggie": AuggieCommandGenerator,
 }
 
 
 def get_generator(agent: str) -> CommandGenerator | None:
-    """获取指定 agent 的命令生成器。
-
-    参数：
-        agent：agent 名称（例如 "claude"、"cursor"）
-
-    返回：
-        CommandGenerator 实例；未找到则返回 None
-    """
     generator_cls = COMMAND_GENERATORS.get(agent.lower())
-    if generator_cls:
-        return generator_cls()
-    return None
+    if not generator_cls:
+        return None
+    return generator_cls()
 
 
 def get_available_agents() -> list[str]:
-    """获取可用的 agent 名称列表。
-
-    返回：
-        agent 名称列表
-    """
     return list(COMMAND_GENERATORS.keys())
+

@@ -34,6 +34,8 @@ from cc_spec.core.state import (
     load_state,
     update_state,
 )
+from cc_spec.rag.models import WorkflowStep
+from cc_spec.rag.workflow import try_write_record
 from cc_spec.ui.banner import show_banner
 from cc_spec.utils.files import find_project_root, get_cc_spec_dir
 
@@ -60,6 +62,11 @@ def checklist_command(
         True,
         "--v13/--no-v13",
         help="使用 v1.3 四维度打分（默认开启）",
+    ),
+    write_report: bool = typer.Option(
+        False,
+        "--write-report",
+        help="输出 checklist-result.md（默认关闭：结果写入 KB records）",
     ),
 ) -> None:
     """使用 checklist 评分验证任务完成情况。
@@ -194,9 +201,41 @@ def checklist_command(
 
         # 处理通过/未通过
         if checklist_result.overall_passed:
-            _handle_pass_v13(status_path, change_dir, change, checklist_result)
+            try_write_record(
+                project_root,
+                step=WorkflowStep.CHECKLIST,
+                change_name=change,
+                outputs={
+                    "overall_score": checklist_result.overall_score,
+                    "overall_passed": checklist_result.overall_passed,
+                    "threshold": checklist_result.threshold,
+                    "failed_tasks": checklist_result.failed_tasks,
+                    "recommendations": checklist_result.recommendations[:20],
+                    "write_report": write_report,
+                    "report_md": format_dimension_report(checklist_result)[:8000],
+                },
+                notes="checklist.scored",
+            )
+            _handle_pass_v13(status_path, change_dir, change, checklist_result, write_report=write_report)
         else:
-            _handle_fail_v13(status_path, change_dir, change, checklist_result, threshold)
+            try_write_record(
+                project_root,
+                step=WorkflowStep.CHECKLIST,
+                change_name=change,
+                outputs={
+                    "overall_score": checklist_result.overall_score,
+                    "overall_passed": checklist_result.overall_passed,
+                    "threshold": checklist_result.threshold,
+                    "failed_tasks": checklist_result.failed_tasks,
+                    "recommendations": checklist_result.recommendations[:20],
+                    "write_report": write_report,
+                    "report_md": format_dimension_report(checklist_result)[:8000],
+                },
+                notes="checklist.scored",
+            )
+            _handle_fail_v13(
+                status_path, change_dir, change, checklist_result, threshold, write_report=write_report
+            )
     else:
         # v1.2 兼容: 简单打分
         all_results = []
@@ -226,9 +265,34 @@ def checklist_command(
 
         # 处理通过/未通过
         if overall_passed:
-            _handle_pass(status_path, change_dir, change, overall_percentage)
+            try_write_record(
+                project_root,
+                step=WorkflowStep.CHECKLIST,
+                change_name=change,
+                outputs={
+                    "overall_score": overall_percentage,
+                    "overall_passed": overall_passed,
+                    "threshold": threshold,
+                    "write_report": write_report,
+                },
+                notes="checklist.scored",
+            )
+            _handle_pass(status_path, change_dir, change, overall_percentage, write_report=write_report)
         else:
-            _handle_fail(status_path, change_dir, change, all_results, threshold)
+            try_write_record(
+                project_root,
+                step=WorkflowStep.CHECKLIST,
+                change_name=change,
+                outputs={
+                    "overall_score": overall_percentage,
+                    "overall_passed": overall_passed,
+                    "threshold": threshold,
+                    "failed_tasks": [task_id for task_id, result in all_results if not result.passed],
+                    "write_report": write_report,
+                },
+                notes="checklist.scored",
+            )
+            _handle_fail(status_path, change_dir, change, all_results, threshold, write_report=write_report)
 
 
 def _display_task_results(
@@ -317,7 +381,12 @@ def _display_overall_result(
 
 
 def _handle_pass(
-    status_path: Path, change_dir: Path, change_name: str, percentage: float
+    status_path: Path,
+    change_dir: Path,
+    change_name: str,
+    percentage: float,
+    *,
+    write_report: bool = False,
 ) -> None:
     """处理 checklist 验证通过的情况。
 
@@ -365,6 +434,8 @@ def _handle_fail(
     change_name: str,
     results: list[tuple[str, any]],
     threshold: int,
+    *,
+    write_report: bool = False,
 ) -> None:
     """处理 checklist 验证未通过的情况。
 
@@ -410,13 +481,14 @@ def _handle_fail(
     )
 
     report_content = generate_failure_report(combined_result)
-
-    # 写入失败报告
-    report_path = change_dir / "checklist-result.md"
-    report_path.write_text(report_content, encoding="utf-8")
-    console.print(
-        f"[green]√[/green] 已生成失败报告：{report_path.relative_to(Path.cwd())}"
-    )
+    if write_report:
+        report_path = change_dir / "checklist-result.md"
+        report_path.write_text(report_content, encoding="utf-8")
+        console.print(
+            f"[green]√[/green] 已生成失败报告：{report_path.relative_to(Path.cwd())}"
+        )
+    else:
+        console.print("[dim]失败报告已写入 KB records（如需文件输出使用 --write-report）[/dim]")
 
     # 将状态更新回 apply 阶段
     try:
@@ -441,7 +513,7 @@ def _handle_fail(
 
     # 展示下一步
     console.print("\n[bold]下一步：[/bold]")
-    console.print("1. 查看 checklist-result.md 中的失败报告")
+    console.print("1. 查看失败原因（KB records 或 --write-report 输出文件）")
     console.print("2. 完成未通过的检查清单项")
     console.print("3. 运行 [cyan]cc-spec clarify <task-id>[/cyan] 标记指定任务返工")
     console.print("4. 修复后重新运行 [cyan]cc-spec checklist[/cyan] 进行验收")
@@ -548,6 +620,8 @@ def _handle_pass_v13(
     change_dir: Path,
     change_name: str,
     result: ChecklistResult,
+    *,
+    write_report: bool = False,
 ) -> None:
     """处理 v1.3 checklist 验证通过的情况。
 
@@ -559,13 +633,16 @@ def _handle_pass_v13(
     """
     console.print("\n[bold green]验证通过！[/bold green]", style="green")
 
-    # 写入打分报告
+    # 打分报告：默认写入 KB records；如需文件输出使用 --write-report
     report_content = format_dimension_report(result)
-    report_path = change_dir / "checklist-result.md"
-    report_path.write_text(report_content, encoding="utf-8")
-    console.print(
-        f"[green]√[/green] 生成打分报告: {report_path.relative_to(Path.cwd())}"
-    )
+    if write_report:
+        report_path = change_dir / "checklist-result.md"
+        report_path.write_text(report_content, encoding="utf-8")
+        console.print(
+            f"[green]√[/green] 生成打分报告: {report_path.relative_to(Path.cwd())}"
+        )
+    else:
+        console.print("[dim]打分报告已写入 KB records（如需文件输出使用 --write-report）[/dim]")
 
     # 更新状态为 checklist 阶段（完成）
     try:
@@ -589,7 +666,7 @@ def _handle_pass_v13(
 
     # 展示下一步
     console.print("\n[bold]下一步:[/bold]")
-    console.print("1. 查看 checklist-result.md 中的打分报告")
+    console.print("1. 查看打分结果（KB records 或 --write-report 输出文件）")
     console.print("2. 运行 [cyan]cc-spec archive[/cyan] 归档该变更")
 
     console.print(f"\n[dim]变更：{change_name}[/dim]")
@@ -602,6 +679,8 @@ def _handle_fail_v13(
     change_name: str,
     result: ChecklistResult,
     threshold: int,
+    *,
+    write_report: bool = False,
 ) -> None:
     """处理 v1.3 checklist 验证未通过的情况。
 
@@ -620,12 +699,14 @@ def _handle_fail_v13(
     # 生成增强版失败报告
     report_content = generate_failure_report_v13(result)
 
-    # 写入失败报告
-    report_path = change_dir / "checklist-result.md"
-    report_path.write_text(report_content, encoding="utf-8")
-    console.print(
-        f"[green]√[/green] 生成失败报告: {report_path.relative_to(Path.cwd())}"
-    )
+    if write_report:
+        report_path = change_dir / "checklist-result.md"
+        report_path.write_text(report_content, encoding="utf-8")
+        console.print(
+            f"[green]√[/green] 生成失败报告: {report_path.relative_to(Path.cwd())}"
+        )
+    else:
+        console.print("[dim]失败报告已写入 KB records（如需文件输出使用 --write-report）[/dim]")
 
     # 将状态更新回 apply 阶段
     try:
@@ -649,7 +730,7 @@ def _handle_fail_v13(
 
     # 展示下一步
     console.print("\n[bold]下一步:[/bold]")
-    console.print("1. 查看 checklist-result.md 中的失败报告")
+    console.print("1. 查看失败原因（KB records 或 --write-report 输出文件）")
     console.print("2. 完成未通过的检查项")
     console.print("3. 运行 [cyan]cc-spec clarify <task-id>[/cyan] 标记任务返工")
     console.print("4. 修复后重新运行 [cyan]cc-spec checklist[/cyan]")

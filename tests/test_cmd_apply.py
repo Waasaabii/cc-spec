@@ -335,7 +335,7 @@ tasks:
         )
 
         # Setup async mock for execute_wave
-        async def mock_execute_wave(wave_num, use_lock=True, skip_locked=False):
+        async def mock_execute_wave(wave_num, use_lock=True, skip_locked=False, resume=False):
             return [mock_result]
 
         mock_executor.execute_wave = mock_execute_wave
@@ -389,7 +389,7 @@ tasks:
             completed_at=datetime.now(),
         )
 
-        async def mock_execute_wave(wave_num, use_lock=True, skip_locked=False):
+        async def mock_execute_wave(wave_num, use_lock=True, skip_locked=False, resume=False):
             return [mock_result]
 
         mock_executor.execute_wave = mock_execute_wave

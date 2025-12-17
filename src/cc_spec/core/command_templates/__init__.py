@@ -12,6 +12,7 @@ from .base import (
 )
 from .checklist_template import ChecklistTemplate
 from .clarify_template import ClarifyTemplate
+from .init_template import InitTemplate
 from .plan_template import PlanTemplate
 from .specify_template import SpecifyTemplate
 
@@ -21,6 +22,7 @@ __all__ = [
     "ClarifyTemplate",
     "CommandTemplate",
     "CommandTemplateContext",
+    "InitTemplate",
     "PlanTemplate",
     "SpecifyTemplate",
 ]

@@ -1,5 +1,6 @@
 """cc-spec 终端启动 Banner 显示。"""
 
+import sys
 from pathlib import Path
 
 from rich.align import Align
@@ -28,11 +29,46 @@ MASCOT_LINES = [
     "  ╰───╯   ",
 ]
 
+# Windows/GBK 等编码环境兼容：提供纯 ASCII 吉祥物，避免 UnicodeEncodeError
+SAFE_MASCOT_LINES = [
+    "    /\\_/\\    ",
+    "   ( o_o )   ",
+    "    > ^ <    ",
+]
+
 # 兼容旧代码
 MASCOT = "\n".join(MASCOT_LINES)
 
 TAGLINE = "规范驱动的 AI 辅助开发工作流 CLI 喵～"
-VERSION_INFO = "v0.1.4 - 四源融合 + 单一真相源"
+VERSION_INFO = "v0.1.5 - Codex 执行 + RAG 向量库"
+
+
+def _console_encoding(console: Console) -> str | None:
+    try:
+        encoding = getattr(console.file, "encoding", None)
+        return str(encoding) if encoding else None
+    except Exception:
+        return None
+
+
+def _can_encode(text: str, encoding: str | None) -> bool:
+    if not encoding:
+        return True
+    try:
+        text.encode(encoding)
+        return True
+    except Exception:
+        return False
+
+
+def _use_safe_unicode(console: Console) -> bool:
+    """判断是否需要使用 ASCII 安全输出。
+
+    在 Windows 传统终端（如 GBK）下，部分字符（emoji/组合字符）会触发 UnicodeEncodeError。
+    """
+    encoding = _console_encoding(console) or sys.stdout.encoding
+    sample = "".join(MASCOT_LINES) + "✅❌✨💦ฅω"
+    return not _can_encode(sample, encoding)
 
 
 def show_banner(console: Console | None = None) -> None:
@@ -47,9 +83,6 @@ def show_banner(console: Console | None = None) -> None:
     # Banner 颜色渐变（粉色系，呼应喵娘的粉发）
     colors = ["bright_magenta", "magenta", "bright_cyan", "cyan", "bright_white", "white"]
 
-    # 吉祥物颜色（紫色眼睛风格）
-    mascot_text = Text(MASCOT.strip(), style="bright_magenta")
-
     # 组合显示
     console.print()
     # 直接打印 banner（使用 BANNER_LINES 保留精确格式）
@@ -58,7 +91,8 @@ def show_banner(console: Console | None = None) -> None:
         console.print(f"[{color}]{line}[/{color}]")
     console.print()
     # 直接打印 mascot（使用 MASCOT_LINES 保留精确格式）
-    for line in MASCOT_LINES:
+    mascot_lines = SAFE_MASCOT_LINES if _use_safe_unicode(console) else MASCOT_LINES
+    for line in mascot_lines:
         console.print(f"[bright_magenta]{line}[/bright_magenta]")
     console.print(Align.center(Text(TAGLINE, style="italic bright_yellow")))
     console.print(Align.center(Text(VERSION_INFO, style="dim")))
@@ -88,7 +122,11 @@ def show_welcome_panel(console: Console | None = None, project_name: str = "") -
 
     panel = Panel(
         "\n".join(welcome_lines),
-        title="[bold magenta]ฅ'ω'ฅ 喵娘工程师准备就绪[/bold magenta]",
+        title=(
+            "[bold magenta]cc-spec ready[/bold magenta]"
+            if _use_safe_unicode(console)
+            else "[bold magenta]ฅ'ω'ฅ 喵娘工程师准备就绪[/bold magenta]"
+        ),
         border_style="magenta",
         padding=(1, 2),
     )
@@ -106,16 +144,25 @@ def show_success_banner(console: Console | None = None, message: str = "操作�
     if console is None:
         console = Console()
 
-    success_cat = r"""
+    if _use_safe_unicode(console):
+        success_cat = r"""
+ /\_/\ 
+( ^_^ )
+ /   \
+"""
+        message_text = f"OK: {message}"
+    else:
+        success_cat = r"""
     ∧＿∧
    (≧▽≦)  ✨
    /  つ
   しーＪ
 """
+        message_text = f"✅ {message} 喵～"
 
     console.print()
     console.print(Align.center(Text(success_cat, style="bright_green")))
-    console.print(Align.center(Text(f"✅ {message} 喵～", style="bold green")))
+    console.print(Align.center(Text(message_text, style="bold green")))
     console.print()
 
 
@@ -129,16 +176,25 @@ def show_error_banner(console: Console | None = None, message: str = "发生错�
     if console is None:
         console = Console()
 
-    error_cat = r"""
+    if _use_safe_unicode(console):
+        error_cat = r"""
+ /\_/\ 
+( >_< )
+ /   \
+"""
+        message_text = f"ERROR: {message}"
+    else:
+        error_cat = r"""
     ∧＿∧
    (；ω；)  💦
    /  つ
   しーＪ
 """
+        message_text = f"❌ {message} 喵..."
 
     console.print()
     console.print(Align.center(Text(error_cat, style="bright_red")))
-    console.print(Align.center(Text(f"❌ {message} 喵...", style="bold red")))
+    console.print(Align.center(Text(message_text, style="bold red")))
     console.print()
 
 

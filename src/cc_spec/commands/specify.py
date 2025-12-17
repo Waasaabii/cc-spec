@@ -20,6 +20,8 @@ from rich.panel import Panel
 from cc_spec.core.id_manager import IDManager
 from cc_spec.core.state import ChangeState, Stage, StageInfo, TaskStatus, update_state
 from cc_spec.core.templates import copy_template
+from cc_spec.rag.models import WorkflowStep
+from cc_spec.rag.workflow import try_write_record
 from cc_spec.ui.banner import show_banner
 from cc_spec.utils.files import find_project_root, get_cc_spec_dir, get_changes_dir
 
@@ -157,6 +159,16 @@ def _edit_existing_change(
         border_style="cyan",
     ))
 
+    # v0.1.5：写入 workflow record（尽力而为）
+    try_write_record(
+        project_root,
+        step=WorkflowStep.SPECIFY,
+        change_name=entry.name,
+        inputs={"mode": "edit", "change_id": change_id},
+        outputs={"proposal": str(proposal_path.relative_to(project_root))},
+        notes="specify.edit",
+    )
+
 
 def _create_new_change(
     id_manager: IDManager,
@@ -264,3 +276,17 @@ def _create_new_change(
         title=f"[bold green]已创建变更 {change_id}[/bold green]",
         border_style="green",
     ))
+
+    # v0.1.5：写入 workflow record（尽力而为）
+    try_write_record(
+        project_root,
+        step=WorkflowStep.SPECIFY,
+        change_name=name,
+        inputs={"mode": "create", "template": template},
+        outputs={
+            "change_id": change_id,
+            "proposal": str(proposal_path.relative_to(project_root)),
+            "status": str(status_path.relative_to(project_root)),
+        },
+        notes="specify.create",
+    )

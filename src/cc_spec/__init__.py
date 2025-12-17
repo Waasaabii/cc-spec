@@ -11,6 +11,7 @@ from cc_spec.commands import checklist as checklist_cmd
 from cc_spec.commands import clarify as clarify_cmd
 from cc_spec.commands import goto as goto_cmd
 from cc_spec.commands import init as init_cmd
+from cc_spec.commands import kb as kb_cmd
 from cc_spec.commands import list as list_cmd
 from cc_spec.commands import plan as plan_cmd
 from cc_spec.commands import quick_delta as quick_delta_cmd
@@ -18,7 +19,7 @@ from cc_spec.commands import specify as specify_cmd
 from cc_spec.commands import update as update_cmd
 from cc_spec.ui.banner import show_banner
 
-__version__ = "0.1.4"
+__version__ = "0.1.5"
 
 app = typer.Typer(
     name="cc-spec",
@@ -60,6 +61,7 @@ app.command(name="quick-delta", help="快速模式：一步创建并归档简单
 app.command(name="list", help="列出变更、任务、规格或归档")(list_cmd.list_command)
 app.command(name="goto", help="导航到特定变更或任务")(goto_cmd.goto_command)
 app.command(name="update", help="更新配置、命令或模板")(update_cmd.update_command)
+app.add_typer(kb_cmd.kb_app, name="kb")
 
 
 def main() -> None:

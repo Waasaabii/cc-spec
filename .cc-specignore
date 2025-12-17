@@ -1,0 +1,33 @@
+# cc-spec KB scanning ignore rules
+#
+# 说明：
+# - 该文件用于控制 v0.1.5 知识库扫描范围
+# - 语法为简化版 gitignore：支持注释、空行、目录（以 / 结尾）、以及 ! 反选
+
+# VCS
+.git/
+
+# Virtual environments / dependencies (do NOT embed dependency source)
+.venv/
+venv/
+ENV/
+env/
+node_modules/
+
+# Build outputs
+dist/
+build/
+
+# Caches
+__pycache__/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# cc-spec runtime & derived artifacts (KB will manage these explicitly)
+.cc-spec/runtime/
+.cc-spec/vectordb/
+.cc-spec/kb.events.jsonl
+.cc-spec/kb.snapshot.jsonl
+.cc-spec/kb.manifest.json
+

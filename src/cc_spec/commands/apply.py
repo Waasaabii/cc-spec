@@ -40,6 +40,8 @@ from cc_spec.core.tech_check import (
     run_tech_checks,
     should_block,
 )
+from cc_spec.rag.models import WorkflowStep
+from cc_spec.rag.workflow import try_compact_kb, try_update_kb, try_write_record
 from cc_spec.subagent.executor import (
     ExecutionResult,
     SubAgentExecutor,
@@ -225,7 +227,15 @@ def apply_command(
     # 统计任务数据
     total_waves = len(doc.waves)
     total_tasks = len(doc.all_tasks)
-    idle_tasks = sum(1 for t in doc.all_tasks.values() if t.status == TaskStatus.IDLE)
+    runnable_tasks = sum(
+        1
+        for t in doc.all_tasks.values()
+        if t.status in (
+            (TaskStatus.IDLE, TaskStatus.IN_PROGRESS, TaskStatus.FAILED)
+            if resume
+            else (TaskStatus.IDLE,)
+        )
+    )
     completed_tasks = sum(
         1 for t in doc.all_tasks.values() if t.status == TaskStatus.COMPLETED
     )
@@ -256,7 +266,7 @@ def apply_command(
         raise typer.Exit(0)
 
     # 检查是否有需要执行的任务
-    if idle_tasks == 0:
+    if runnable_tasks == 0:
         console.print(
             "\n[yellow]没有待执行任务。[/yellow]",
             style="yellow",
@@ -274,9 +284,7 @@ def apply_command(
         raise typer.Exit(0)
 
     # 确认执行
-    console.print(
-        f"\n[bold]准备执行 {idle_tasks} 个任务[/bold]"
-    )
+    console.print(f"\n[bold]准备执行 {runnable_tasks} 个任务[/bold]")
     console.print(f"[dim]最大并发：{max_concurrent}[/dim]")
     console.print(f"[dim]单任务超时：{timeout / 1000:.0f}s[/dim]\n")
 
@@ -312,6 +320,24 @@ def apply_command(
                 f"[dim]任务 {force_unlock} 未被锁定，跳过解锁[/dim]\n"
             )
 
+    # v0.1.5：写入 workflow record（尽力而为，失败不阻断）
+    try_write_record(
+        project_root,
+        step=WorkflowStep.APPLY,
+        change_name=change,
+        inputs={
+            "resume": resume,
+            "start_wave": start_wave,
+            "max_concurrent": max_concurrent,
+            "timeout_ms": timeout,
+            "use_lock": use_lock,
+            "skip_locked": skip_locked,
+            "tech_check": tech_check,
+            "check_types": check_types,
+        },
+        notes="apply.start",
+    )
+
     try:
         # v1.4: 生成变更摘要以优化 SubAgent 上下文
         change_summary = generate_change_summary(change_dir, change)
@@ -326,6 +352,7 @@ def apply_command(
             max_concurrent=max_concurrent,
             timeout_ms=timeout,
             config=config,  # v1.2：传入配置以支持 profile
+            project_root=project_root,  # v0.1.5：Codex/KB 工作目录
             cc_spec_root=cc_spec_root if use_lock else None,  # v1.3：传入根目录以支持锁
             change_summary=change_summary,  # v1.4：传入变更摘要以优化上下文
         )
@@ -343,6 +370,9 @@ def apply_command(
                 total_tasks,
                 use_lock,  # v1.3：传入锁参数
                 skip_locked,  # v1.3：传入跳过锁定任务参数
+                resume,  # v0.1.5：允许重试 FAILED/IN_PROGRESS
+                project_root,
+                change,
             )
         )
 
@@ -352,6 +382,15 @@ def apply_command(
         # 根据结果更新状态
         if collector.has_failures():
             _handle_execution_failure(status_path, change, collector)
+
+            # v0.1.5：记录 apply 结束（失败）
+            try_write_record(
+                project_root,
+                step=WorkflowStep.APPLY,
+                change_name=change,
+                outputs={"summary": collector.get_summary(), "passed": False},
+                notes="apply.end",
+            )
         else:
             # v1.4: 技术检查（由主 Agent 执行，非 SubAgent）
             tech_check_passed = True
@@ -365,6 +404,20 @@ def apply_command(
 
             if tech_check_passed:
                 _handle_execution_success(status_path, change, collector, total_waves)
+
+                # v0.1.5：apply 完成后 compact（events → snapshot）
+                compact_ok = try_compact_kb(project_root)
+                try_write_record(
+                    project_root,
+                    step=WorkflowStep.APPLY,
+                    change_name=change,
+                    outputs={
+                        "summary": collector.get_summary(),
+                        "passed": True,
+                        "kb_compact": compact_ok,
+                    },
+                    notes="apply.end",
+                )
             else:
                 # 技术检查失败，按失败处理
                 console.print(
@@ -372,6 +425,14 @@ def apply_command(
                     style="red",
                 )
                 _handle_execution_failure(status_path, change, collector)
+
+                try_write_record(
+                    project_root,
+                    step=WorkflowStep.APPLY,
+                    change_name=change,
+                    outputs={"summary": collector.get_summary(), "passed": False, "tech_check": False},
+                    notes="apply.end",
+                )
 
     except Exception as e:
         console.print(
@@ -389,6 +450,9 @@ async def _execute_with_progress(
     total_tasks: int,
     use_lock: bool = True,  # v1.3：锁参数
     skip_locked: bool = False,  # v1.3：跳过被锁任务参数
+    resume: bool = False,  # v0.1.5：支持重试失败任务
+    project_root: Path | None = None,
+    change_name: str | None = None,
 ) -> dict[int, list[ExecutionResult]]:
     """执行所有 wave，并展示进度。
 
@@ -400,6 +464,8 @@ async def _execute_with_progress(
         total_tasks：任务总数
         use_lock：v1.3 - 是否使用锁机制
         skip_locked：v1.3 - 是否跳过被锁定的任务
+        project_root：v0.1.5 - 项目根目录（用于 KB 更新/记录）
+        change_name：v0.1.5 - 变更名称（用于 KB records）
 
     返回：
         一个字典：wave 编号 -> 结果列表
@@ -422,19 +488,23 @@ async def _execute_with_progress(
             tracker.completed_waves += 1
             continue
 
-        # 获取该 wave 中待执行（idle）的任务
-        idle_tasks = [t for t in wave.tasks if t.status == TaskStatus.IDLE]
+        runnable_statuses = (
+            (TaskStatus.IDLE, TaskStatus.IN_PROGRESS, TaskStatus.FAILED)
+            if resume
+            else (TaskStatus.IDLE,)
+        )
+        runnable_tasks = [t for t in wave.tasks if t.status in runnable_statuses]
 
-        if not idle_tasks:
+        if not runnable_tasks:
             # 该 wave 的任务已全部处理
             tracker.completed_waves += 1
             continue
 
         # 开始 wave
-        task_ids = [t.task_id for t in idle_tasks]
+        task_ids = [t.task_id for t in runnable_tasks]
         console.print(
             f"\n[bold cyan]波次 {wave.wave_number}[/bold cyan] - "
-            f"正在执行 {len(idle_tasks)} 个任务...\n"
+            f"正在执行 {len(runnable_tasks)} 个任务...\n"
         )
 
         collector.start_wave(wave.wave_number)
@@ -448,6 +518,7 @@ async def _execute_with_progress(
             wave.wave_number,
             use_lock=use_lock,
             skip_locked=skip_locked,
+            resume=resume,
         )
 
         # 收集结果
@@ -465,6 +536,24 @@ async def _execute_with_progress(
                 f"（{result.duration_seconds:.1f}秒）"
             )
 
+            # v0.1.5：为每个 task 写一条可追溯记录（失败不阻断）
+            if project_root and change_name:
+                try_write_record(
+                    project_root,
+                    step=WorkflowStep.APPLY,
+                    change_name=change_name,
+                    task_id=result.task_id,
+                    session_id=getattr(result, "session_id", None),
+                    outputs={
+                        "success": result.success,
+                        "duration_seconds": result.duration_seconds,
+                        "exit_code": getattr(result, "exit_code", None),
+                        "output": (result.output or "")[:2000],
+                        "error": (result.error or "")[:2000] if getattr(result, "error", None) else None,
+                    },
+                    notes="apply.task_result",
+                )
+
         # 结束 wave
         collector.end_wave(wave.wave_number)
         tracker.complete_wave(wave.wave_number)
@@ -478,6 +567,31 @@ async def _execute_with_progress(
             )
             # 遇到失败则停止执行
             break
+
+        # v0.1.5：Wave 完成后做一次增量 KB 更新（失败不阻断）
+        if project_root and change_name:
+            kb_res = try_update_kb(project_root, reference_mode="index")
+            if kb_res is not None:
+                summary, report = kb_res
+                try_write_record(
+                    project_root,
+                    step=WorkflowStep.APPLY,
+                    change_name=change_name,
+                    inputs={"wave": wave.wave_number},
+                    outputs={
+                        "kb_update": {
+                            "scanned": summary.scanned,
+                            "added": summary.added,
+                            "changed": summary.changed,
+                            "removed": summary.removed,
+                            "chunks_written": summary.chunks_written,
+                            "reference_mode": summary.reference_mode,
+                            "included": report.included,
+                            "excluded": report.excluded,
+                        }
+                    },
+                    notes="apply.kb_update",
+                )
 
         console.print(
             f"\n[green]√ 波次 {wave.wave_number} 执行完成[/green]"
@@ -878,4 +992,3 @@ def _display_tech_check_results(results: list[CheckResult]) -> None:
                     console.print(f"[dim]... 还有 {len(error_lines) - 10} 行 ...[/dim]")
                 else:
                     console.print(result.error.strip())
-

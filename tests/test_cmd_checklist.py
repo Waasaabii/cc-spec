@@ -143,7 +143,7 @@ tasks:
         self._create_status()
 
         os.chdir(str(self.project_root))
-        result = runner.invoke(app, ["checklist", self.change_name])
+        result = runner.invoke(app, ["checklist", self.change_name, "--write-report"])
         assert result.exit_code == 1
         assert "tasks.yaml" in result.stdout or "tasks" in result.stdout
 
@@ -153,7 +153,7 @@ tasks:
         status_path = self._create_status()
 
         os.chdir(str(self.project_root))
-        result = runner.invoke(app, ["checklist", self.change_name])
+        result = runner.invoke(app, ["checklist", self.change_name, "--write-report"])
 
         if result.exit_code != 0:
             print("STDOUT:", result.stdout)
@@ -193,7 +193,7 @@ tasks:
         status_path = self._create_status()
 
         os.chdir(str(self.project_root))
-        result = runner.invoke(app, ["checklist", self.change_name])
+        result = runner.invoke(app, ["checklist", self.change_name, "--write-report"])
 
         assert result.exit_code == 0, f"Command failed with: {result.stdout}"
 
@@ -473,7 +473,7 @@ tasks:
         update_state(status_path, state)
 
         # Step 4: Run checklist
-        result = runner.invoke(app, ["checklist", "add-feature"])
+        result = runner.invoke(app, ["checklist", "add-feature", "--write-report"])
         assert result.exit_code == 0
         assert "未通过" in result.stdout or "FAILED" in result.stdout
 

@@ -28,10 +28,14 @@ from cc_spec.core.delta import (
 from cc_spec.core.id_manager import IDManager
 from cc_spec.core.state import (
     Stage,
+    StageInfo,
     TaskStatus,
     get_current_change,
     load_state,
+    update_state,
 )
+from cc_spec.rag.models import WorkflowStep
+from cc_spec.rag.workflow import try_compact_kb, try_update_kb, try_write_record
 from cc_spec.ui.banner import show_banner
 from cc_spec.utils.files import (
     ensure_dir,
@@ -75,6 +79,7 @@ def archive_command(
     """
     # 显示启动 Banner
     show_banner(console)
+    archive_started_at = datetime.now().isoformat()
 
     # 查找项目根目录
     project_root = find_project_root()
@@ -126,6 +131,15 @@ def archive_command(
         raise typer.Exit(1)
 
     console.print(f"[cyan]正在归档变更：[/cyan] [bold]{change}[/bold]\n")
+
+    # v0.1.5：写入 workflow record（尽力而为）
+    try_write_record(
+        project_root,
+        step=WorkflowStep.ARCHIVE,
+        change_name=change,
+        inputs={"mode": "start", "force": force, "started_at": archive_started_at},
+        notes="archive.start",
+    )
 
     # 加载并校验状态
     status_path = change_dir / "status.yaml"
@@ -235,6 +249,13 @@ def archive_command(
 
         if not Confirm.ask("[bold]是否继续？[/bold]", default=False):
             console.print("[yellow]已取消归档。[/yellow]")
+            try_write_record(
+                project_root,
+                step=WorkflowStep.ARCHIVE,
+                change_name=change,
+                outputs={"cancelled": True},
+                notes="archive.cancelled",
+            )
             raise typer.Exit(0)
 
     # 执行合并操作
@@ -311,6 +332,23 @@ def archive_command(
         )
         raise typer.Exit(1)
 
+    # 将状态更新到 archive 阶段（完成）
+    try:
+        archived_status_path = archive_path / "status.yaml"
+        state = load_state(archived_status_path)
+        state.current_stage = Stage.ARCHIVE
+        state.stages[Stage.ARCHIVE] = StageInfo(
+            status=TaskStatus.COMPLETED,
+            started_at=archive_started_at,
+            completed_at=datetime.now().isoformat(),
+        )
+        update_state(archived_status_path, state)
+    except Exception as e:
+        console.print(
+            f"[yellow]警告：[/yellow] 无法更新 archive 阶段状态：{e}",
+            style="yellow",
+        )
+
     # 成功提示
     console.print(
         "\n[bold green]归档完成！[/bold green]",
@@ -323,6 +361,21 @@ def archive_command(
         )
     console.print(
         f"[dim]已归档到 {archive_path.relative_to(project_root)}[/dim]"
+    )
+
+    # v0.1.5：归档后刷新 KB + compact（失败不阻断）
+    kb_updated = try_update_kb(project_root, reference_mode="index")
+    compact_ok = try_compact_kb(project_root)
+    try_write_record(
+        project_root,
+        step=WorkflowStep.ARCHIVE,
+        change_name=change,
+        outputs={
+            "archive_path": str(archive_path.relative_to(project_root)),
+            "kb_updated": kb_updated is not None,
+            "kb_compact": compact_ok,
+        },
+        notes="archive.end",
     )
 
 

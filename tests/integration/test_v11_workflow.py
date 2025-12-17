@@ -1,4 +1,4 @@
-"""Integration tests for cc-spec v1.1 features."""
+"""Integration tests for legacy v1.1-era features (kept minimal)."""
 
 import tempfile
 from pathlib import Path
@@ -10,7 +10,6 @@ from cc_spec.core.config import Config, SubAgentConfig, SubAgentProfile, load_co
 from cc_spec.core.id_manager import IDManager, IDType
 from cc_spec.core.command_generator import (
     ClaudeCommandGenerator,
-    GeminiCommandGenerator,
     get_generator,
     get_available_agents,
 )
@@ -181,30 +180,18 @@ class TestCommandGeneratorWorkflow:
         assert "<!-- CC-SPEC:START -->" in content
         assert "<!-- CC-SPEC:END -->" in content
 
-    def test_gemini_generator_toml(self, temp_project: Path) -> None:
-        """Test Gemini command generator produces TOML."""
-        generator = GeminiCommandGenerator()
-
-        path = generator.generate_command("goto", "Navigate to change", temp_project)
-
-        assert path is not None
-        assert path.exists()
-        assert path.suffix == ".toml"
-
-        content = path.read_text(encoding="utf-8")
-        assert 'description = "Navigate to change"' in content
-
     def test_generate_all_commands(self, temp_project: Path) -> None:
         """Test generating all commands for an agent."""
         generator = ClaudeCommandGenerator()
 
         paths = generator.generate_all(temp_project)
 
-        # Should generate 10 commands
-        assert len(paths) == 10
+        # Should generate 11 commands
+        assert len(paths) == 11
 
         # Check some specific commands exist
         cmd_names = [p.stem for p in paths]
+        assert "init" in cmd_names
         assert "specify" in cmd_names
         assert "list" in cmd_names
         assert "goto" in cmd_names
@@ -216,9 +203,7 @@ class TestCommandGeneratorWorkflow:
         assert claude_gen is not None
         assert isinstance(claude_gen, ClaudeCommandGenerator)
 
-        gemini_gen = get_generator("gemini")
-        assert gemini_gen is not None
-        assert isinstance(gemini_gen, GeminiCommandGenerator)
+        assert get_generator("gemini") is None
 
         unknown_gen = get_generator("unknown-agent")
         assert unknown_gen is None
@@ -227,11 +212,7 @@ class TestCommandGeneratorWorkflow:
         """Test getting list of available agents."""
         agents = get_available_agents()
 
-        assert len(agents) >= 9
-        assert "claude" in agents
-        assert "cursor" in agents
-        assert "gemini" in agents
-        assert "copilot" in agents
+        assert agents == ["claude"]
 
     def test_update_preserves_user_content(self, temp_project: Path) -> None:
         """Test that update preserves user-added content."""
@@ -276,12 +257,13 @@ class TestV11Features:
         assert data["version"] == "1.1"
 
     def test_eleven_commands_available(self) -> None:
-        """Test that we now have 11 commands."""
+        """Test CLI commands are registered (now includes kb group)."""
         from cc_spec import app
 
         commands = [cmd.name for cmd in app.registered_commands]
+        groups = [g.name for g in app.registered_groups]
 
-        # v1.0 commands (8)
+        # Core workflow commands
         assert "init" in commands
         assert "specify" in commands
         assert "clarify" in commands
@@ -290,11 +272,9 @@ class TestV11Features:
         assert "checklist" in commands
         assert "archive" in commands
         assert "quick-delta" in commands
-
-        # v1.1 commands (+3)
         assert "list" in commands
         assert "goto" in commands
         assert "update" in commands
+        assert "kb" in groups
 
-        # Total: 11
         assert len(commands) == 11
