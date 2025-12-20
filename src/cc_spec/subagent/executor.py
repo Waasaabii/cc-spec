@@ -11,7 +11,7 @@ v1.4: 添加上下文优化，主 Agent 预处理生成变更摘要，SubAgent �
 import asyncio
 import time
 import uuid
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
@@ -21,6 +21,7 @@ from cc_spec.codex.client import CodexClient
 from cc_spec.codex.models import CodexResult
 from cc_spec.core.config import Config, SubAgentProfile
 from cc_spec.core.lock import LockManager
+from cc_spec.rag.context_provider import ContextConfig, ContextProvider
 from cc_spec.subagent.task_parser import (
     Task,
     TasksDocument,
@@ -142,18 +143,18 @@ class ChangeSummary:
             格式化的摘要文本（目标 ~200 tokens）
         """
         lines = [
-            f"## 变更: {self.change_name}",
+            f"## Change: {self.change_name}",
             "",
-            f"**目标**: {self.objective}",
+            f"**Objective**: {self.objective}",
         ]
 
         if self.scope:
             lines.append("")
-            lines.append("**范围**: " + ", ".join(self.scope[:3]))  # 最多 3 项
+            lines.append("**Scope**: " + ", ".join(self.scope[:3]))  # 最多 3 项
 
         if self.tech_decisions:
             lines.append("")
-            lines.append("**技术要点**: " + "; ".join(self.tech_decisions[:2]))  # 最多 2 项
+            lines.append("**Key Decisions**: " + "; ".join(self.tech_decisions[:2]))  # 最多 2 项
 
         return "\n".join(lines)
 
@@ -264,6 +265,8 @@ class ExecutionResult:
         retry_count: v1.3 - 重试次数
         session_id: Codex 线程/会话 ID（用于 resume）
         exit_code: Codex CLI 退出码
+        context_tokens: v0.1.6 - 注入上下文的 token 估算
+        context_sources: v0.1.6 - 上下文来源文件列表
     """
 
     task_id: str
@@ -279,6 +282,8 @@ class ExecutionResult:
     retry_count: int = 0
     session_id: str | None = None
     exit_code: int | None = None
+    context_tokens: int = 0
+    context_sources: list[str] = field(default_factory=list)
 
 
 class SubAgentExecutor:
@@ -370,7 +375,7 @@ class SubAgentExecutor:
         self._retry_counts: dict[str, int] = {}
 
         # v0.1.5: 懒加载 KB（用于为 Codex prompt 提供 RAG 上下文）
-        self._kb: Any | None = None
+        self._context_provider: ContextProvider | None = None
 
     def get_task_profile(self, task: Task) -> SubAgentProfile:
         """获取任务的 Profile 配置。
@@ -430,23 +435,23 @@ class SubAgentExecutor:
 
         # 2. 任务定义（~150 tokens）
         prompt_lines.extend([
-            f"## 任务: {task.task_id}",
-            f"**名称**: {task.name}",
+            f"## Task: {task.task_id}",
+            f"**Title**: {task.name}",
         ])
 
         # 依赖
         if task.dependencies:
-            prompt_lines.append(f"**依赖**: {', '.join(task.dependencies)}")
+            prompt_lines.append(f"**Dependencies**: {', '.join(task.dependencies)}")
 
         # 代码入口（最多 3 个）
         if task.code_entry_points:
             entries = task.code_entry_points[:3]
-            prompt_lines.append(f"**入口**: {', '.join(entries)}")
+            prompt_lines.append(f"**Entry Points**: {', '.join(entries)}")
 
         # 参考文档（最多 3 个）
         if task.required_docs:
             docs = task.required_docs[:3]
-            prompt_lines.append(f"**参考文档**: {', '.join(docs)}")
+            prompt_lines.append(f"**Docs**: {', '.join(docs)}")
 
         prompt_lines.append("")
 
@@ -465,7 +470,7 @@ class SubAgentExecutor:
             prompt_lines.append("")
 
         # 5. 执行说明（~50 tokens）
-        prompt_lines.append("**执行**: 完成 checklist 所有项。不要修改 tasks.yaml（状态由执行器更新）。")
+        prompt_lines.append("**Execution**: Complete all checklist items. Do not edit tasks.yaml (status is managed by the executor).")
 
         return "\n".join(prompt_lines)
 
@@ -498,35 +503,49 @@ class SubAgentExecutor:
             return self.codex.resume(session_id, prompt, workdir, timeout_ms=timeout_ms)
         return self.codex.execute(prompt, workdir, timeout_ms=timeout_ms)
 
-    def _get_kb_context_for_task(self, task: Task) -> str | None:
-        """为任务构建最小 KB 上下文片段（失败则返回 None）。"""
+    def _get_smart_context_for_task(self, task: Task) -> tuple[str | None, int, list[str]]:
+        """v0.1.6: 为任务构建智能上下文（失败则降级为 None）。"""
         try:
-            from cc_spec.rag.knowledge_base import KnowledgeBase  # type: ignore[import-not-found]
+            if self._context_provider is None:
+                # embedding_model 由 KB 自行从 manifest/默认值推断；这里不强制绑定配置
+                self._context_provider = ContextProvider(self.project_root)
+            provider = self._context_provider
         except Exception:
-            return None
+            return (None, 0, [])
+
+        # 1) 读取 tasks.yaml 的 context 配置
+        mode = task.context.mode if task.context else "auto"
+        max_chunks = task.context.max_chunks if task.context else 10
+        queries = list(task.context.queries) if task.context else []
+        related_files = list(task.context.related_files) if task.context else []
+
+        # 2) auto/hybrid 且未配置 queries：构造一个最小 query 兜底
+        if mode in ("auto", "hybrid") and not queries:
+            query_parts: list[str] = [task.name, task.task_id]
+            if self.change_summary and self.change_summary.objective:
+                query_parts.append(self.change_summary.objective)
+            query_parts.extend(task.code_entry_points[:3])
+            query_parts.extend(task.required_docs[:3])
+            derived = " ".join([p for p in query_parts if p]).strip()
+            if derived:
+                queries = [derived]
+
+        cfg = ContextConfig(
+            queries=queries,
+            related_files=related_files,
+            max_chunks=max_chunks,
+            mode=mode if mode in ("auto", "manual", "hybrid") else "auto",
+        )
 
         try:
-            if self._kb is None:
-                self._kb = KnowledgeBase(self.project_root)
-            kb: Any = self._kb
+            ctx = provider.get_context_for_task(task.task_id, cfg)
         except Exception:
-            return None
+            return (None, 0, [])
 
-        query_parts: list[str] = [task.name, task.task_id]
-        if self.change_summary and self.change_summary.objective:
-            query_parts.append(self.change_summary.objective)
-        query_parts.extend(task.code_entry_points[:3])
-        query_parts.extend(task.required_docs[:3])
-        query = " ".join([p for p in query_parts if p]).strip()
-        if not query:
-            return None
-
-        try:
-            res = kb.query(query, n=6, collection="chunks")
-        except Exception:
-            return None
-
-        return _format_kb_query_result(query, res)
+        md = ctx.to_markdown()
+        if not md.strip():
+            return (None, 0, [])
+        return (md, int(ctx.total_tokens), list(ctx.sources))
 
     async def execute_task(self, task: Task, wave_num: int = 0) -> ExecutionResult:
         """执行单个任务（真实调用 Codex CLI）。
@@ -570,7 +589,7 @@ class SubAgentExecutor:
 
         try:
             async with self._semaphore:
-                kb_context = self._get_kb_context_for_task(task)
+                kb_context, context_tokens, context_sources = self._get_smart_context_for_task(task)
                 prompt = self.build_task_prompt(task, kb_context=kb_context)
 
                 codex_result: CodexResult = await asyncio.to_thread(
@@ -602,6 +621,8 @@ class SubAgentExecutor:
                     retry_count=retry_count,
                     session_id=codex_result.session_id,
                     exit_code=codex_result.exit_code,
+                    context_tokens=context_tokens,
+                    context_sources=context_sources,
                 )
 
         except asyncio.TimeoutError:
@@ -819,6 +840,99 @@ class SubAgentExecutor:
 
         # 写入最终状态
         self.tasks_md_path.write_text(self.tasks_md_content, encoding="utf-8")
+
+        return results
+
+    async def execute_wave_strict(
+        self,
+        wave_num: int,
+        *,
+        use_lock: bool = True,
+        skip_locked: bool = False,
+        resume: bool = False,
+        on_task_complete: Callable[[ExecutionResult], Awaitable[None]] | None = None,
+    ) -> list[ExecutionResult]:
+        """严格模式：串行执行 Wave 内任务，并允许在每个任务结束后执行回调。
+
+        设计目标：
+        - 便于在 apply 中实现“任务级 KB 更新/归属追踪”
+        - 保证回调在同一 Wave 内按任务顺序执行（callback awaited）
+
+        行为：
+        - 仅对 runnable_tasks（默认 IDLE；resume 时包含 FAILED/IN_PROGRESS）串行执行
+        - 每个任务：IN_PROGRESS → 执行 → COMPLETED/FAILED
+        - 若任务失败：停止后续任务（与 apply 的停止策略一致）
+        """
+        tasks = get_tasks_by_wave(self.doc, wave_num)
+        if not tasks:
+            raise ValueError(f"未找到波次 {wave_num} 的任务")
+
+        runnable_statuses = (
+            (TaskStatus.IDLE, TaskStatus.FAILED, TaskStatus.IN_PROGRESS)
+            if resume
+            else (TaskStatus.IDLE,)
+        )
+        runnable_tasks = [t for t in tasks if t.status in runnable_statuses]
+        if not runnable_tasks:
+            return []
+
+        results: list[ExecutionResult] = []
+
+        for task in runnable_tasks:
+            # 标记 IN_PROGRESS
+            task.status = TaskStatus.IN_PROGRESS
+            self.tasks_md_content = update_task_status_yaml(
+                self.tasks_md_content,
+                task.task_id,
+                TaskStatus.IN_PROGRESS,
+            )
+            self.tasks_md_path.write_text(self.tasks_md_content, encoding="utf-8")
+
+            # 执行（串行）
+            if use_lock and self.lock_manager is not None:
+                result = await self._execute_task_with_lock(task, wave_num, skip_locked)
+            else:
+                result = await self.execute_task(task, wave_num)
+            result.wave = wave_num
+            results.append(result)
+
+            # 更新状态
+            task_obj = self.doc.all_tasks.get(result.task_id)
+            if task_obj:
+                if result.success:
+                    new_status = TaskStatus.COMPLETED
+                    task_obj.status = TaskStatus.COMPLETED
+                else:
+                    new_status = TaskStatus.FAILED
+                    task_obj.status = TaskStatus.FAILED
+                    self._retry_counts[result.task_id] = self._retry_counts.get(result.task_id, 0) + 1
+
+                log = {
+                    "completed_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+                    "subagent_id": result.agent_id or f"agent_{result.task_id}",
+                }
+                if result.session_id:
+                    log["session_id"] = result.session_id
+                if result.exit_code is not None:
+                    log["exit_code"] = result.exit_code
+                if result.error:
+                    log["notes"] = str(result.error)[:200]
+
+                self.tasks_md_content = update_task_status_yaml(
+                    self.tasks_md_content,
+                    result.task_id,
+                    new_status,
+                    log=log,
+                )
+                self.tasks_md_path.write_text(self.tasks_md_content, encoding="utf-8")
+
+            # 回调（严格等待）
+            if on_task_complete is not None:
+                await on_task_complete(result)
+
+            # 失败则停止
+            if not result.success:
+                break
 
         return results
 

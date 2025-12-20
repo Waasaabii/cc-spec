@@ -5,6 +5,8 @@
 
 v1.1: 新增 tasks.yaml 格式支持。
 v1.2: 移除 tasks.md 支持，只保留 tasks.yaml。
+
+v0.1.6: 新增任务级 `context` 配置，用于智能上下文注入。
 """
 
 import re
@@ -13,6 +15,8 @@ from pathlib import Path
 from typing import Any
 
 import yaml
+
+from cc_spec.version import TASKS_YAML_VERSION
 
 from cc_spec.core.scoring import CheckItem, CheckStatus, parse_checklist
 
@@ -35,6 +39,16 @@ STATUS_MAP = {
     "failed": TaskStatus.FAILED,
     "timeout": TaskStatus.TIMEOUT,
 }
+
+
+@dataclass(frozen=True)
+class TaskContext:
+    """v0.1.6: 任务上下文配置（用于自动注入 KB 上下文）。"""
+
+    queries: list[str] = field(default_factory=list)
+    related_files: list[str] = field(default_factory=list)
+    max_chunks: int = 10
+    mode: str = "auto"  # auto | manual | hybrid
 
 
 @dataclass
@@ -72,6 +86,7 @@ class Task:
         checklist_items: 该任务的检查清单项列表
         execution_log: 执行日志条目（若已完成）
         profile: SubAgent Profile 名称（v1.1）
+        context: v0.1.6 任务上下文配置
     """
 
     task_id: str
@@ -85,6 +100,7 @@ class Task:
     checklist_items: list[CheckItem] = field(default_factory=list)
     execution_log: ExecutionLog | None = None
     profile: str | None = None  # v1.1：SubAgent Profile 名称
+    context: TaskContext | None = None  # v0.1.6：任务上下文配置
 
 
 @dataclass
@@ -119,8 +135,6 @@ class TasksDocument:
 # YAML 格式解析
 # ============================================================================
 
-TASKS_YAML_VERSION = "1.0"
-
 
 def parse_tasks_yaml(
     content: str,
@@ -149,10 +163,9 @@ def parse_tasks_yaml(
         raise ValueError("tasks.yaml 必须是有效的 YAML 对象")
 
     # 提取元信息
-    version = data.get("version", "1.0")
+    version = data.get("version")
     if version != TASKS_YAML_VERSION:
-        # 暂时只支持 1.0 版本，但允许向后兼容
-        pass
+        raise ValueError(f"tasks.yaml 版本不兼容：期望 {TASKS_YAML_VERSION}，实际 {version!r}")
 
     change_name = data.get("change", "")
     if not change_name:
@@ -238,6 +251,9 @@ def _parse_yaml_task(
     # 解析 Profile
     profile = task_info.get("profile")
 
+    # v0.1.6: 解析任务上下文配置
+    context = _parse_task_context(task_info.get("context"))
+
     # 解析执行日志
     execution_log = None
     log_info = task_info.get("log")
@@ -269,6 +285,7 @@ def _parse_yaml_task(
         checklist_items=checklist_items,
         execution_log=execution_log,
         profile=profile,
+        context=context,
     )
 
 
@@ -376,6 +393,44 @@ def _parse_yaml_checklist(
     return items
 
 
+def _parse_task_context(raw: Any) -> TaskContext | None:
+    """解析 tasks.yaml 中的 `context` 字段（v0.1.6）。"""
+    if raw is None:
+        return None
+    if not isinstance(raw, dict):
+        return None
+
+    queries_raw = raw.get("queries", [])
+    if isinstance(queries_raw, str):
+        queries = [q.strip() for q in queries_raw.splitlines() if q.strip()]
+    elif isinstance(queries_raw, list):
+        queries = [str(q).strip() for q in queries_raw if str(q).strip()]
+    else:
+        queries = []
+
+    related_raw = raw.get("related_files", [])
+    if isinstance(related_raw, str):
+        related_files = [p.strip() for p in related_raw.splitlines() if p.strip()]
+    elif isinstance(related_raw, list):
+        related_files = [str(p).strip() for p in related_raw if str(p).strip()]
+    else:
+        related_files = []
+
+    max_chunks_raw = raw.get("max_chunks", 10)
+    try:
+        max_chunks = int(max_chunks_raw)
+    except (TypeError, ValueError):
+        max_chunks = 10
+    if max_chunks <= 0:
+        max_chunks = 10
+
+    mode = str(raw.get("mode", "auto")).strip() or "auto"
+    if mode not in {"auto", "manual", "hybrid"}:
+        mode = "auto"
+
+    return TaskContext(queries=queries, related_files=related_files, max_chunks=max_chunks, mode=mode)
+
+
 def generate_tasks_yaml(doc: TasksDocument) -> str:
     """从 TasksDocument 生成 tasks.yaml 内容。
 
@@ -429,6 +484,15 @@ def generate_tasks_yaml(doc: TasksDocument) -> str:
         # Profile
         if task.profile:
             task_data["profile"] = task.profile
+
+        # v0.1.6: 智能上下文配置
+        if task.context:
+            task_data["context"] = {
+                "mode": task.context.mode,
+                "max_chunks": task.context.max_chunks,
+                "queries": task.context.queries,
+                "related_files": task.context.related_files,
+            }
 
         # 执行日志
         if task.execution_log:
