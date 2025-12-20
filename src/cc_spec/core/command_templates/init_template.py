@@ -30,13 +30,14 @@ class InitTemplate(CommandTemplate):
 
 - 运行：
   ```bash
-  cc-spec kb scan
+  cc-spec kb preview
   ```
 - 将输出的 included/excluded 与 excluded reasons 摘要展示给用户
 - 询问用户是否需要调整：
   - `.cc-specignore`（扫描范围）
   - `--max-bytes`（单文件大小上限）
   - `--reference-mode index|full`（reference 两级入库策略）
+  - `--codex-batch-files/--codex-batch-chars`（Codex 切片批处理大小：更快但更易超时/格式不稳）
 """,
             """**决定 init vs update**
 
@@ -86,4 +87,3 @@ class InitTemplate(CommandTemplate):
             "扫描范围已由用户确认（必要时调整 `.cc-specignore`）",
             "已写入 `kb record --step init`（可追溯）",
         ]
-

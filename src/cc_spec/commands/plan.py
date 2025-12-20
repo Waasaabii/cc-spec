@@ -205,7 +205,7 @@ def plan_command(
 def _create_basic_tasks_yaml(tasks_yaml_path: Path, change_name: str) -> None:
     """创建基础 tasks.yaml 结构。"""
     data = {
-        "version": "1.0",
+        "version": "1.6",
         "change": change_name,
         "tasks": {
             "01-SETUP": {

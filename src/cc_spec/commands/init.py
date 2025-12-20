@@ -50,6 +50,7 @@ __pycache__/
 .cc-spec/kb.events.jsonl
 .cc-spec/kb.snapshot.jsonl
 .cc-spec/kb.manifest.json
+.cc-spec/kb.attribution.json
 """
 
 
@@ -191,7 +192,7 @@ cc-spec init [project] [--force]
 ### kb - 知识库（RAG）
 ```bash
 cc-spec kb status
-cc-spec kb scan
+cc-spec kb preview
 cc-spec kb init
 cc-spec kb update
 cc-spec kb query "query"

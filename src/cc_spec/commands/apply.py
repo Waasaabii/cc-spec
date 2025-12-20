@@ -41,7 +41,13 @@ from cc_spec.core.tech_check import (
     should_block,
 )
 from cc_spec.rag.models import WorkflowStep
-from cc_spec.rag.workflow import try_compact_kb, try_update_kb, try_write_record
+from cc_spec.rag.pipeline import update_kb
+from cc_spec.rag.workflow import (
+    default_embedding_model,
+    try_compact_kb,
+    try_update_kb,
+    try_write_record,
+)
 from cc_spec.subagent.executor import (
     ExecutionResult,
     SubAgentExecutor,
@@ -122,6 +128,11 @@ def apply_command(
         "-C",
         help="v1.4：指定检查类型，逗号分隔（lint,type_check,test,build）",
     ),
+    kb_strict: bool = typer.Option(
+        False,
+        "--kb-strict",
+        help="v0.1.6：KB 严格模式（强制串行执行，并在每个任务后更新 KB 以记录 task_id 归属）",
+    ),
 ) -> None:
     """使用 SubAgent 并行执行 tasks.yaml 中的任务。
 
@@ -147,6 +158,7 @@ def apply_command(
         cc-spec apply --skip-locked     # 跳过被锁任务继续执行
         cc-spec apply --no-tech-check   # 禁用技术检查
         cc-spec apply --check-types lint,test  # 仅执行 lint 和 test 检查
+        cc-spec apply --kb-strict       # 严格模式：任务串行 + 每任务 KB 增量更新（可追溯归属）
     """
     # 显示启动 Banner
     show_banner(console)
@@ -201,6 +213,15 @@ def apply_command(
         raise typer.Exit(1)
 
     console.print(f"[cyan]正在执行变更：[/cyan] [bold]{change}[/bold]\n")
+
+    # v0.1.6：解析 change_id（用于 KB 追踪归属）
+    change_id: str | None = None
+    try:
+        found = id_manager.get_change_by_name(change)
+        if found:
+            change_id = found[0]
+    except Exception:
+        change_id = None
 
     # 检查 tasks.yaml 是否存在
     tasks_path = change_dir / "tasks.yaml"
@@ -285,6 +306,11 @@ def apply_command(
 
     # 确认执行
     console.print(f"\n[bold]准备执行 {runnable_tasks} 个任务[/bold]")
+    if kb_strict and max_concurrent != 1:
+        console.print(
+            f"[yellow]KB 严格模式已启用：将强制最大并发为 1（原值：{max_concurrent}）。[/yellow]"
+        )
+        max_concurrent = 1
     console.print(f"[dim]最大并发：{max_concurrent}[/dim]")
     console.print(f"[dim]单任务超时：{timeout / 1000:.0f}s[/dim]\n")
 
@@ -334,6 +360,7 @@ def apply_command(
             "skip_locked": skip_locked,
             "tech_check": tech_check,
             "check_types": check_types,
+            "kb_strict": kb_strict,
         },
         notes="apply.start",
     )
@@ -373,6 +400,7 @@ def apply_command(
                 resume,  # v0.1.5：允许重试 FAILED/IN_PROGRESS
                 project_root,
                 change,
+                kb_strict=kb_strict,
             )
         )
 
@@ -404,6 +432,47 @@ def apply_command(
 
             if tech_check_passed:
                 _handle_execution_success(status_path, change, collector, total_waves)
+
+                # v0.1.6：严格模式下在 compact 前做一次“最终同步”（用于捕获 tech-check 等非 SubAgent 变更）
+                if kb_strict and project_root and change:
+                    try:
+                        final_summary, final_report = update_kb(
+                            project_root,
+                            embedding_model=default_embedding_model(project_root),
+                            reference_mode="index",
+                            attribution={
+                                "step": "apply.final",
+                                "by": f"apply:{change_id or change}:final",
+                                "change_id": change_id,
+                                "change_name": change,
+                            },
+                        )
+                        try_write_record(
+                            project_root,
+                            step=WorkflowStep.APPLY,
+                            change_name=change,
+                            inputs={"phase": "final_sync"},
+                            outputs={
+                                "kb_update": {
+                                    "scanned": final_summary.scanned,
+                                    "added": final_summary.added,
+                                    "changed": final_summary.changed,
+                                    "removed": final_summary.removed,
+                                    "chunks_written": final_summary.chunks_written,
+                                    "reference_mode": final_summary.reference_mode,
+                                    "included": final_report.included,
+                                    "excluded": final_report.excluded,
+                                    "change_id": change_id,
+                                }
+                            },
+                            notes="apply.kb_final_update",
+                        )
+                    except Exception as e:
+                        console.print(
+                            f"\n[red]KB 最终同步失败（严格模式）：[/red] {e}",
+                            style="red",
+                        )
+                        raise typer.Exit(1)
 
                 # v0.1.5：apply 完成后 compact（events → snapshot）
                 compact_ok = try_compact_kb(project_root)
@@ -453,6 +522,7 @@ async def _execute_with_progress(
     resume: bool = False,  # v0.1.5：支持重试失败任务
     project_root: Path | None = None,
     change_name: str | None = None,
+    kb_strict: bool = False,
 ) -> dict[int, list[ExecutionResult]]:
     """执行所有 wave，并展示进度。
 
@@ -476,6 +546,64 @@ async def _execute_with_progress(
         total_waves=total_waves,
         total_tasks=total_tasks,
     )
+
+    # v0.1.6: 解析 change_id（用于 KB 追踪归属）
+    change_id: str | None = None
+    if project_root and change_name:
+        try:
+            cc_spec_root = get_cc_spec_dir(project_root)
+            id_manager = IDManager(cc_spec_root)
+            found = id_manager.get_change_by_name(change_name)
+            if found:
+                change_id = found[0]
+        except Exception:
+            change_id = None
+
+    kb_model: str | None = default_embedding_model(project_root) if project_root else None
+
+    # v0.1.6：严格模式基线同步（避免把“历史脏状态”误归属到第一个任务）
+    if kb_strict and project_root and change_name:
+        try:
+            console.print("[cyan]KB 严格模式：正在同步 KB 基线...[/cyan]")
+            baseline_attr: dict[str, Any] = {
+                "step": "apply.baseline",
+                "by": f"apply:{change_id or change_name}:baseline",
+            }
+            if change_id:
+                baseline_attr["change_id"] = change_id
+            if change_name:
+                baseline_attr["change_name"] = change_name
+
+            base_summary, base_report = update_kb(
+                project_root,
+                embedding_model=kb_model or "intfloat/multilingual-e5-small",
+                reference_mode="index",
+                attribution=baseline_attr,
+                skip_list_fields=True,
+            )
+            try_write_record(
+                project_root,
+                step=WorkflowStep.APPLY,
+                change_name=change_name,
+                inputs={"phase": "baseline_sync"},
+                outputs={
+                    "kb_update": {
+                        "scanned": base_summary.scanned,
+                        "added": base_summary.added,
+                        "changed": base_summary.changed,
+                        "removed": base_summary.removed,
+                        "chunks_written": base_summary.chunks_written,
+                        "reference_mode": base_summary.reference_mode,
+                        "included": base_report.included,
+                        "excluded": base_report.excluded,
+                        "change_id": change_id,
+                    }
+                },
+                notes="apply.kb_baseline",
+            )
+        except Exception as e:
+            console.print(f"[red]KB 基线同步失败（严格模式）：[/red] {e}")
+            raise
 
     # 开始执行
     collector.start_execution()
@@ -513,16 +641,7 @@ async def _execute_with_progress(
         # 显示 wave 初始状态
         tracker.display()
 
-        # 执行 wave (v1.3：支持锁机制)
-        results = await executor.execute_wave(
-            wave.wave_number,
-            use_lock=use_lock,
-            skip_locked=skip_locked,
-            resume=resume,
-        )
-
-        # 收集结果
-        for result in results:
+        async def _handle_task_result(result: ExecutionResult) -> None:
             collector.add_result(wave.wave_number, result)
             status = "completed" if result.success else "failed"
             tracker.update_task(wave.wave_number, result.task_id, status)
@@ -530,10 +649,15 @@ async def _execute_with_progress(
             # 显示任务结果 (v1.3：包含 agent_id)
             icon = "√" if result.success else "×"
             agent_info = f" [{result.agent_id}]" if result.agent_id else ""
+            ctx_tokens = getattr(result, "context_tokens", 0) or 0
+            ctx_sources = getattr(result, "context_sources", None) or []
+            ctx_info = ""
+            if ctx_tokens > 0:
+                ctx_info = f"；上下文~{ctx_tokens} tokens，来源 {len(ctx_sources)} 个文件"
             console.print(
                 f"  {icon} [bold]{result.task_id}[/bold]{agent_info}: "
                 f"{'已完成' if result.success else '失败'} "
-                f"（{result.duration_seconds:.1f}秒）"
+                f"（{result.duration_seconds:.1f}秒{ctx_info}）"
             )
 
             # v0.1.5：为每个 task 写一条可追溯记录（失败不阻断）
@@ -554,6 +678,66 @@ async def _execute_with_progress(
                     notes="apply.task_result",
                 )
 
+                # v0.1.6：严格模式下“任务级 KB 更新”，用于归属追踪与后续上下文注入
+                if kb_strict:
+                    try:
+                        kb_summary, kb_report = update_kb(
+                            project_root,
+                            embedding_model=kb_model or "intfloat/multilingual-e5-small",
+                            reference_mode="index",
+                            attribution={
+                                "step": "apply",
+                                "by": f"{change_id or change_name}/{result.task_id}",
+                                "change_id": change_id,
+                                "change_name": change_name,
+                                "wave": wave.wave_number,
+                                "task_id": result.task_id,
+                            },
+                        )
+                        try_write_record(
+                            project_root,
+                            step=WorkflowStep.APPLY,
+                            change_name=change_name,
+                            task_id=result.task_id,
+                            inputs={"wave": wave.wave_number},
+                            outputs={
+                                "kb_update": {
+                                    "scanned": kb_summary.scanned,
+                                    "added": kb_summary.added,
+                                    "changed": kb_summary.changed,
+                                    "removed": kb_summary.removed,
+                                    "chunks_written": kb_summary.chunks_written,
+                                    "reference_mode": kb_summary.reference_mode,
+                                    "included": kb_report.included,
+                                    "excluded": kb_report.excluded,
+                                    "change_id": change_id,
+                                }
+                            },
+                            notes="apply.kb_update_task",
+                        )
+                    except Exception as e:
+                        console.print(f"[red]KB 更新失败（严格模式）：[/red] {e}")
+                        raise
+
+        # 执行 wave (v1.3：支持锁机制；v0.1.6：严格模式支持串行回调)
+        if kb_strict:
+            results = await executor.execute_wave_strict(
+                wave.wave_number,
+                use_lock=use_lock,
+                skip_locked=skip_locked,
+                resume=resume,
+                on_task_complete=_handle_task_result,
+            )
+        else:
+            results = await executor.execute_wave(
+                wave.wave_number,
+                use_lock=use_lock,
+                skip_locked=skip_locked,
+                resume=resume,
+            )
+            for result in results:
+                await _handle_task_result(result)
+
         # 结束 wave
         collector.end_wave(wave.wave_number)
         tracker.complete_wave(wave.wave_number)
@@ -569,8 +753,18 @@ async def _execute_with_progress(
             break
 
         # v0.1.5：Wave 完成后做一次增量 KB 更新（失败不阻断）
-        if project_root and change_name:
-            kb_res = try_update_kb(project_root, reference_mode="index")
+        if (not kb_strict) and project_root and change_name:
+            kb_res = try_update_kb(
+                project_root,
+                reference_mode="index",
+                attribution={
+                    "step": "apply",
+                    "by": f"apply:{change_id or change_name}:wave-{wave.wave_number}",
+                    "change_id": change_id,
+                    "change_name": change_name,
+                    "wave": wave.wave_number,
+                },
+            )
             if kb_res is not None:
                 summary, report = kb_res
                 try_write_record(
@@ -588,6 +782,7 @@ async def _execute_with_progress(
                             "reference_mode": summary.reference_mode,
                             "included": report.included,
                             "excluded": report.excluded,
+                            "change_id": change_id,
                         }
                     },
                     notes="apply.kb_update",

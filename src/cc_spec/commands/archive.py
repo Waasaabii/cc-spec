@@ -364,7 +364,26 @@ def archive_command(
     )
 
     # v0.1.5：归档后刷新 KB + compact（失败不阻断）
-    kb_updated = try_update_kb(project_root, reference_mode="index")
+    change_id: str | None = None
+    try:
+        cc_spec_root = get_cc_spec_dir(project_root)
+        id_manager = IDManager(cc_spec_root)
+        found = id_manager.get_change_by_name(change)
+        if found:
+            change_id = found[0]
+    except Exception:
+        change_id = None
+
+    kb_updated = try_update_kb(
+        project_root,
+        reference_mode="index",
+        attribution={
+            "step": "archive",
+            "by": f"archive:{change_id or change}",
+            "change_id": change_id,
+            "change_name": change,
+        },
+    )
     compact_ok = try_compact_kb(project_root)
     try_write_record(
         project_root,
