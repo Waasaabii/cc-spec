@@ -3,9 +3,9 @@
 该模块提供配置的加载、保存与管理能力。
 它负责处理 config.yaml，并为所有设置提供默认值。
 
-v1.1：新增 SubAgentProfile 及 profile 支持。
-v1.2：新增 AgentsConfig 以支持多工具。
-v1.3：新增 ScoringConfig（四维评分）与 LockConfig。
+
+
+
 """
 
 from dataclasses import dataclass, field
@@ -17,7 +17,7 @@ import yaml
 
 
 class Dimension(Enum):
-    """v1.3 四维评分机制的评分维度。"""
+    """四维评分机制的评分维度。"""
 
     FUNCTIONALITY = "functionality"  # 功能完整性
     CODE_QUALITY = "code_quality"    # 代码质量
@@ -53,7 +53,6 @@ class DimensionConfig:
         )
 
 
-# v1.3 的默认维度配置
 DEFAULT_DIMENSION_CONFIGS: dict[Dimension, DimensionConfig] = {
     Dimension.FUNCTIONALITY: DimensionConfig(
         weight=30,
@@ -76,7 +75,7 @@ DEFAULT_DIMENSION_CONFIGS: dict[Dimension, DimensionConfig] = {
 
 @dataclass
 class ScoringConfig:
-    """v1.3 四维评分的评分配置。
+    """四维评分的评分配置。
 
     属性：
         pass_threshold：通过所需的最低百分比（0-100）
@@ -139,7 +138,7 @@ class ScoringConfig:
 
 @dataclass
 class LockConfig:
-    """v1.3 分布式锁的锁配置。
+    """分布式锁的锁配置。
 
     属性：
         timeout_minutes：锁超时时间（分钟，默认 30）
@@ -171,7 +170,7 @@ class LockConfig:
 
 @dataclass
 class AgentsConfig:
-    """v1.2 的多 agent 配置。
+    """的多 agent 配置。
 
     允许为项目配置多个 AI 工具，以便团队使用不同工具协作。
 
@@ -201,7 +200,7 @@ class AgentsConfig:
 
 @dataclass
 class SubAgentProfile:
-    """SubAgent profile 配置（v1.1）。
+    """SubAgent profile 配置。
 
     profile 用于定义不同任务类型的执行设置。
 
@@ -248,7 +247,7 @@ class SubAgentProfile:
 class SubAgentConfig:
     """SubAgent 执行配置。
 
-    v1.1：新增 common 与 profiles，以支持基于 profile 的配置。
+    
 
     属性：
         max_concurrent：最大并发任务数
@@ -260,7 +259,6 @@ class SubAgentConfig:
     max_concurrent: int = 10
     timeout: int = 300000  # 5 分钟（毫秒，旧字段）
 
-    # v1.1 新增字段
     common: SubAgentProfile = field(default_factory=SubAgentProfile)
     profiles: dict[str, SubAgentProfile] = field(default_factory=dict)
 
@@ -342,19 +340,19 @@ class Config:
 
     属性：
         version：配置文件格式版本
-        agent：当前 AI 工具类型（v1.2 已废弃，使用 agents.default）
-        agents：多 agent 配置（v1.2）
+        agent：当前 AI 工具类型
+        agents：多 agent 配置
         project_name：项目名称
         tech_requirements_sources：读取技术需求的文件列表
         subagent：SubAgent 执行配置
-        checklist：Checklist 验证配置（v1.3 已废弃，使用 scoring）
-        scoring：v1.3 四维评分配置
-        lock：v1.3 分布式锁配置
+        checklist：Checklist 验证配置
+        scoring：四维评分配置
+        lock：分布式锁配置
     """
 
     version: str = "1.3"
-    agent: str = "claude"  # v1.2 已废弃：为了向后兼容保留
-    agents: AgentsConfig = field(default_factory=AgentsConfig)  # v1.2（多 agent 配置）
+    agent: str = "claude"  
+    agents: AgentsConfig = field(default_factory=AgentsConfig)  
     project_name: str = "my-project"
     tech_requirements_sources: list[str] = field(default_factory=lambda: [
         ".claude/CLAUDE.md",
@@ -363,37 +361,34 @@ class Config:
         "package.json",
     ])
     subagent: SubAgentConfig = field(default_factory=SubAgentConfig)
-    checklist: ChecklistConfig = field(default_factory=ChecklistConfig)  # v1.3 已废弃
-    # v1.3 新增字段
+    checklist: ChecklistConfig = field(default_factory=ChecklistConfig)  
     scoring: ScoringConfig = field(default_factory=ScoringConfig)
     lock: LockConfig = field(default_factory=LockConfig)
 
     def get_active_agent(self) -> str:
         """获取当前激活的 AI agent。
 
-        v1.2+ 优先使用 agents.default；为兼容 v1.0/v1.1 配置，回退到 agent 字段。
+        优先使用 agents.default；为兼容 旧版 配置，回退到 agent 字段。
 
         返回：
             当前 agent 名称（例如 "claude"、"cursor"、"gemini"）
         """
-        # v1.2：如果配置了 agents，则使用 agents.default
         if self.agents and self.agents.enabled:
             return self.agents.default
-        # 兼容 v1.0/v1.1 配置：回退到 agent 字段
+        # 兼容 旧版 配置：回退到 agent 字段
         return self.agent
 
     def get_pass_threshold(self) -> int:
         """获取评分的通过阈值。
 
-        v1.3+ 优先使用 scoring.pass_threshold；为兼容 v1.2 配置，回退到 checklist.pass_threshold。
+        优先使用 scoring.pass_threshold；回退到 checklist.pass_threshold。
 
         返回：
             通过阈值百分比（0-100）
         """
-        # v1.3：优先使用 scoring.pass_threshold
         if self.version >= "1.3":
             return self.scoring.pass_threshold
-        # 兼容 v1.2 配置：回退到 checklist.pass_threshold
+        # 兼容旧配置：回退到 checklist.pass_threshold
         return self.checklist.pass_threshold
 
     def to_dict(self) -> dict[str, Any]:
@@ -409,14 +404,12 @@ class Config:
             "subagent": self.subagent.to_dict(),
         }
 
-        # v1.2：包含 agents 配置
         if self.version >= "1.2":
             result["agents"] = self.agents.to_dict()
         else:
             # 旧格式：包含 agent 字段
             result["agent"] = self.agent
 
-        # v1.3：包含 scoring 与 lock 配置
         if self.version >= "1.3":
             result["scoring"] = self.scoring.to_dict()
             result["lock"] = self.lock.to_dict()
@@ -433,7 +426,7 @@ class Config:
     def from_dict(cls, data: dict[str, Any]) -> "Config":
         """从 YAML 读取的字典创建 Config。
 
-        支持从 v1.0/v1.1/v1.2 格式迁移到 v1.3 格式。
+        支持从 旧版 格式迁移。
 
         参数：
             data：从 config.yaml 读取的字典
@@ -446,32 +439,29 @@ class Config:
         scoring_data = data.get("scoring", {})
         lock_data = data.get("lock", {})
 
-        # v1.2 迁移：agent -> agents
         agents_data = data.get("agents")
         agent = data.get("agent", "claude")
 
         if agents_data:
-            # v1.2+ 格式
+            # 格式
             agents = AgentsConfig.from_dict(agents_data)
         else:
-            # v1.0/v1.1 格式：将单一 agent 迁移到 agents
+            # 旧版 格式：将单一 agent 迁移到 agents
             agents = AgentsConfig(
                 enabled=[agent],
                 default=agent,
             )
 
-        # v1.3 迁移：checklist -> scoring
         if scoring_data:
-            # v1.3 格式
+            
             scoring = ScoringConfig.from_dict(scoring_data)
         else:
-            # v1.2 格式：将 checklist 迁移到 scoring
+            
             scoring = ScoringConfig(
                 pass_threshold=checklist_data.get("pass_threshold", 80),
                 auto_retry=checklist_data.get("auto_retry", False),
             )
 
-        # v1.3：Lock 配置（新字段，不存在则使用默认值）
         lock = LockConfig.from_dict(lock_data) if lock_data else LockConfig()
 
         return cls(

@@ -3,9 +3,6 @@
 提供 SubAgentExecutor 类用于管理任务的并发执行。
 任务按 Wave 分组，同一 Wave 内的任务并行执行，Wave 之间顺序执行。
 
-v1.2: 添加 Profile 支持，实现任务特定的配置。
-v1.3: 添加锁集成、agent_id、wave 字段和重试计数。
-v1.4: 添加上下文优化，主 Agent 预处理生成变更摘要，SubAgent 只接收精简上下文。
 """
 
 import asyncio
@@ -117,7 +114,7 @@ def _format_kb_query_result(query: str, res: dict[str, Any]) -> str:
 
 @dataclass
 class ChangeSummary:
-    """v1.4: 变更摘要数据类，用于上下文优化。
+    """
 
     主 Agent 预处理 proposal.md 生成精简摘要，传递给 SubAgent。
     目标是将每个 SubAgent 的上下文从 ~5K 降到 ~500 tokens。
@@ -163,7 +160,7 @@ def generate_change_summary(
     change_dir: Path,
     change_name: str,
 ) -> ChangeSummary:
-    """v1.4: 从 proposal.md 生成变更摘要。
+    """
 
     主 Agent 调用此函数预处理变更信息，生成精简摘要供 SubAgent 使用。
 
@@ -250,7 +247,7 @@ def _extract_section(content: str, section_names: list[str]) -> str:
 class ExecutionResult:
     """任务执行结果数据类。
 
-    v1.3 新增字段: agent_id, wave, retry_count
+    agent_id, wave, retry_count
 
     属性：
         task_id: 执行的任务 ID
@@ -260,9 +257,9 @@ class ExecutionResult:
         duration_seconds: 任务执行耗时 (秒)
         started_at: 任务开始执行的时间戳
         completed_at: 任务完成执行的时间戳
-        agent_id: v1.3 - 执行该任务的 SubAgent ID
-        wave: v1.3 - 任务所属的 Wave 编号
-        retry_count: v1.3 - 重试次数
+        agent_id: 
+        wave: 
+        retry_count: 
         session_id: Codex 线程/会话 ID（用于 resume）
         exit_code: Codex CLI 退出码
         context_tokens: v0.1.6 - 注入上下文的 token 估算
@@ -276,7 +273,6 @@ class ExecutionResult:
     duration_seconds: float = 0.0
     started_at: datetime | None = None
     completed_at: datetime | None = None
-    # v1.3 新增字段
     agent_id: str | None = None
     wave: int = 0
     retry_count: int = 0
@@ -292,19 +288,19 @@ class SubAgentExecutor:
     处理 tasks.md 文件中的任务，按 Wave 组织并在 Wave 内并发执行任务，
     同时保持 Wave 之间的顺序执行。
 
-    v1.2: 添加 Profile 支持，实现任务特定的配置。
-    v1.3: 添加 LockManager 集成，防止并发冲突；添加 agent_id 追踪。
-    v1.4: 添加上下文优化，支持变更摘要和精简 prompt。
+    
+    
+    
 
     属性：
         tasks_md_path: tasks.md 文件路径
         max_concurrent: 最大并发任务数
         timeout_ms: 默认任务超时时间 (毫秒)
-        config: 可选的 Config 配置对象 (v1.2)
-        lock_manager: v1.3 - 锁管理器
+        config: 可选的 Config 配置对象
+        lock_manager: 
         doc: 解析后的 TasksDocument
         tasks_md_content: tasks.md 的原始内容
-        change_summary: v1.4 - 变更摘要（由主 Agent 预处理生成）
+        change_summary: 
     """
 
     def __init__(
@@ -315,9 +311,9 @@ class SubAgentExecutor:
         config: Config | None = None,
         project_root: Path | None = None,
         codex: CodexClient | None = None,
-        lock_manager: LockManager | None = None,  # v1.3 新增
-        cc_spec_root: Path | None = None,  # v1.3 新增
-        change_summary: ChangeSummary | None = None,  # v1.4 新增
+        lock_manager: LockManager | None = None,  
+        cc_spec_root: Path | None = None,  
+        change_summary: ChangeSummary | None = None,  
     ):
         """初始化执行器。
 
@@ -325,10 +321,10 @@ class SubAgentExecutor:
             tasks_md_path: tasks.md 文件路径
             max_concurrent: 最大并发任务数
             timeout_ms: 默认任务超时时间 (毫秒)
-            config: 可选的 Config 配置对象 (v1.2)
-            lock_manager: v1.3 - 可选的锁管理器
-            cc_spec_root: v1.3 - .cc-spec 目录路径 (用于创建锁管理器)
-            change_summary: v1.4 - 预处理的变更摘要
+            config: 可选的 Config 配置对象
+            lock_manager: 
+            cc_spec_root: 
+            change_summary: 
 
         异常：
             FileNotFoundError: 如果 tasks_md_path 不存在
@@ -344,10 +340,8 @@ class SubAgentExecutor:
         self.project_root = project_root or _infer_project_root(tasks_md_path)
         self.codex = codex or CodexClient()
 
-        # v1.4: 变更摘要
         self.change_summary = change_summary
 
-        # v1.3: 初始化锁管理器
         if lock_manager is not None:
             self.lock_manager = lock_manager
         elif cc_spec_root is not None:
@@ -371,7 +365,6 @@ class SubAgentExecutor:
         # 自定义任务执行器 (用于测试或自定义实现)
         self._task_executor: Callable[[Task], ExecutionResult] | None = None
 
-        # v1.3: 任务重试计数器
         self._retry_counts: dict[str, int] = {}
 
         # v0.1.5: 懒加载 KB（用于为 Codex prompt 提供 RAG 上下文）
@@ -380,7 +373,7 @@ class SubAgentExecutor:
     def get_task_profile(self, task: Task) -> SubAgentProfile:
         """获取任务的 Profile 配置。
 
-        v1.2: 使用 task.profile 指定的配置，回退到 "common"。
+        
 
         参数：
             task: 要获取配置的任务
@@ -415,7 +408,7 @@ class SubAgentExecutor:
         self._task_executor = executor
 
     def build_task_prompt(self, task: Task, *, kb_context: str | None = None) -> str:
-        """v1.4: 构建精简的任务提示词（目标 ~500 tokens）。
+        """
 
         使用预处理的变更摘要 + 任务定义 + 检查清单，
         将上下文从 ~5K 降到 ~500 tokens/agent。
@@ -475,7 +468,7 @@ class SubAgentExecutor:
         return "\n".join(prompt_lines)
 
     def get_prompt_stats(self, task: Task) -> dict:
-        """v1.4: 获取 prompt 统计信息。
+        """
 
         参数：
             task: 任务
@@ -550,8 +543,8 @@ class SubAgentExecutor:
     async def execute_task(self, task: Task, wave_num: int = 0) -> ExecutionResult:
         """执行单个任务（真实调用 Codex CLI）。
 
-        v1.2: 使用 task.profile 选择配置。
-        v1.3: 添加 agent_id、wave、retry_count 字段。
+        
+        
 
         执行策略：
         - 默认使用 CodexClient.execute()
@@ -560,27 +553,24 @@ class SubAgentExecutor:
 
         参数：
             task: 要执行的任务
-            wave_num: v1.3 - 任务所属的 Wave 编号
+            wave_num: 
 
         返回：
             包含执行详情的 ExecutionResult
         """
-        # v1.3: 生成唯一的 agent_id
         agent_id = _generate_agent_id()
 
-        # v1.3: 获取重试计数
         retry_count = self._retry_counts.get(task.task_id, 0)
 
         # 使用自定义执行器 (如果设置)
         if self._task_executor:
             result = self._task_executor(task)
-            # 更新 v1.3 字段
+            
             result.agent_id = agent_id
             result.wave = wave_num
             result.retry_count = retry_count
             return result
 
-        # v1.2: 获取 profile 配置
         profile = self.get_task_profile(task)
         task_timeout_ms = profile.timeout if profile.timeout != 300000 else self.timeout_ms
 
@@ -666,7 +656,7 @@ class SubAgentExecutor:
         wave_num: int = 0,
         skip_locked: bool = False,
     ) -> ExecutionResult:
-        """带锁执行任务 (v1.3 新增)。
+        """带锁执行任务 。
 
         在执行任务前尝试获取锁，执行完成后释放锁。
         如果锁被占用，根据 skip_locked 参数决定是跳过还是返回错误。
@@ -739,7 +729,7 @@ class SubAgentExecutor:
     ) -> list[ExecutionResult]:
         """并发执行 Wave 内的所有任务。
 
-        v1.3: 添加锁支持和 agent_id 追踪。
+        
 
         处理流程:
         1. 获取该 Wave 内所有 IDLE 状态的任务
@@ -749,8 +739,8 @@ class SubAgentExecutor:
 
         参数：
             wave_num: 要执行的 Wave 编号
-            use_lock: v1.3 - 是否使用锁机制
-            skip_locked: v1.3 - 是否跳过被锁定的任务
+            use_lock: 
+            skip_locked: 
 
         返回：
             该 Wave 内所有任务的 ExecutionResult 列表
@@ -786,7 +776,6 @@ class SubAgentExecutor:
         # 写入更新后的状态
         self.tasks_md_path.write_text(self.tasks_md_content, encoding="utf-8")
 
-        # v1.3: 使用带锁的执行器
         if use_lock and self.lock_manager is not None:
             execution_tasks = [
                 self._execute_task_with_lock(task, wave_num, skip_locked)
@@ -815,7 +804,7 @@ class SubAgentExecutor:
             else:
                 new_status = TaskStatus.FAILED
                 task.status = TaskStatus.FAILED
-                # v1.3: 更新重试计数
+                # 
                 self._retry_counts[result.task_id] = self._retry_counts.get(result.task_id, 0) + 1
 
             # 更新 tasks.yaml
@@ -943,7 +932,7 @@ class SubAgentExecutor:
     ) -> dict[int, list[ExecutionResult]]:
         """顺序执行所有 Wave。
 
-        v1.3: 添加锁支持。
+        
 
         对于每个 Wave (从 start_wave 开始):
         1. 执行该 Wave
@@ -953,7 +942,7 @@ class SubAgentExecutor:
 
         参数：
             start_wave: 开始执行的 Wave 编号 (默认: 0)
-            use_lock: v1.3 - 是否使用锁机制
+            use_lock: 
 
         返回：
             Wave 编号到 ExecutionResult 列表的映射字典
@@ -1033,7 +1022,7 @@ class SubAgentExecutor:
         self.tasks_md_path.write_text(self.tasks_md_content, encoding="utf-8")
 
     def get_retry_count(self, task_id: str) -> int:
-        """获取任务的重试次数 (v1.3 新增)。
+        """获取任务的重试次数 。
 
         参数：
             task_id: 任务 ID
@@ -1044,7 +1033,7 @@ class SubAgentExecutor:
         return self._retry_counts.get(task_id, 0)
 
     def increment_retry_count(self, task_id: str) -> int:
-        """增加任务的重试次数 (v1.3 新增)。
+        """增加任务的重试次数 。
 
         参数：
             task_id: 任务 ID
@@ -1057,7 +1046,7 @@ class SubAgentExecutor:
         return self._retry_counts[task_id]
 
     def cleanup_locks(self) -> list[str]:
-        """清理过期的锁 (v1.3 新增)。
+        """清理过期的锁 。
 
         返回：
             被清理的任务 ID 列表
@@ -1067,7 +1056,7 @@ class SubAgentExecutor:
         return self.lock_manager.cleanup_expired()
 
     def release_all_locks(self) -> int:
-        """释放所有锁 (v1.3 新增)。
+        """释放所有锁 。
 
         警告: 这会强制释放所有锁，可能导致并发问题。
 

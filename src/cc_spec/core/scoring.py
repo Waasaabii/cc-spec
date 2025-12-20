@@ -1,7 +1,7 @@
 """打分机制模块。
 
 提供 checklist 解析、分数计算和失败报告生成功能。
-v1.3 新增: 四维度打分机制 (功能完整性、代码质量、测试覆盖、文档同步)
+四维度打分机制 (功能完整性、代码质量、测试覆盖、文档同步)
 """
 
 from __future__ import annotations
@@ -31,7 +31,7 @@ class CheckItem:
         score: 该项获得的分数 (0-10)
         max_score: 该项的满分值
         notes: 可选的备注说明
-        dimension: v1.3 新增 - 该项所属的维度
+        dimension: 该项所属的维度
     """
 
     description: str
@@ -39,12 +39,12 @@ class CheckItem:
     score: int = 0
     max_score: int = 10
     notes: str | None = None
-    dimension: Dimension | None = None  # v1.3 新增
+    dimension: Dimension | None = None  
 
 
 @dataclass
 class ScoreResult:
-    """打分结果数据类 (v1.2 兼容)。
+    """打分结果数据类 。
 
     属性：
         items: 所有检查项列表
@@ -66,12 +66,11 @@ class ScoreResult:
 
 
 # ============================================================================
-# v1.3 新增: 四维度打分数据结构
 # ============================================================================
 
 @dataclass
 class DimensionScore:
-    """单个维度的得分 (v1.3 新增)。
+    """单个维度的得分 。
 
     属性：
         dimension: 维度类型
@@ -92,7 +91,7 @@ class DimensionScore:
 
 @dataclass
 class TaskScore:
-    """单个任务的打分结果 (v1.3 新增)。
+    """单个任务的打分结果 。
 
     属性：
         task_id: 任务 ID
@@ -113,7 +112,7 @@ class TaskScore:
 
 @dataclass
 class ChecklistResult:
-    """完整的 checklist 打分结果 (v1.3 新增)。
+    """完整的 checklist 打分结果 。
 
     属性：
         task_scores: 各任务的打分结果列表
@@ -353,14 +352,13 @@ def extract_checklists_from_tasks_yaml(tasks_content: str) -> dict[str, list[Che
 
 
 # ============================================================================
-# v1.2 兼容: 简单打分函数
 # ============================================================================
 
 def calculate_score(
     items: list[CheckItem],
     threshold: int = 80,
 ) -> ScoreResult:
-    """计算检查项的得分 (v1.2 兼容)。
+    """计算检查项的得分 。
 
     打分规则:
     - 每个 PASSED 项获得满分 (默认 10 分)
@@ -402,7 +400,6 @@ def calculate_score(
 
 
 # ============================================================================
-# v1.3 新增: 四维度打分函数
 # ============================================================================
 
 def _classify_item(
@@ -530,7 +527,7 @@ def calculate_task_score(
     scoring_config: ScoringConfig | None = None,
     threshold: int = 80,
 ) -> TaskScore:
-    """计算单个任务的四维度加权得分 (v1.3 核心函数)。
+    """计算单个任务的四维度加权得分 。
 
     算法:
     1. 根据关键词将检查项分类到各维度
@@ -602,7 +599,7 @@ def calculate_checklist_result(
     scoring_config: ScoringConfig | None = None,
     threshold: int = 80,
 ) -> ChecklistResult:
-    """计算完整的 checklist 打分结果 (v1.3 核心函数)。
+    """计算完整的 checklist 打分结果 。
 
     参数：
         task_checklists: 任务 ID 到检查项列表的映射
@@ -748,7 +745,7 @@ def _generate_recommendations(
 # ============================================================================
 
 def format_result(result: ScoreResult) -> str:
-    """格式化打分结果为可读字符串 (v1.2 兼容)。
+    """格式化打分结果为可读字符串 。
 
     参数：
         result: 打分结果
@@ -799,7 +796,7 @@ def format_result(result: ScoreResult) -> str:
 
 
 def format_dimension_report(result: ChecklistResult) -> str:
-    """格式化四维度打分报告 (v1.3 新增)。
+    """格式化四维度打分报告 。
 
     参数：
         result: 完整打分结果
@@ -878,7 +875,7 @@ def format_dimension_report(result: ChecklistResult) -> str:
 
 
 def generate_failure_report(result: ScoreResult) -> str:
-    """生成失败报告 (v1.2 兼容)。
+    """生成失败报告 。
 
     参数：
         result: 打分结果
@@ -922,7 +919,7 @@ def generate_failure_report(result: ScoreResult) -> str:
 
 
 def generate_failure_report_v13(result: ChecklistResult) -> str:
-    """生成增强的失败报告 (v1.3 新增)。
+    """生成增强的失败报告 。
 
     包含四维度详细分析和针对性的改进建议。
 

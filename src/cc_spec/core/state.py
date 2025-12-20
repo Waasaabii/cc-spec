@@ -48,14 +48,13 @@ class StageInfo:
 class TaskInfo:
     """任务信息数据类。
 
-    v1.3 新增字段: agent_id, started_at, completed_at, error, retry_count
+    agent_id, started_at, completed_at, error, retry_count
     用于追踪任务执行的详细状态。
     """
 
     id: str
     status: TaskStatus
     wave: int
-    # v1.3 新增字段
     agent_id: str | None = None      # 执行该任务的 SubAgent ID
     started_at: str | None = None    # 任务开始时间 (ISO 格式)
     completed_at: str | None = None  # 任务完成时间 (ISO 格式)
@@ -139,7 +138,7 @@ def load_state(state_path: Path) -> ChangeState:
                     id=task_data["id"],
                     status=status,
                     wave=task_data.get("wave", 0),
-                    # v1.3 新增字段
+                    字段
                     agent_id=task_data.get("agent_id"),
                     started_at=task_data.get("started_at"),
                     completed_at=task_data.get("completed_at"),
@@ -197,7 +196,6 @@ def update_state(state_path: Path, state: ChangeState) -> None:
             "status": task.status.value,
             "wave": task.wave,
         }
-        # v1.3 新增字段 (仅在有值时写入)
         if task.agent_id:
             task_data["agent_id"] = task.agent_id
         if task.started_at:

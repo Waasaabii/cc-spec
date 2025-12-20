@@ -3,8 +3,6 @@
 本模块用于解析 tasks.yaml 文件，提取任务信息，
 并在规格驱动工作流中管理任务状态与检查清单。
 
-v1.1: 新增 tasks.yaml 格式支持。
-v1.2: 移除 tasks.md 支持，只保留 tasks.yaml。
 
 v0.1.6: 新增任务级 `context` 配置，用于智能上下文注入。
 """
@@ -85,7 +83,7 @@ class Task:
         code_entry_points: 核心代码入口路径列表
         checklist_items: 该任务的检查清单项列表
         execution_log: 执行日志条目（若已完成）
-        profile: SubAgent Profile 名称（v1.1）
+        profile: SubAgent Profile 名称
         context: v0.1.6 任务上下文配置
     """
 
@@ -99,7 +97,7 @@ class Task:
     code_entry_points: list[str] = field(default_factory=list)
     checklist_items: list[CheckItem] = field(default_factory=list)
     execution_log: ExecutionLog | None = None
-    profile: str | None = None  # v1.1：SubAgent Profile 名称
+    profile: str | None = None  # 
     context: TaskContext | None = None  # v0.1.6：任务上下文配置
 
 
