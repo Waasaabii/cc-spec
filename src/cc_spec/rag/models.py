@@ -18,6 +18,15 @@ class ChunkType(str, Enum):
     REFERENCE = "reference"
 
 
+class ChunkStatus(str, Enum):
+    """切片操作的状态。"""
+
+    SUCCESS = "success"              # Codex 成功，JSON 解析成功
+    FALLBACK_EXEC = "fallback_exec"  # Codex 执行失败
+    FALLBACK_PARSE = "fallback_parse"  # JSON 解析失败
+    FALLBACK_EMPTY = "fallback_empty"  # 解析成功但结果为空
+
+
 class WorkflowStep(str, Enum):
     """工作流步骤，用于 records 可追溯。"""
 
@@ -76,6 +85,17 @@ class Chunk:
         if self.extra:
             metadata.update(self.extra)
         return (self.chunk_id, self.text, metadata)
+
+
+@dataclass
+class ChunkResult:
+    """切片操作的结果（包含状态和错误信息）。"""
+
+    chunks: list[Chunk]
+    status: ChunkStatus
+    source_path: str
+    error_message: str | None = None
+    codex_exit_code: int | None = None
 
 
 @dataclass(frozen=True)

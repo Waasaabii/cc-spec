@@ -143,6 +143,112 @@ def scan_project(
     return included_files, report
 
 
+def scan_paths(
+    project_root: Path,
+    rel_paths: list[str | Path],
+    *,
+    settings: ScanSettings | None = None,
+) -> tuple[list[ScannedFile], ScanReport]:
+    """仅扫描指定路径列表（用于 v0.1.6 增量更新）。"""
+    if settings is None:
+        settings = ScanSettings()
+
+    ignore_file = project_root / settings.ignore_file_name
+    ignore_rules = IgnoreRules.from_file(ignore_file, extra_patterns=DEFAULT_KB_IGNORE_PATTERNS)
+
+    included_files: list[ScannedFile] = []
+    excluded_reasons: dict[str, int] = {}
+    sample_included: list[str] = []
+    sample_excluded: list[str] = []
+    excluded_paths: list[str] = []
+
+    def _exclude(rel_posix: PurePosixPath, reason: str) -> None:
+        excluded_reasons[reason] = excluded_reasons.get(reason, 0) + 1
+        if len(sample_excluded) < 20:
+            sample_excluded.append(f"{rel_posix.as_posix()} ({reason})")
+        if len(excluded_paths) < settings.max_report_paths:
+            excluded_paths.append(f"{rel_posix.as_posix()} ({reason})")
+
+    for raw in rel_paths:
+        try:
+            rel_path = Path(str(raw))
+        except Exception:
+            continue
+
+        if rel_path.is_absolute():
+            try:
+                rel_path = rel_path.resolve().relative_to(project_root)
+            except Exception:
+                continue
+
+        # 统一成 posix 语义的相对路径
+        rel_posix = PurePosixPath(rel_path.as_posix())
+
+        # 忽略规则
+        if ignore_rules.is_ignored(rel_posix, is_dir=False):
+            _exclude(rel_posix, "ignored")
+            continue
+
+        abs_path = project_root / rel_path
+        if not abs_path.exists() or not abs_path.is_file():
+            _exclude(rel_posix, "stat_failed")
+            continue
+
+        try:
+            size_bytes = abs_path.stat().st_size
+        except OSError:
+            _exclude(rel_posix, "stat_failed")
+            continue
+
+        if size_bytes > settings.max_file_bytes:
+            _exclude(rel_posix, "too_large")
+            included_files.append(
+                ScannedFile(
+                    abs_path=abs_path,
+                    rel_path=rel_path,
+                    size_bytes=size_bytes,
+                    sha256=None,
+                    is_text=False,
+                    is_reference=_is_reference(rel_path),
+                    reason="too_large",
+                )
+            )
+            continue
+
+        try:
+            data = abs_path.read_bytes()
+        except OSError:
+            _exclude(rel_posix, "read_failed")
+            continue
+
+        if _looks_binary(data):
+            _exclude(rel_posix, "binary")
+            continue
+
+        sha256 = hashlib.sha256(data).hexdigest()
+        scanned = ScannedFile(
+            abs_path=abs_path,
+            rel_path=rel_path,
+            size_bytes=size_bytes,
+            sha256=sha256,
+            is_text=True,
+            is_reference=_is_reference(rel_path),
+        )
+        included_files.append(scanned)
+        if len(sample_included) < 20:
+            sample_included.append(rel_posix.as_posix())
+
+    report = ScanReport(
+        included=len(included_files),
+        excluded=sum(excluded_reasons.values()),
+        excluded_reasons=dict(sorted(excluded_reasons.items(), key=lambda x: (-x[1], x[0]))),
+        sample_included=sample_included,
+        sample_excluded=sample_excluded,
+        excluded_paths=excluded_paths,
+    )
+    return included_files, report
+
+
 def build_file_hash_map(files: list[ScannedFile]) -> dict[str, str]:
     """将扫描结果转换为 {rel_path: sha256}（仅包含可入库文本）。"""
     result: dict[str, str] = {}

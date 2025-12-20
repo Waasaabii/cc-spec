@@ -85,11 +85,17 @@ def try_update_kb(
     *,
     embedding_model: str | None = None,
     reference_mode: str = "index",
+    attribution: dict[str, Any] | None = None,
 ) -> tuple[KBUpdateSummary, ScanReport] | None:
     """执行一次增量 KB 更新；失败时返回 None（降级）。"""
     model = embedding_model or default_embedding_model(project_root)
     try:
-        return update_kb(project_root, embedding_model=model, reference_mode=reference_mode)
+        return update_kb(
+            project_root,
+            embedding_model=model,
+            reference_mode=reference_mode,
+            attribution=attribution,
+        )
     except Exception:
         return None
 
@@ -104,4 +110,3 @@ def try_compact_kb(project_root: Path, *, embedding_model: str | None = None) ->
         return True
     except Exception:
         return False
-

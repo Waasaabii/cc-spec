@@ -20,6 +20,57 @@ from dataclasses import dataclass, field
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Any
 
+from cc_spec.version import EMBEDDING_SERVER_VERSION
+
+
+def _pick_fallback_model(text_embedding_cls: Any, preferred: str) -> str:
+    """从 fastembed 支持列表中选择一个尽量接近的 multilingual small 模型。"""
+    supported: list[str] = []
+    try:
+        raw = text_embedding_cls.list_supported_models()
+    except Exception:
+        raw = None
+
+    if isinstance(raw, list):
+        for item in raw:
+            if isinstance(item, str):
+                supported.append(item)
+            elif isinstance(item, dict) and "model" in item:
+                supported.append(str(item["model"]))
+            elif hasattr(item, "model"):
+                supported.append(str(getattr(item, "model")))
+            elif hasattr(item, "name"):
+                supported.append(str(getattr(item, "name")))
+
+    preferred_l = preferred.lower()
+    supported_l = [(name, name.lower()) for name in supported]
+
+    # 1) 尝试精确包含匹配（最保守）
+    for name, lower in supported_l:
+        if lower == preferred_l:
+            return name
+
+    # 2) 优先 multilingual e5 small
+    candidates = [name for name, lower in supported_l if "multilingual" in lower and "e5" in lower]
+    small = [name for name in candidates if "small" in name.lower()]
+    if small:
+        return small[0]
+    if candidates:
+        return candidates[0]
+
+    # 3) 次选：中文/多语的小模型
+    candidates = [name for name, lower in supported_l if ("zh" in lower or "multi" in lower) and "small" in lower]
+    if candidates:
+        return candidates[0]
+
+    # 4) 最后兜底：列表第一个
+    if supported:
+        return supported[0]
+
+    raise RuntimeError(
+        f"fastembed 无法加载模型 '{preferred}'，且无法获取支持模型列表；请更换 embedding 模型配置。"
+    )
+
 
 def _load_fastembed(model: str) -> tuple["_Embedder", str]:
     try:
@@ -58,7 +109,7 @@ class _Embedder:
 
 
 class _Handler(BaseHTTPRequestHandler):
-    server_version = "cc-spec-embedding/0.1.5"
+    server_version = EMBEDDING_SERVER_VERSION
 
     def _json_response(self, status: int, payload: dict[str, Any]) -> None:
         body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
@@ -146,52 +197,3 @@ def main(argv: list[str] | None = None) -> int:
 
 if __name__ == "__main__":  # pragma: no cover
     raise SystemExit(main(sys.argv[1:]))
-
-
-def _pick_fallback_model(text_embedding_cls: Any, preferred: str) -> str:
-    """从 fastembed 支持列表中选择一个尽量接近的 multilingual small 模型。"""
-    supported: list[str] = []
-    try:
-        raw = text_embedding_cls.list_supported_models()
-    except Exception:
-        raw = None
-
-    if isinstance(raw, list):
-        for item in raw:
-            if isinstance(item, str):
-                supported.append(item)
-            elif isinstance(item, dict) and "model" in item:
-                supported.append(str(item["model"]))
-            elif hasattr(item, "model"):
-                supported.append(str(getattr(item, "model")))
-            elif hasattr(item, "name"):
-                supported.append(str(getattr(item, "name")))
-
-    preferred_l = preferred.lower()
-    supported_l = [(name, name.lower()) for name in supported]
-
-    # 1) 尝试精确包含匹配（最保守）
-    for name, lower in supported_l:
-        if lower == preferred_l:
-            return name
-
-    # 2) 优先 multilingual e5 small
-    candidates = [name for name, lower in supported_l if "multilingual" in lower and "e5" in lower]
-    small = [name for name in candidates if "small" in name.lower()]
-    if small:
-        return small[0]
-    if candidates:
-        return candidates[0]
-
-    # 3) 次选：中文/多语的小模型
-    candidates = [name for name, lower in supported_l if ("zh" in lower or "multi" in lower) and "small" in lower]
-    if candidates:
-        return candidates[0]
-
-    # 4) 最后兜底：列表第一个
-    if supported:
-        return supported[0]
-
-    raise RuntimeError(
-        f"fastembed 无法加载模型 '{preferred}'，且无法获取支持模型列表；请更换 embedding 模型配置。"
-    )

@@ -30,6 +30,11 @@ class KBPaths:
     def manifest_file(self) -> Path:
         return self.cc_spec_root / "kb.manifest.json"
 
+    @property
+    def attribution_file(self) -> Path:
+        """v0.1.6：归属/追踪索引（列表字段的规范化存储）。"""
+        return self.cc_spec_root / "kb.attribution.json"
+
 
 class KBFileStore:
     """KB 的可提交文件：events（追加）/snapshot（compact 输出）/manifest（可追溯配置）。"""
@@ -86,4 +91,3 @@ class KBFileStore:
             json.dumps(manifest, ensure_ascii=False, indent=2),
             encoding="utf-8",
         )
-
