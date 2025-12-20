@@ -125,7 +125,7 @@ class TestFullWorkflow:
         tasks_path = change_dir / "tasks.yaml"
 
         # 写入只包含一个完成的任务的 tasks.yaml
-        tasks_content = """version: "1.0"
+        tasks_content = """version: "1.6"
 change: test-feature
 tasks:
   01-TEST:
@@ -395,7 +395,7 @@ class TestStateTransitions:
         tasks_path = change_dir / "tasks.yaml"
 
         # Write a complete tasks.yaml with checklist
-        content = """version: "1.0"
+        content = """version: "1.6"
 change: test-change
 tasks:
   01-TEST:

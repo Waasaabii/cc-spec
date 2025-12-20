@@ -311,7 +311,7 @@ class TestSubAgentExecutor:
     @pytest.fixture
     def sample_tasks_yaml(self, tmp_path: Path) -> Path:
         """Create a sample tasks.yaml file for testing."""
-        content = """version: "1.0"
+        content = """version: "1.6"
 change: test-change
 tasks:
   01-SETUP:
@@ -382,12 +382,12 @@ tasks:
         prompt = executor.build_task_prompt(task)
 
         # v1.4: 精简格式检查
-        assert "## 任务: 01-SETUP" in prompt
-        assert "**名称**:" in prompt
+        assert "## Task: 01-SETUP" in prompt
+        assert "**Title**:" in prompt
         assert "**Checklist**:" in prompt
         assert "创建配置文件" in prompt
         assert "添加环境变量" in prompt
-        assert "**执行**:" in prompt
+        assert "**Execution**:" in prompt
 
     def test_build_task_prompt_with_dependencies(self, sample_tasks_yaml: Path) -> None:
         """Test building prompt for task with dependencies (v1.4 compact format)."""
@@ -397,7 +397,7 @@ tasks:
         prompt = executor.build_task_prompt(task)
 
         # v1.4: 依赖检查
-        assert "**依赖**:" in prompt
+        assert "**Dependencies**:" in prompt
         assert "01-SETUP" in prompt
 
     @pytest.mark.asyncio

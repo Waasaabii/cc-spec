@@ -1,4 +1,4 @@
-"""Tests for command_generator module (v0.1.5)."""
+"""Tests for command_generator module (v0.1.6)."""
 
 import tempfile
 from pathlib import Path
@@ -112,4 +112,3 @@ class TestClaudeCommandGenerator:
             updated = path.read_text(encoding="utf-8")
             assert "## User Custom Section" in updated
             assert "My custom content" in updated
-

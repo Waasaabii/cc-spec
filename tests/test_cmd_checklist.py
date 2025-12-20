@@ -53,7 +53,7 @@ class TestChecklistCommand:
     def _create_tasks_yaml(self, content: str = None) -> Path:
         """Helper to create tasks.yaml with checklist items."""
         if content is None:
-            content = """version: "1.0"
+            content = """version: "1.6"
 change: add-feature
 tasks:
   01-SETUP:
@@ -172,7 +172,7 @@ tasks:
     def test_checklist_with_failed_items(self) -> None:
         """Test checklist command with failed items."""
         # Create tasks.yaml with some unchecked items
-        tasks_content = """version: "1.0"
+        tasks_content = """version: "1.6"
 change: add-feature
 tasks:
   01-SETUP:
@@ -217,7 +217,7 @@ tasks:
     def test_checklist_with_custom_threshold(self) -> None:
         """Test checklist command with custom threshold."""
         # Create tasks with 50% completion
-        tasks_content = """version: "1.0"
+        tasks_content = """version: "1.6"
 change: add-feature
 tasks:
   01-SETUP:
@@ -250,7 +250,7 @@ tasks:
     def test_checklist_with_no_checklist_items(self) -> None:
         """Test checklist command when no checklist items found."""
         # Create tasks.yaml without checklist items
-        tasks_content = """version: "1.0"
+        tasks_content = """version: "1.6"
 change: add-feature
 tasks:
   01-SETUP:
@@ -272,7 +272,7 @@ tasks:
 
     def test_checklist_with_skipped_items(self) -> None:
         """Test checklist command with skipped items."""
-        tasks_content = """version: "1.0"
+        tasks_content = """version: "1.6"
 change: add-feature
 tasks:
   01-SETUP:
@@ -381,7 +381,7 @@ class TestChecklistIntegration:
         tasks_path = change_dir / "tasks.yaml"
 
         # Create new tasks.yaml with completed checklist
-        tasks_content = """version: "1.0"
+        tasks_content = """version: "1.6"
 change: add-oauth
 tasks:
   99-TEST:
@@ -442,7 +442,7 @@ tasks:
         tasks_path = change_dir / "tasks.yaml"
 
         # Create new tasks.yaml with incomplete checklist
-        tasks_content = """version: "1.0"
+        tasks_content = """version: "1.6"
 change: add-feature
 tasks:
   99-TEST:

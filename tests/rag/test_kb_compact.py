@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 
 from cc_spec.rag.knowledge_base import KnowledgeBase
+from cc_spec.version import KB_SCHEMA_VERSION
 
 
 def test_kb_compact_writes_snapshot_and_clears_events(tmp_path, monkeypatch) -> None:
@@ -31,7 +32,7 @@ def test_kb_compact_writes_snapshot_and_clears_events(tmp_path, monkeypatch) -> 
     manifest = kb.store.load_manifest()
     assert manifest["embedding"]["provider"] == "fastembed"
     assert manifest["embedding"]["model"] == "test-model"
-    assert manifest["schema_version"] == "0.1.5-draft"
+    assert manifest["schema_version"] == KB_SCHEMA_VERSION
     assert isinstance(manifest.get("last_compact_at"), str)
     assert manifest.get("last_compact_at")
 
@@ -46,7 +47,6 @@ def test_kb_update_manifest_files_records_hashes(tmp_path, monkeypatch) -> None:
     assert manifest["files"] == {"a.txt": "111", "b.txt": "222"}
     assert manifest["embedding"]["provider"] == "fastembed"
     assert manifest["embedding"]["model"] == "test-model"
-    assert manifest["schema_version"] == "0.1.5-draft"
+    assert manifest["schema_version"] == KB_SCHEMA_VERSION
     assert isinstance(manifest.get("last_scan_at"), str)
     assert manifest.get("last_scan_at")
-

@@ -1,4 +1,4 @@
-"""Tests for the update command (v0.1.5)."""
+"""Tests for the update command (v0.1.6)."""
 
 from unittest.mock import AsyncMock, patch
 
@@ -85,4 +85,3 @@ class TestUpdateSubagentConfig:
         assert "subagent" in updated
         assert "common" in updated["subagent"]
         assert "profiles" in updated["subagent"]
-

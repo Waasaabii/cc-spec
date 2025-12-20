@@ -1,4 +1,4 @@
-"""Tests for the init command (v0.1.5)."""
+"""Tests for the init command (v0.1.6)."""
 
 from typer.testing import CliRunner
 

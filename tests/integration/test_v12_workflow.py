@@ -1,4 +1,4 @@
-"""Integration tests for v0.1.5 command surfaces."""
+"""Integration tests for v0.1.6 command surfaces."""
 
 import tempfile
 from pathlib import Path

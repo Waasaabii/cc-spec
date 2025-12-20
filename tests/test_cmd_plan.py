@@ -227,7 +227,7 @@ class TestPlanValidation:
         """Test dependency validation with valid dependencies."""
         from cc_spec.commands.plan import _validate_tasks_yaml_dependencies
 
-        tasks_content = """version: "1.0"
+        tasks_content = """version: "1.6"
 change: test
 tasks:
   01-SETUP:
@@ -258,7 +258,7 @@ tasks:
         """Test dependency validation with invalid dependencies."""
         from cc_spec.commands.plan import _validate_tasks_yaml_dependencies
 
-        tasks_content = """version: "1.0"
+        tasks_content = """version: "1.6"
 change: test
 tasks:
   01-SETUP:
@@ -282,7 +282,7 @@ tasks:
         """Test parsing tasks.yaml for display."""
         from cc_spec.commands.plan import _parse_tasks_yaml_summary
 
-        tasks_content = """version: "1.0"
+        tasks_content = """version: "1.6"
 change: test
 tasks:
   01-SETUP:

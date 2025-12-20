@@ -299,7 +299,7 @@ class TestParseTasksYaml:
     def test_parse_basic_yaml(self) -> None:
         """Test parsing basic tasks.yaml file."""
         content = """
-version: "1.0"
+version: "1.6"
 change: test-feature
 tasks:
   01-SETUP:
@@ -353,7 +353,7 @@ tasks:
     def test_parse_yaml_with_status(self) -> None:
         """Test parsing tasks.yaml with different task statuses."""
         content = """
-version: "1.0"
+version: "1.6"
 change: status-test
 tasks:
   01-A:
@@ -379,7 +379,7 @@ tasks:
     def test_parse_yaml_with_execution_log(self) -> None:
         """Test parsing tasks.yaml with execution log."""
         content = """
-version: "1.0"
+version: "1.6"
 change: log-test
 tasks:
   01-DONE:
@@ -408,12 +408,12 @@ tasks:
     def test_parse_yaml_missing_change(self) -> None:
         """Test parsing YAML without change field."""
         with pytest.raises(ValueError, match="'change'"):
-            parse_tasks_yaml("version: '1.0'\ntasks: {}")
+            parse_tasks_yaml("version: '1.6'\ntasks: {}")
 
     def test_parse_yaml_with_profile(self) -> None:
         """Test parsing tasks.yaml with profile field."""
         content = """
-version: "1.0"
+version: "1.6"
 change: profile-test
 tasks:
   01-TASK:
@@ -467,7 +467,7 @@ class TestGenerateTasksYaml:
         yaml_content = generate_tasks_yaml(doc)
 
         # Verify YAML contains expected content
-        assert "version: '1.0'" in yaml_content or 'version: "1.0"' in yaml_content
+        assert "version: '1.6'" in yaml_content or 'version: "1.6"' in yaml_content
         assert "change: test-feature" in yaml_content
         assert "01-SETUP:" in yaml_content
         assert "02-MODEL:" in yaml_content
@@ -512,7 +512,7 @@ class TestUpdateTaskStatusYaml:
 
     def test_update_task_status_basic(self) -> None:
         """Test updating task status in YAML."""
-        content = """version: "1.0"
+        content = """version: "1.6"
 change: test
 tasks:
   01-SETUP:
@@ -527,7 +527,7 @@ tasks:
 
     def test_update_task_status_with_log(self) -> None:
         """Test updating task status with execution log."""
-        content = """version: "1.0"
+        content = """version: "1.6"
 change: test
 tasks:
   01-SETUP:
@@ -545,7 +545,7 @@ tasks:
 
     def test_update_task_status_not_found(self) -> None:
         """Test updating status for non-existent task."""
-        content = """version: "1.0"
+        content = """version: "1.6"
 change: test
 tasks:
   01-SETUP:
@@ -562,7 +562,7 @@ class TestUpdateChecklistItemYaml:
 
     def test_update_checklist_item_check(self) -> None:
         """Test checking a checklist item."""
-        content = """version: "1.0"
+        content = """version: "1.6"
 change: test
 tasks:
   01-SETUP:
@@ -580,7 +580,7 @@ tasks:
 
     def test_update_checklist_item_task_not_found(self) -> None:
         """Test updating checklist for non-existent task."""
-        content = """version: "1.0"
+        content = """version: "1.6"
 change: test
 tasks:
   01-SETUP:
@@ -593,7 +593,7 @@ tasks:
 
     def test_update_checklist_item_index_out_of_range(self) -> None:
         """Test updating checklist with invalid index."""
-        content = """version: "1.0"
+        content = """version: "1.6"
 change: test
 tasks:
   01-SETUP:

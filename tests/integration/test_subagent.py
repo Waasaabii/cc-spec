@@ -32,7 +32,7 @@ class TestTaskParserIntegration:
 
     def test_parse_complex_tasks_yaml(self) -> None:
         """Test parsing a realistic tasks.yaml file."""
-        content = """version: "1.0"
+        content = """version: "1.6"
 change: add-oauth
 tasks:
   01-SETUP:
@@ -89,7 +89,7 @@ tasks:
 
     def test_validate_dependencies_valid(self) -> None:
         """Test dependency validation passes for valid dependencies."""
-        content = """version: "1.0"
+        content = """version: "1.6"
 change: test
 tasks:
   01-A:
@@ -112,7 +112,7 @@ tasks:
 
     def test_update_task_status_integration(self) -> None:
         """Test updating task status in tasks.yaml content."""
-        content = """version: "1.0"
+        content = """version: "1.6"
 change: test
 tasks:
   01-TEST:
@@ -153,7 +153,7 @@ class TestSubAgentExecutorIntegration:
     def _create_tasks_yaml(self, content: str = None) -> Path:
         """Create a tasks.yaml file for testing."""
         if content is None:
-            content = """version: "1.0"
+            content = """version: "1.6"
 change: test
 tasks:
   01-SETUP:
@@ -195,8 +195,8 @@ tasks:
         prompt = executor.build_task_prompt(task)
 
         # v1.4: 精简格式检查
-        assert "## 任务: 01-SETUP" in prompt
-        assert "**名称**:" in prompt
+        assert "## Task: 01-SETUP" in prompt
+        assert "**Title**:" in prompt
         assert "**Checklist**:" in prompt or "Checklist" in prompt
 
     def test_executor_with_custom_executor(self) -> None:
@@ -373,7 +373,7 @@ class TestConcurrentExecution:
 
     def test_concurrent_tasks_in_wave(self) -> None:
         """Test multiple tasks execute concurrently within a wave."""
-        content = """version: "1.0"
+        content = """version: "1.6"
 change: test
 tasks:
   01-A:
@@ -430,7 +430,7 @@ tasks:
 
     def test_max_concurrent_limit(self) -> None:
         """Test max concurrent limit is respected."""
-        content = """version: "1.0"
+        content = """version: "1.6"
 change: test
 tasks:
   01-A:
