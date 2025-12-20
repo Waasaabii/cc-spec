@@ -18,8 +18,9 @@ from cc_spec.commands import quick_delta as quick_delta_cmd
 from cc_spec.commands import specify as specify_cmd
 from cc_spec.commands import update as update_cmd
 from cc_spec.ui.banner import show_banner
+from cc_spec.version import PACKAGE_VERSION
 
-__version__ = "0.1.5"
+__version__ = PACKAGE_VERSION
 
 app = typer.Typer(
     name="cc-spec",

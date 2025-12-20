@@ -4,7 +4,7 @@
 
 [English](./docs/README.en.md) | 中文
 
-[![Version](https://img.shields.io/badge/version-0.1.5-blue.svg)](https://github.com/Waasaabii/cc-spec)
+[![Version](https://img.shields.io/badge/version-0.1.6-blue.svg)](https://github.com/Waasaabii/cc-spec)
 
 ---
 
@@ -23,8 +23,8 @@ openspec缺少打分环节。speckit又对模型的改造太大，完全忽略�
 ### 核心特性
 
 - **7 步标准工作流**: `init → specify → clarify → plan → apply → checklist → archive`
-- **Claude 编排 / Codex 执行（v0.1.5）**: Claude 只负责编排，Codex CLI 负责产出代码/文件
-- **RAG 知识库（v0.1.5）**: ChromaDB 向量库 + fastembed embeddings + workflow records
+- **Claude 编排 / Codex 执行（v0.1.6）**: Claude 只负责编排，Codex CLI 负责产出代码/文件
+- **智能上下文 + RAG 知识库（v0.1.6）**: ChromaDB 向量库 + fastembed embeddings + workflow records
 - **Delta 变更追踪**: ADDED / MODIFIED / REMOVED / RENAMED 格式
 - **打分验收机制**: checklist 打分 ≥80 通过，否则打回 apply
 - **超简单模式**: `quick-delta` 一步生成变更记录

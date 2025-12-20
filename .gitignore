@@ -60,7 +60,7 @@ reference/
 .env.*
 
 # cc-spec working directory (user projects)
-# .cc-spec/
+.cc-spec/
 
 # cc-spec runtime (should not be committed)
 .cc-spec/runtime/

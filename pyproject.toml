@@ -1,6 +1,6 @@
 [project]
 name = "cc-spec"
-version = "0.1.5"
+dynamic = ["version"]
 description = "Spec-driven AI-assisted development workflow CLI tool"
 readme = "README.md"
 license = { text = "MIT" }
@@ -50,6 +50,9 @@ Documentation = "https://github.com/Waasaabii/cc-spec#readme"
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
+
+[tool.hatch.version]
+path = "src/cc_spec/version.py"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/cc_spec"]

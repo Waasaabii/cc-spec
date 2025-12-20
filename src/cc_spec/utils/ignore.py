@@ -39,6 +39,7 @@ DEFAULT_KB_IGNORE_PATTERNS: list[str] = [
     ".cc-spec/kb.events.jsonl",
     ".cc-spec/kb.snapshot.jsonl",
     ".cc-spec/kb.manifest.json",
+    ".cc-spec/kb.attribution.json",
 ]
 
 

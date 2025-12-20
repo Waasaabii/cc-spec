@@ -11,7 +11,7 @@
 .venv/
 venv/
 ENV/
-env/
+!env
 node_modules/
 
 # Build outputs
@@ -30,4 +30,7 @@ __pycache__/
 .cc-spec/kb.events.jsonl
 .cc-spec/kb.snapshot.jsonl
 .cc-spec/kb.manifest.json
+.cc-spec/kb.attribution.json
 
+# Reference projects (exclude from KB to focus on core project code)
+reference/

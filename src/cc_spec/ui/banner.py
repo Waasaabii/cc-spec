@@ -8,6 +8,8 @@ from rich.console import Console
 from rich.panel import Panel
 from rich.text import Text
 
+from cc_spec.version import UI_VERSION_INFO
+
 # CC-SPEC ASCII Art Banner (列表形式保留精确格式)
 BANNER_LINES = [
     " ██████╗ ██████╗       ███████╗██████╗ ███████╗ ██████╗",
@@ -40,7 +42,7 @@ SAFE_MASCOT_LINES = [
 MASCOT = "\n".join(MASCOT_LINES)
 
 TAGLINE = "规范驱动的 AI 辅助开发工作流 CLI 喵～"
-VERSION_INFO = "v0.1.5 - Codex 执行 + RAG 向量库"
+VERSION_INFO = UI_VERSION_INFO
 
 
 def _console_encoding(console: Console) -> str | None:
