@@ -1,4 +1,4 @@
-version: '1.3'
+version: '1.4'
 project_name: cc-spec
 tech_requirements_sources:
 - .claude/CLAUDE.md
@@ -63,3 +63,37 @@ lock:
   timeout_minutes: 30
   use_git_commit: false
   cleanup_on_start: true
+
+kb:
+  # Smart Chunking 策略
+  chunking:
+    strategy: smart  # smart | codex-only | ast-only
+    ast:
+      enabled: true
+      max_chunk_chars: 2000
+      chunk_overlap_nodes: 1
+    line:
+      lines_per_chunk: 100
+      overlap_lines: 10
+    llm:
+      enabled: true
+      priority_files:
+        - readme.md
+        - main.py
+        - app.py
+        - index.ts
+        - __init__.py
+        - pyproject.toml
+        - package.json
+
+  # 更新策略
+  update:
+    post_task_sync:
+      enabled: true
+      strategy: smart  # smart | full | skip
+
+  # 上下文检索
+  retrieval:
+    max_chunks: 10
+    max_tokens: 8000
+    strategy: hybrid  # hybrid | semantic | keyword

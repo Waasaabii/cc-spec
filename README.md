@@ -4,7 +4,7 @@
 
 [English](./docs/README.en.md) | 中文
 
-[![Version](https://img.shields.io/badge/version-0.1.6-blue.svg)](https://github.com/Waasaabii/cc-spec)
+[![Version](https://img.shields.io/badge/version-0.1.8-blue.svg)](https://github.com/Waasaabii/cc-spec)
 
 ---
 
@@ -94,15 +94,24 @@ cc-spec init 会生成 Claude Code 的命令文件到 `.claude/commands/cc-spec/
 
 ---
 
-## 工作流设计来源
+## 设计来源与技术参考
 
 cc-spec 整合了以下项目的设计精华：
+
+### 工作流设计
 
 | 来源 | 贡献 |
 |------|------|
 | **[OpenSpec](https://github.com/hannesrudolph/openspec)** | Delta 变更追踪、归档规范、多 AI 工具配置、AGENTS.md 标准 |
 | **[Spec-Kit](https://github.com/github/spec-kit)** | CLI 技术栈 (uv + typer + rich)、模板系统、clarify 澄清流程、打分机制 |
 | **auto-dev** | SubAgent 并发执行、Wave 任务规划格式 |
+
+### RAG / 代码切片（v0.1.6）
+
+| 来源 | 贡献 |
+|------|------|
+| **[astchunk](https://github.com/yilinjz/astchunk)** | AST-based 代码切片核心算法，保留语法结构边界 |
+| **[tree-sitter-language-pack](https://github.com/AEFeinstein/tree-sitter-language-pack)** | 100+ 编程语言的 tree-sitter parser 支持 |
 
 ### 模板来源
 
@@ -130,33 +139,44 @@ cc-spec 使用的模板基于 OpenSpec 和 Spec-Kit 的模板设计：
 
 - **[OpenSpec](https://github.com/hannesrudolph/openspec)** - Hannes Rudolph 创建的规范驱动开发框架，提供了优秀的 Delta 变更追踪和多工具支持设计
 - **[Spec-Kit](https://github.com/github/spec-kit)** - GitHub 团队（Den Delimarsky、John Lam 等）创建的规范驱动开发工具包，提供了成熟的 CLI 框架和模板系统
+- **[astchunk](https://github.com/yilinjz/astchunk)** - Yilin Zhang 等人创建的 AST-based 代码切片库，基于 [cAST 论文](https://arxiv.org/abs/2506.15655)，为 cc-spec 的 Smart Chunking 提供了核心算法
+- **[tree-sitter-language-pack](https://pypi.org/project/tree-sitter-language-pack/)** - 提供 100+ 编程语言的 tree-sitter parser 支持
 
 ---
 
 ## 更新日志
 
-### v1.3.0 (2025-01)
+### v0.1.8 (2025-01)
+
+- **Smart Chunking**: AST-based 代码切片（0 token，100x 速度提升）
+- **KB 配置优化**: 三层策略调度（AST → Line → LLM）
+- **规范模板更新**: base-template.yaml v1.0.8
+
+### v0.1.6 (2025-01)
+
+- **智能上下文**: ContextProvider 自动注入相关代码
+- **增量更新**: KB 支持 git diff 检测变更文件
+
+### v0.1.4 (2025-01)
 
 - **四维度打分机制**: 功能完整性 (30%)、代码质量 (25%)、测试覆盖 (25%)、文档同步 (20%)
 - **任务锁机制**: 防止多 agent 同时执行同一任务导致冲突
 - **Agent ID 追踪**: 执行结果中包含 agent_id、wave、retry_count 等字段
 - **quick-delta 增强**: 自动解析 git diff，显示文件变更列表和统计信息
-- **checklist 报告增强**: 支持四维度打分报告和改进建议
 
-### v1.2.0 (2025-01)
+### v0.1.3 (2025-01)
 
 - **多工具配置**: `agents.enabled[]` 支持同时启用多个 AI 工具
 - **17+ AI 工具**: 新增 tabnine, aider, devin, replit, cody, supermaven, kilo, auggie
 - **模板下载**: `update --templates` 支持从远程更新模板
-- **命令执行**: `goto --execute` 直接执行选择的命令
 
-### v1.1.0 (2024-12)
+### v0.1.2 (2024-12)
 
 - **导航命令**: `list`, `goto`, `update` 三个新命令
 - **ID 系统**: C-001, S-001, A-001 格式的变更/规范/归档 ID
 - **Profile 系统**: SubAgent 配置支持 quick/heavy/explore 等多种配置
 
-### v1.0.0 (2024-11)
+### v0.1.0 (2024-11)
 
 - 初始版本
 - 7 步标准工作流

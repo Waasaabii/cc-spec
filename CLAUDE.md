@@ -71,7 +71,7 @@ uv run mypy src/cc_spec/                # 类型检查
 ## 关键约定
 
 - 所有命令使用 Typer + Rich 构建 CLI 界面
-- 配置文件格式为 YAML，支持版本迁移（v1.0 → v1.2）
+- 配置文件格式为 YAML
 - Delta 格式：`ADDED:`、`MODIFIED:`、`REMOVED:`、`RENAMED: old → new`
 - 任务 ID 遵循 `W<wave>-T<task>` 格式（如 W1-T1, W2-T3）
 - 检查清单通过阈值：80 分（可配置）
