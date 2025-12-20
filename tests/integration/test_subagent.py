@@ -2,8 +2,6 @@
 
 Tests the SubAgent executor, task parser, and result collector
 working together in realistic scenarios.
-
-v1.2: Updated to use tasks.yaml format only.
 """
 
 import asyncio
@@ -186,7 +184,7 @@ tasks:
         assert len(executor.doc.waves) == 2
 
     def test_executor_builds_prompt(self) -> None:
-        """Test executor builds task prompt correctly (v1.4 compact format)."""
+        """Test executor builds task prompt correctly (compact format)."""
         tasks_path = self._create_tasks_yaml()
 
         executor = SubAgentExecutor(tasks_path)
@@ -194,7 +192,7 @@ tasks:
 
         prompt = executor.build_task_prompt(task)
 
-        # v1.4: 精简格式检查
+        # 精简格式检查
         assert "## Task: 01-SETUP" in prompt
         assert "**Title**:" in prompt
         assert "**Checklist**:" in prompt or "Checklist" in prompt

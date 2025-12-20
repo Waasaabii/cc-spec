@@ -1,7 +1,4 @@
-"""v1.3 quick-delta 增强测试。
-
-测试 git diff 解析、文件变更统计和输出格式增强。
-"""
+"""quick-delta 增强测试。"""
 
 import pytest
 from unittest.mock import patch, MagicMock

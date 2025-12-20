@@ -139,7 +139,7 @@ We need this feature to improve user experience.
         assert "tasks" in content
 
     def test_plan_creates_design_md(self) -> None:
-        """Test plan command - design.md is no longer created in v1.2+."""
+        """Test plan command - design.md is no longer created."""
         self._create_proposal()
         self._create_status()
 
@@ -148,9 +148,9 @@ We need this feature to improve user experience.
 
         assert result.exit_code == 0, f"Command failed with: {result.stdout}"
 
-        # v1.2+: design.md is no longer generated, technical decisions are in proposal.md
+        # design.md is no longer generated, technical decisions are in proposal.md
         design_path = self.change_dir / "design.md"
-        assert not design_path.exists(), "design.md should not be created in v1.2+"
+        assert not design_path.exists(), "design.md should not be created"
 
     def test_plan_updates_state_to_plan(self) -> None:
         """Test plan command updates state to plan stage."""
@@ -351,12 +351,12 @@ class TestPlanIntegration:
 
         assert result.exit_code == 0
 
-        # Step 4: Verify plan outputs - v1.3+ only creates tasks.yaml
+        # Step 4: Verify plan outputs - only creates tasks.yaml
         tasks_path = change_dir / "tasks.yaml"
         design_path = change_dir / "design.md"
         assert tasks_path.exists()
-        # v1.2+: design.md is no longer generated
-        assert not design_path.exists(), "design.md should not be created in v1.2+"
+        # design.md is no longer generated
+        assert not design_path.exists(), "design.md should not be created"
 
         # Step 5: Verify state progression
         status_path = change_dir / "status.yaml"

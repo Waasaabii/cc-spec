@@ -375,13 +375,13 @@ tasks:
             SubAgentExecutor(tasks_md_path=tmp_path / "nonexistent.yaml")
 
     def test_build_task_prompt(self, sample_tasks_yaml: Path) -> None:
-        """Test building task prompt (v1.4 compact format)."""
+        """Test building task prompt (compact format)."""
         executor = SubAgentExecutor(tasks_md_path=sample_tasks_yaml)
         task = executor.doc.all_tasks["01-SETUP"]
 
         prompt = executor.build_task_prompt(task)
 
-        # v1.4: 精简格式检查
+        # 精简格式检查
         assert "## Task: 01-SETUP" in prompt
         assert "**Title**:" in prompt
         assert "**Checklist**:" in prompt
@@ -390,13 +390,13 @@ tasks:
         assert "**Execution**:" in prompt
 
     def test_build_task_prompt_with_dependencies(self, sample_tasks_yaml: Path) -> None:
-        """Test building prompt for task with dependencies (v1.4 compact format)."""
+        """Test building prompt for task with dependencies (compact format)."""
         executor = SubAgentExecutor(tasks_md_path=sample_tasks_yaml)
         task = executor.doc.all_tasks["02-MODEL"]
 
         prompt = executor.build_task_prompt(task)
 
-        # v1.4: 依赖检查
+        # 依赖检查
         assert "**Dependencies**:" in prompt
         assert "01-SETUP" in prompt
 

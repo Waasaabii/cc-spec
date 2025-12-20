@@ -20,7 +20,7 @@ from cc_spec.core.config import (
 
 
 class TestAgentsConfig:
-    """Tests for AgentsConfig dataclass (v1.2)."""
+    """Tests for AgentsConfig dataclass."""
 
     def test_default_values(self) -> None:
         """Test AgentsConfig default values."""
@@ -60,7 +60,7 @@ class TestAgentsConfig:
 
 
 class TestSubAgentProfile:
-    """Tests for SubAgentProfile dataclass (v1.1)."""
+    """Tests for SubAgentProfile dataclass."""
 
     def test_default_values(self) -> None:
         """Test SubAgentProfile default values."""
@@ -177,7 +177,7 @@ class TestConfig:
     def test_default_values(self) -> None:
         """Test Config default values."""
         config = Config()
-        assert config.version == "1.3"  # v1.3 default
+        assert config.version == "1.3"  # default
         assert config.agent == "claude"
         assert config.project_name == "my-project"
         assert ".claude/CLAUDE.md" in config.tech_requirements_sources
@@ -212,7 +212,7 @@ class TestConfig:
         data = config.to_dict()
 
         assert data["version"] == "1.2"
-        # v1.2 uses agents instead of agent
+        # uses agents instead of agent
         assert data["agents"]["default"] == "gemini"
         assert data["agents"]["enabled"] == ["gemini"]
         assert data["project_name"] == "test"
@@ -256,14 +256,14 @@ class TestConfig:
         }
         config = Config.from_dict(data)
 
-        assert config.version == "1.3"  # v1.3 default
+        assert config.version == "1.3"  # default
         assert config.agent == "claude"
         assert config.project_name == "my-project"
         assert config.subagent.max_concurrent == 10
         assert config.checklist.pass_threshold == 80
 
     def test_agents_config_v12(self) -> None:
-        """Test Config with AgentsConfig (v1.2)."""
+        """Test Config with AgentsConfig."""
         config = Config(
             version="1.2",
             agent="claude",
@@ -276,7 +276,7 @@ class TestConfig:
         assert config.agents.default == "cursor"
 
     def test_get_active_agent_with_agents_config(self) -> None:
-        """Test Config.get_active_agent() with AgentsConfig (v1.2)."""
+        """Test Config.get_active_agent() with AgentsConfig."""
         config = Config(
             agent="claude",
             agents=AgentsConfig(enabled=["cursor", "gemini"], default="gemini"),
@@ -295,7 +295,7 @@ class TestConfig:
         assert config.get_active_agent() == "cursor"
 
     def test_from_dict_with_agents(self) -> None:
-        """Test Config.from_dict() with agents field (v1.2)."""
+        """Test Config.from_dict() with agents field."""
         data = {
             "version": "1.2",
             "agent": "claude",
@@ -355,7 +355,7 @@ class TestLoadConfig:
 
             config = load_config(config_path)
 
-            assert config.version == "1.3"  # v1.3 default
+            assert config.version == "1.3"  # default
             assert config.agent == "claude"
             assert config.project_name == "my-project"
 
@@ -400,7 +400,7 @@ class TestSaveConfig:
             with open(config_path, "r", encoding="utf-8") as f:
                 data = yaml.safe_load(f)
 
-            # v1.2 uses agents field instead of agent
+            # uses agents field instead of agent
             assert data["agents"]["default"] == "gemini"
             assert data["project_name"] == "save-test"
             assert data["version"] == "1.2"

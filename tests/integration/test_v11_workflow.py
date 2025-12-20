@@ -1,4 +1,4 @@
-"""Integration tests for legacy v1.1-era features (kept minimal)."""
+"""Integration tests for legacy features (kept minimal)."""
 
 import tempfile
 from pathlib import Path
@@ -244,10 +244,10 @@ class TestCommandGeneratorWorkflow:
 
 
 class TestV11Features:
-    """Test v1.1 specific features."""
+    """Test legacy features."""
 
     def test_version_in_config(self) -> None:
-        """Test config version is 1.1 for new configs."""
+        """Test config version is set correctly."""
         config = Config(
             version="1.1",
             agent="claude",

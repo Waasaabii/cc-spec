@@ -1,4 +1,4 @@
-"""Tests for the goto command (v1.2)."""
+"""Tests for the goto command."""
 
 import tempfile
 from pathlib import Path
@@ -18,7 +18,7 @@ runner = CliRunner()
 
 
 class TestExecuteCommand:
-    """Tests for _execute_command helper function (v1.2)."""
+    """Tests for _execute_command helper function."""
 
     def test_execute_command_skips_non_commands(self, capsys) -> None:
         """Test that non-command strings are skipped."""
