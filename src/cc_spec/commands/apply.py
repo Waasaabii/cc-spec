@@ -3,10 +3,6 @@
 该命令使用 SubAgent 并行执行 tasks.yaml 中的任务。
 任务按 wave 分组：同一 wave 内任务并行执行，wave 之间按顺序串行执行。
 
-v1.1: 新增通过 ID 指定变更的支持。
-v1.2: 新增任务级配置的 Profile 支持。
-v1.3: 新增锁机制防止并发冲突，新增 agent_id 追踪。
-v1.4: 移除 tasks.md 支持，仅使用 tasks.yaml。
 """
 
 import asyncio
@@ -104,29 +100,29 @@ def apply_command(
     use_lock: bool = typer.Option(
         True,
         "--lock/--no-lock",
-        help="v1.3：使用锁机制防止并发执行冲突",
+        help=",
     ),
     force_unlock: Optional[str] = typer.Option(
         None,
         "--force-unlock",
         "-f",
-        help="v1.3：执行前强制解锁指定任务（例如 --force-unlock 01-SETUP）",
+        help=",
     ),
     skip_locked: bool = typer.Option(
         False,
         "--skip-locked",
-        help="v1.3：跳过被锁定的任务并继续执行其他任务",
+        help=",
     ),
     tech_check: bool = typer.Option(
         True,
         "--tech-check/--no-tech-check",
-        help="v1.4：执行完成后运行技术检查（lint/type-check/test）",
+        help=",
     ),
     check_types: Optional[str] = typer.Option(
         None,
         "--check-types",
         "-C",
-        help="v1.4：指定检查类型，逗号分隔（lint,type_check,test,build）",
+        help=",type_check,test,build）",
     ),
     kb_strict: bool = typer.Option(
         False,
@@ -136,9 +132,9 @@ def apply_command(
 ) -> None:
     """使用 SubAgent 并行执行 tasks.yaml 中的任务。
 
-    v1.1：现支持通过变更 ID（例如 C-001）。
-    v1.3：支持锁机制防止并发执行冲突。
-    v1.4：支持技术检查（从 CLAUDE.md 读取或自动检测技术栈）。
+    
+    
+    
 
     该命令会：
     1. 读取 tasks.yaml 并解析 Wave 分组
@@ -146,7 +142,7 @@ def apply_command(
     3. 等待当前 Wave 全部完成后再开始下一 Wave
     4. 更新 tasks.yaml 中的任务状态并记录执行日志
     5. 遇到失败时停止执行并输出报告
-    6. v1.4：任务完成后由主 Agent 执行技术检查
+    6. 
 
     示例：
         cc-spec apply                   # 应用当前激活的变更
@@ -318,7 +314,6 @@ def apply_command(
     status_path = change_dir / "status.yaml"
     _update_apply_stage_started(status_path, total_waves)
 
-    # v1.2：加载配置以支持 profile
     config = None
     config_path = cc_spec_root / "config.yaml"
     if config_path.exists():
@@ -330,7 +325,6 @@ def apply_command(
     # 执行任务
     console.print("[cyan]开始执行任务...[/cyan]\n")
 
-    # v1.3: 处理 force_unlock 选项
     if force_unlock and use_lock:
         lock_manager = LockManager(cc_spec_root)
         lock_info = lock_manager.get_lock_info(force_unlock)
@@ -366,22 +360,21 @@ def apply_command(
     )
 
     try:
-        # v1.4: 生成变更摘要以优化 SubAgent 上下文
         change_summary = generate_change_summary(change_dir, change)
         if change_summary.estimated_tokens > 0:
             console.print(
                 f"[dim]变更摘要：~{change_summary.estimated_tokens} tokens[/dim]"
             )
 
-        # 创建带配置的执行器（v1.2：profile 支持，v1.3：锁支持，v1.4：上下文优化）
+        # 创建带配置的执行器（
         executor = SubAgentExecutor(
             tasks_md_path=tasks_path,
             max_concurrent=max_concurrent,
             timeout_ms=timeout,
-            config=config,  # v1.2：传入配置以支持 profile
+            config=config,  # 
             project_root=project_root,  # v0.1.5：Codex/KB 工作目录
-            cc_spec_root=cc_spec_root if use_lock else None,  # v1.3：传入根目录以支持锁
-            change_summary=change_summary,  # v1.4：传入变更摘要以优化上下文
+            cc_spec_root=cc_spec_root if use_lock else None,  # 
+            change_summary=change_summary,  # 
         )
 
         # 创建结果收集器
@@ -395,8 +388,8 @@ def apply_command(
                 start_wave,
                 total_waves,
                 total_tasks,
-                use_lock,  # v1.3：传入锁参数
-                skip_locked,  # v1.3：传入跳过锁定任务参数
+                use_lock,  # 
+                skip_locked,  # 
                 resume,  # v0.1.5：允许重试 FAILED/IN_PROGRESS
                 project_root,
                 change,
@@ -420,7 +413,7 @@ def apply_command(
                 notes="apply.end",
             )
         else:
-            # v1.4: 技术检查（由主 Agent 执行，非 SubAgent）
+            # 
             tech_check_passed = True
             if tech_check:
                 # 解析检查类型
@@ -517,8 +510,8 @@ async def _execute_with_progress(
     start_wave: int,
     total_waves: int,
     total_tasks: int,
-    use_lock: bool = True,  # v1.3：锁参数
-    skip_locked: bool = False,  # v1.3：跳过被锁任务参数
+    use_lock: bool = True,  # 
+    skip_locked: bool = False,  # 
     resume: bool = False,  # v0.1.5：支持重试失败任务
     project_root: Path | None = None,
     change_name: str | None = None,
@@ -532,8 +525,8 @@ async def _execute_with_progress(
         start_wave：开始执行的 wave 编号
         total_waves：wave 总数
         total_tasks：任务总数
-        use_lock：v1.3 - 是否使用锁机制
-        skip_locked：v1.3 - 是否跳过被锁定的任务
+        use_lock：
+        skip_locked：
         project_root：v0.1.5 - 项目根目录（用于 KB 更新/记录）
         change_name：v0.1.5 - 变更名称（用于 KB records）
 
@@ -646,7 +639,7 @@ async def _execute_with_progress(
             status = "completed" if result.success else "failed"
             tracker.update_task(wave.wave_number, result.task_id, status)
 
-            # 显示任务结果 (v1.3：包含 agent_id)
+            # 显示任务结果 
             icon = "√" if result.success else "×"
             agent_info = f" [{result.agent_id}]" if result.agent_id else ""
             ctx_tokens = getattr(result, "context_tokens", 0) or 0
@@ -719,7 +712,7 @@ async def _execute_with_progress(
                         console.print(f"[red]KB 更新失败（严格模式）：[/red] {e}")
                         raise
 
-        # 执行 wave (v1.3：支持锁机制；v0.1.6：严格模式支持串行回调)
+        # 执行 wave 
         if kb_strict:
             results = await executor.execute_wave_strict(
                 wave.wave_number,
@@ -1067,7 +1060,7 @@ def _run_tech_checks_with_display(
 ) -> bool:
     """执行技术检查并显示结果。
 
-    v1.4：由主 Agent 执行技术检查（非 SubAgent）。
+    
 
     检查逻辑：
     1. 尝试从 CLAUDE.md 读取技术要求

@@ -6,7 +6,7 @@
 3. 基于模板生成 proposal.md
 4. 使用默认状态初始化 status.yaml
 
-v1.1：新增通过 ID 编辑既有变更的支持。
+
 """
 
 import re
@@ -76,7 +76,7 @@ def specify(
 ) -> None:
     """创建新的变更规格说明，或编辑已有变更。
 
-    v1.1：现支持使用 ID 编辑既有变更。
+    
 
     该命令会：
     1. 如果 name_or_id 是 ID（C-XXX），打开已有 proposal 进行编辑
@@ -254,7 +254,7 @@ def _create_new_change(
     status_path = change_dir / "status.yaml"
     update_state(status_path, state)
 
-    # 使用 ID 管理器注册变更（v1.1）
+    # 使用 ID 管理器注册变更
     change_id = id_manager.register_change(name, change_dir)
 
     # 显示成功提示

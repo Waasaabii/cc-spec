@@ -2,7 +2,6 @@
 
 该命令为不需要完整工作流的简单变更提供精简流程：生成 mini-proposal 并直接归档。
 
-v1.3: 新增 git diff 解析，自动提取文件变更列表和统计信息。
 """
 
 import re
@@ -24,12 +23,11 @@ console = Console()
 
 
 # ============================================================================
-# v1.3 新增: 文件变更数据结构和解析
 # ============================================================================
 
 @dataclass
 class FileChange:
-    """文件变更信息 (v1.3 新增)。
+    """文件变更信息 。
 
     属性：
         path: 文件路径
@@ -48,7 +46,7 @@ class FileChange:
 
 @dataclass
 class DiffStats:
-    """Git diff 统计信息 (v1.3 新增)。
+    """Git diff 统计信息 。
 
     属性：
         changes: 文件变更列表
@@ -66,7 +64,7 @@ class DiffStats:
 
 
 def _parse_git_diff() -> DiffStats | None:
-    """解析 git diff 获取文件变更列表 (v1.3 新增)。
+    """解析 git diff 获取文件变更列表 。
 
     优先解析 staged 变更，如果没有则解析最近一次 commit 的变更。
 
@@ -265,7 +263,6 @@ def quick_delta_command(
     else:
         console.print("[dim]Git 信息：[/dim] 不可用")
 
-    # v1.3: 解析 git diff 获取文件变更
     diff_stats = _parse_git_diff()
 
     if diff_stats and diff_stats.changes:
@@ -284,14 +281,14 @@ def quick_delta_command(
     change_dir = archive_dir / change_name
     ensure_dir(change_dir)
 
-    # 4. 创建 mini-proposal.md (v1.3：包含文件变更)
+    # 4. 创建 mini-proposal.md 
     mini_proposal_path = change_dir / "mini-proposal.md"
     mini_proposal_content = _generate_mini_proposal(
         message=message,
         change_name=change_name,
         timestamp=now,
         git_info=git_info,
-        diff_stats=diff_stats,  # v1.3 新增
+        diff_stats=diff_stats,  
     )
 
     mini_proposal_path.write_text(mini_proposal_content, encoding="utf-8")
@@ -311,7 +308,7 @@ def quick_delta_command(
         f"\n[dim]已归档到：[/dim] [cyan]{relative_path}[/cyan]"
     )
 
-    # 显示内容预览 (v1.3：包含文件变更)
+    # 显示内容预览 
     preview_panel = Panel(
         _format_preview(message, git_info, diff_stats),
         title="[bold]quick-delta 摘要[/bold]",
@@ -410,7 +407,7 @@ def _get_git_info() -> dict[str, str] | None:
 
 
 def _display_file_changes_table(diff_stats: DiffStats) -> None:
-    """显示文件变更表格 (v1.3 新增)。
+    """显示文件变更表格 。
 
     参数：
         diff_stats：Git diff 统计信息
@@ -476,7 +473,7 @@ def _generate_mini_proposal(
     change_name: str,
     timestamp: datetime,
     git_info: dict[str, str] | None,
-    diff_stats: DiffStats | None = None,  # v1.3 新增
+    diff_stats: DiffStats | None = None,  
 ) -> str:
     """生成 mini-proposal.md 内容。
 
@@ -485,7 +482,7 @@ def _generate_mini_proposal(
         change_name：变更名称
         timestamp：创建时间
         git_info：Git 信息（可选）
-        diff_stats：v1.3 - Git diff 统计信息（可选）
+        diff_stats：
 
     返回：
         mini-proposal 的 markdown 内容
@@ -513,7 +510,6 @@ def _generate_mini_proposal(
             "",
         ])
 
-    # v1.3: 添加文件变更信息
     if diff_stats and diff_stats.changes:
         lines.extend([
             "## 文件变更",
@@ -598,14 +594,14 @@ def _generate_mini_proposal(
 def _format_preview(
     message: str,
     git_info: dict[str, str] | None,
-    diff_stats: DiffStats | None = None,  # v1.3 新增
+    diff_stats: DiffStats | None = None,  
 ) -> str:
     """格式化预览内容。
 
     参数：
         message：变更描述
         git_info：Git 信息（可选）
-        diff_stats：v1.3 - Git diff 统计信息（可选）
+        diff_stats：
 
     返回：
         格式化的预览文本
@@ -619,7 +615,6 @@ def _format_preview(
             f"[bold]Git 提交：[/bold] {git_info['hash'][:7]} - {git_info['message']}"
         )
 
-    # v1.3: 添加文件变更摘要
     if diff_stats and diff_stats.changes:
         added_count = diff_stats.count_by_operation(DeltaOperation.ADDED)
         modified_count = diff_stats.count_by_operation(DeltaOperation.MODIFIED)

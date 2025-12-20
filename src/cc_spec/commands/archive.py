@@ -6,7 +6,7 @@
 3. 将 Delta specs 合并到主 specs/ 目录
 4. 将变更目录按时间戳移动到 archive
 
-v1.1：新增通过 ID 指定变更的支持。
+
 """
 
 import shutil
@@ -62,7 +62,7 @@ def archive_command(
 ) -> None:
     """归档一个已完成的变更。
 
-    v1.1：现支持通过变更 ID（例如 C-001）。
+    
 
     该命令会执行以下步骤：
     1. 校验 checklist 阶段已完成

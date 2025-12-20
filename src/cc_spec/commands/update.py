@@ -22,7 +22,6 @@ from cc_spec.utils.files import find_project_root, get_cc_spec_dir
 
 console = Console()
 
-# v1.2：模板配置（沿用；若下载失败则使用内置模板兜底）
 TEMPLATE_REPO = "anthropics/cc-spec"  # TODO：更新为实际仓库
 TEMPLATE_BRANCH = "main"
 TEMPLATE_PATH_PREFIX = "templates"
@@ -125,7 +124,7 @@ def _update_slash_commands(project_root: Path, config: Config, force: bool) -> N
 
 
 def _update_subagent_config(cc_spec_root: Path, force: bool) -> None:
-    """用 v1.1 结构更新 subagent 配置。"""
+    """更新 subagent 配置。"""
     _ = force
     console.print("[cyan]正在更新 subagent 配置...[/cyan]")
 

@@ -2,9 +2,6 @@
 
 基于 checklist 评分验证任务完成情况；若未达到要求阈值，则生成失败报告。
 
-v1.1: 新增通过 ID 指定变更的支持。
-v1.3: 新增四维度打分机制 (功能/质量/测试/文档)。
-v1.4: 移除 tasks.md 支持，仅使用 tasks.yaml。
 """
 
 from datetime import datetime
@@ -61,7 +58,7 @@ def checklist_command(
     use_v13: bool = typer.Option(
         True,
         "--v13/--no-v13",
-        help="使用 v1.3 四维度打分（默认开启）",
+        help="使用 四维度打分（默认开启）",
     ),
     write_report: bool = typer.Option(
         False,
@@ -71,12 +68,12 @@ def checklist_command(
 ) -> None:
     """使用 checklist 评分验证任务完成情况。
 
-    v1.1：现支持通过变更 ID（例如 C-001）。
-    v1.3：支持四维度打分机制 (功能完整性/代码质量/测试覆盖/文档同步)。
+    
+    
 
     该命令会：
     1. 读取 tasks.yaml 并提取所有 checklist 项
-    2. 根据完成项计算得分 (v1.3 支持四维度加权)
+    2. 根据完成项计算得分 
     3. 若得分 >= threshold：将阶段标记为完成，可继续 archive
     4. 若得分 < threshold：生成失败报告并回退到 apply 阶段
 
@@ -150,7 +147,7 @@ def checklist_command(
     console.print(f"[cyan]正在验收检查清单：[/cyan] [bold]{change}[/bold]")
     console.print(f"[dim]阈值：{threshold}%[/dim]")
     if use_v13:
-        console.print("[dim]模式：v1.3 四维度打分[/dim]\n")
+        console.print("[dim]模式：四维度打分[/dim]\n")
     else:
         console.print("[dim]模式：简单打分[/dim]\n")
 
@@ -189,7 +186,6 @@ def checklist_command(
     status_path = change_dir / "status.yaml"
 
     if use_v13:
-        # v1.3: 四维度打分
         checklist_result = calculate_checklist_result(
             task_checklists,
             scoring_config=scoring_config,
@@ -237,7 +233,6 @@ def checklist_command(
                 status_path, change_dir, change, checklist_result, threshold, write_report=write_report
             )
     else:
-        # v1.2 兼容: 简单打分
         all_results = []
         task_scores = []
 
@@ -525,11 +520,10 @@ def _handle_fail(
 
 
 # ============================================================================
-# v1.3 新增: 四维度打分相关函数
 # ============================================================================
 
 def _display_v13_results(result: ChecklistResult, threshold: int) -> None:
-    """展示 v1.3 四维度打分结果。
+    """展示 四维度打分结果。
 
     参数：
         result: ChecklistResult 打分结果
@@ -623,7 +617,7 @@ def _handle_pass_v13(
     *,
     write_report: bool = False,
 ) -> None:
-    """处理 v1.3 checklist 验证通过的情况。
+    """处理 checklist 验证通过的情况。
 
     参数：
         status_path: status.yaml 路径
@@ -682,7 +676,7 @@ def _handle_fail_v13(
     *,
     write_report: bool = False,
 ) -> None:
-    """处理 v1.3 checklist 验证未通过的情况。
+    """处理 checklist 验证未通过的情况。
 
     参数：
         status_path: status.yaml 路径

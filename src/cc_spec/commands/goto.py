@@ -1,8 +1,8 @@
-"""cc-spec v1.2 的 goto 命令。
+"""cc-spec  goto 命令。
 
 该模块提供 goto 命令，用于在变更与任务之间导航。
 
-v1.2：新增 --execute 选项，用于直接执行所选命令。
+
 """
 
 import subprocess
@@ -39,12 +39,12 @@ def goto_command(
         False,
         "--execute",
         "-x",
-        help="v1.2：直接执行所选命令",
+        help=",
     ),
 ) -> None:
     """导航到指定的变更或任务。
 
-    v1.2：新增 --execute 选项。
+    
 
     \b
     示例：
@@ -109,7 +109,7 @@ def _goto_change(
         cc_spec_root：.cc-spec 目录路径
         change_id：要跳转的变更 ID
         force：是否强制跳转
-        execute：是否直接执行所选命令（v1.2）
+        execute：是否直接执行所选命令
     """
     # 解析变更
     entry = id_manager.get_change_entry(change_id)
@@ -207,7 +207,7 @@ def _show_stage_options(
         change_id：变更 ID
         state：变更状态
         force：是否强制跳转
-        execute：是否直接执行所选命令（v1.2）
+        execute：是否直接执行所选命令
     """
     stage = state.current_stage
     options: list[tuple[str, str, str]] = []  # (key, label, command)：(编号, 展示文案, 命令)
@@ -290,7 +290,7 @@ def _show_stage_options(
     for key, label, cmd in options:
         if key == choice:
             console.print(f"\n[cyan]执行：[/cyan] {cmd}")
-            # v1.2：如果设置了 --execute 则直接执行命令
+            # 
             if execute:
                 _execute_command(cmd)
             break
@@ -312,7 +312,7 @@ def _goto_task(
         change_id：变更 ID
         task_id：变更内的任务 ID
         force：是否强制跳转
-        execute：是否直接执行所选命令（v1.2）
+        execute：是否直接执行所选命令
     """
     # 解析变更
     entry = id_manager.get_change_entry(change_id)
@@ -424,7 +424,7 @@ def _show_task_options(
         task_id：任务 ID
         task_info：来自状态文件的任务信息
         force：是否强制跳转
-        execute：是否直接执行所选命令（v1.2）
+        execute：是否直接执行所选命令
     """
     status = task_info.status.value if task_info else "unknown"
     full_id = f"{change_id}:{task_id}"
@@ -474,7 +474,7 @@ def _show_task_options(
     for key, label, cmd in options:
         if key == choice:
             console.print(f"\n[cyan]执行：[/cyan] {cmd}")
-            # v1.2：如果设置了 --execute 则直接执行命令
+            # 
             if execute:
                 _execute_command(cmd)
             break
@@ -483,7 +483,7 @@ def _show_task_options(
 def _execute_command(cmd: str) -> None:
     """执行一个 cc-spec 命令。
 
-    v1.2：用于 --execute 选项的辅助函数。
+    
 
     参数：
         cmd：要执行的命令字符串（例如 "cc-spec apply C-001"）

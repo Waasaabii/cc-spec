@@ -2,9 +2,9 @@
 
 根据变更提案生成执行计划（tasks.yaml）。
 
-v1.1：新增通过 ID 指定变更的支持。
-v1.2：移除 design.md 生成，技术决策已整合到 proposal.md。
-v1.3：只生成 tasks.yaml（移除 tasks.md 支持）。
+
+
+
 """
 
 from datetime import datetime
@@ -40,9 +40,9 @@ def plan_command(
 ) -> None:
     """生成执行计划（tasks.yaml）。
 
-    v1.1：现支持通过变更 ID（例如 C-001）。
-    v1.2：移除 design.md 生成，技术决策已整合到 proposal.md。
-    v1.3：只生成 tasks.yaml（移除 tasks.md 支持）。
+    
+    
+    
 
     该命令读取 proposal.md 并生成 tasks.yaml - 紧凑的结构化任务文件（供 SubAgent 使用）。
 
