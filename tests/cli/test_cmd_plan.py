@@ -1,0 +1,337 @@
+"""Unit tests for plan command."""
+
+import os
+from datetime import datetime
+from pathlib import Path
+from unittest.mock import patch
+
+import pytest
+from typer.testing import CliRunner
+
+from helpers import assert_contains_any, read_yaml
+from cc_spec import app
+from cc_spec.core.state import Stage, StageInfo, TaskStatus, load_state, update_state
+
+runner = CliRunner()
+
+
+class TestPlanCommand:
+    """Tests for plan command."""
+
+    @pytest.fixture(autouse=True)
+    def _setup(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        self.project_root = tmp_path
+        self.cc_spec_dir = self.project_root / ".cc-spec"
+        self.changes_dir = self.cc_spec_dir / "changes"
+        self.change_name = "add-feature"
+        self.change_dir = self.changes_dir / self.change_name
+        self.cc_spec_dir.mkdir(parents=True, exist_ok=True)
+        self.change_dir.mkdir(parents=True, exist_ok=True)
+        monkeypatch.chdir(self.project_root)
+
+    def _create_proposal(self, content: str = None) -> Path:
+        """Helper to create proposal.md."""
+        if content is None:
+            content = """# Proposal: Add Feature
+
+## Why
+
+We need this feature to improve user experience.
+
+## What Changes
+
+- Add new API endpoint
+- Update database schema
+- Implement frontend components
+
+## Impact
+
+- Low risk
+- No breaking changes
+"""
+        proposal_path = self.change_dir / "proposal.md"
+        proposal_path.write_text(content, encoding="utf-8")
+        return proposal_path
+
+    def _create_status(self) -> Path:
+        """Helper to create status.yaml."""
+        from cc_spec.core.state import ChangeState, Stage, StageInfo, TaskStatus
+
+        state = ChangeState(
+            change_name=self.change_name,
+            created_at=datetime.now().isoformat(),
+            current_stage=Stage.SPECIFY,
+            stages={
+                Stage.SPECIFY: StageInfo(
+                    status=TaskStatus.COMPLETED,
+                    started_at=datetime.now().isoformat(),
+                    completed_at=datetime.now().isoformat(),
+                ),
+                Stage.CLARIFY: StageInfo(status=TaskStatus.PENDING),
+                Stage.PLAN: StageInfo(status=TaskStatus.PENDING),
+                Stage.APPLY: StageInfo(status=TaskStatus.PENDING),
+                Stage.CHECKLIST: StageInfo(status=TaskStatus.PENDING),
+                Stage.ARCHIVE: StageInfo(status=TaskStatus.PENDING),
+            },
+        )
+
+        status_path = self.change_dir / "status.yaml"
+        update_state(status_path, state)
+        return status_path
+
+    def test_plan_without_project_root(self) -> None:
+        """Test plan command fails when not in a project."""
+        # Mock find_project_root to return None (simulates not being in a project)
+        with patch("cc_spec.commands.plan.find_project_root", return_value=None):
+            result = runner.invoke(app, ["plan", "test-change"])
+            assert result.exit_code == 1
+            assert "cc-spec" in result.stdout  # Error message contains project name
+
+    def test_plan_without_change(self) -> None:
+        """Test plan command fails when change doesn't exist."""
+        os.chdir(str(self.project_root))
+        result = runner.invoke(app, ["plan", "nonexistent-change"])
+        assert result.exit_code == 1
+        assert_contains_any(result.stdout, ["未找到", "not found"])
+
+    def test_plan_without_proposal(self) -> None:
+        """Test plan command fails when proposal.md doesn't exist."""
+        self._create_status()
+
+        os.chdir(str(self.project_root))
+        result = runner.invoke(app, ["plan", self.change_name])
+        assert result.exit_code == 1
+        assert "proposal.md" in result.stdout  # Contains proposal.md in error message
+
+    def test_plan_creates_tasks_yaml(self) -> None:
+        """Test plan command creates tasks.yaml."""
+        self._create_proposal()
+        self._create_status()
+
+        os.chdir(str(self.project_root))
+        result = runner.invoke(app, ["plan", self.change_name])
+
+        if result.exit_code != 0:
+            print("STDOUT:", result.stdout)
+            print("STDERR:", result.stderr)
+
+        assert result.exit_code == 0, f"Command failed with: {result.stdout}"
+
+        tasks_path = self.change_dir / "tasks.yaml"
+        assert tasks_path.exists()
+
+        content = read_yaml(tasks_path)
+        assert content["change"] == self.change_name
+        assert "tasks" in content
+
+    def test_plan_creates_design_md(self) -> None:
+        """Test plan command - design.md is no longer created."""
+        self._create_proposal()
+        self._create_status()
+
+        os.chdir(str(self.project_root))
+        result = runner.invoke(app, ["plan", self.change_name])
+
+        assert result.exit_code == 0, f"Command failed with: {result.stdout}"
+
+        # design.md is no longer generated, technical decisions are in proposal.md
+        design_path = self.change_dir / "design.md"
+        assert not design_path.exists(), "design.md should not be created"
+
+    def test_plan_updates_state_to_plan(self) -> None:
+        """Test plan command updates state to plan stage."""
+        self._create_proposal()
+        status_path = self._create_status()
+
+        os.chdir(str(self.project_root))
+        result = runner.invoke(app, ["plan", self.change_name])
+
+        assert result.exit_code == 0, f"Command failed with: {result.stdout}"
+
+        # Load and verify state
+        state = load_state(status_path)
+        assert state.current_stage == Stage.PLAN
+        assert state.stages[Stage.PLAN].status == TaskStatus.COMPLETED
+        assert state.stages[Stage.PLAN].started_at is not None
+        assert state.stages[Stage.PLAN].completed_at is not None
+
+    def test_plan_shows_task_overview(self) -> None:
+        """Test plan command displays task overview."""
+        self._create_proposal()
+        self._create_status()
+
+        os.chdir(str(self.project_root))
+        result = runner.invoke(app, ["plan", self.change_name])
+
+        assert result.exit_code == 0
+        assert_contains_any(result.stdout, ["Task Overview", "任务"])
+
+    def test_plan_shows_next_steps(self) -> None:
+        """Test plan command displays next steps."""
+        self._create_proposal()
+        self._create_status()
+
+        os.chdir(str(self.project_root))
+        result = runner.invoke(app, ["plan", self.change_name])
+
+        assert result.exit_code == 0
+        # Support Chinese and English output: "计划生成成功" or "Plan generated"
+        assert_contains_any(result.stdout, ["计划生成", "Plan generated"])
+        assert_contains_any(result.stdout, ["下一步", "Next steps"])
+        assert "cc-spec apply" in result.stdout
+
+    def test_plan_without_explicit_change_name(self) -> None:
+        """Test plan command uses current active change when name not provided."""
+        self._create_proposal()
+        self._create_status()
+
+        # Run without specifying change name
+        os.chdir(str(self.project_root))
+        result = runner.invoke(app, ["plan"])
+
+        assert result.exit_code == 0, f"Command failed with: {result.stdout}"
+
+        tasks_path = self.change_dir / "tasks.yaml"
+        assert tasks_path.exists()
+
+
+class TestPlanValidation:
+    """Tests for plan validation functions."""
+
+    @pytest.fixture(autouse=True)
+    def _setup(self, tmp_path: Path) -> None:
+        self.project_root = tmp_path
+
+    def test_validate_tasks_yaml_with_valid_dependencies(self) -> None:
+        """Test dependency validation with valid dependencies."""
+        from cc_spec.commands.plan import _validate_tasks_yaml_dependencies
+
+        tasks_content = """version: "1.6"
+change: test
+tasks:
+  01-SETUP:
+    wave: 0
+    name: Setup
+    deps: []
+  02-MODEL:
+    wave: 1
+    name: Model
+    deps: [01-SETUP]
+  03-API:
+    wave: 1
+    name: API
+    deps: [01-SETUP]
+  04-FE:
+    wave: 2
+    name: Frontend
+    deps: [02-MODEL, 03-API]
+"""
+        tasks_path = self.project_root / "tasks.yaml"
+        tasks_path.write_text(tasks_content, encoding="utf-8")
+
+        result = _validate_tasks_yaml_dependencies(tasks_path)
+        assert result["valid"] is True
+        assert len(result["tasks"]) == 4
+
+    def test_validate_tasks_yaml_with_invalid_dependencies(self) -> None:
+        """Test dependency validation with invalid dependencies."""
+        from cc_spec.commands.plan import _validate_tasks_yaml_dependencies
+
+        tasks_content = """version: "1.6"
+change: test
+tasks:
+  01-SETUP:
+    wave: 0
+    name: Setup
+    deps: []
+  02-MODEL:
+    wave: 1
+    name: Model
+    deps: [99-INVALID]
+"""
+        tasks_path = self.project_root / "tasks.yaml"
+        tasks_path.write_text(tasks_content, encoding="utf-8")
+
+        result = _validate_tasks_yaml_dependencies(tasks_path)
+        assert result["valid"] is False
+        # Support Chinese: "无效依赖" or "依赖无效"
+        assert "无效" in result["message"] and "依赖" in result["message"] or "Invalid dependencies" in result["message"]
+
+    def test_parse_tasks_yaml_summary(self) -> None:
+        """Test parsing tasks.yaml for display."""
+        from cc_spec.commands.plan import _parse_tasks_yaml_summary
+
+        tasks_content = """version: "1.6"
+change: test
+tasks:
+  01-SETUP:
+    wave: 0
+    name: Setup
+    status: idle
+  02-MODEL:
+    wave: 1
+    name: Model
+    status: in_progress
+  03-API:
+    wave: 2
+    name: API
+    status: completed
+"""
+        tasks_path = self.project_root / "tasks.yaml"
+        tasks_path.write_text(tasks_content, encoding="utf-8")
+
+        tasks = _parse_tasks_yaml_summary(tasks_path)
+        assert len(tasks) == 3
+
+        # Find tasks by id
+        task_map = {t["id"]: t for t in tasks}
+        assert task_map["01-SETUP"]["status"] == "idle"
+        assert task_map["02-MODEL"]["status"] == "in_progress"
+        assert task_map["03-API"]["status"] == "completed"
+
+
+class TestPlanIntegration:
+    """Integration tests for plan command workflow."""
+
+    @pytest.fixture(autouse=True)
+    def _setup(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        self.project_root = tmp_path
+        self.cc_spec_dir = self.project_root / ".cc-spec"
+        self.cc_spec_dir.mkdir(parents=True, exist_ok=True)
+        monkeypatch.chdir(self.project_root)
+
+    def test_full_specify_to_plan_workflow(self) -> None:
+        """Test complete workflow from specify to plan."""
+        # Step 1: Create change with specify
+        os.chdir(str(self.project_root))
+        result = runner.invoke(app, ["specify", "add-oauth"])
+        assert result.exit_code == 0
+
+        # Step 2: Verify proposal exists
+        changes_dir = self.cc_spec_dir / "changes"
+        change_dir = changes_dir / "add-oauth"
+        proposal_path = change_dir / "proposal.md"
+        assert proposal_path.exists()
+
+        # Step 3: Run plan
+        result = runner.invoke(app, ["plan", "add-oauth"])
+
+        if result.exit_code != 0:
+            print("STDOUT:", result.stdout)
+            print("STDERR:", result.stderr)
+
+        assert result.exit_code == 0
+
+        # Step 4: Verify plan outputs - only creates tasks.yaml
+        tasks_path = change_dir / "tasks.yaml"
+        design_path = change_dir / "design.md"
+        assert tasks_path.exists()
+        # design.md is no longer generated
+        assert not design_path.exists(), "design.md should not be created"
+
+        # Step 5: Verify state progression
+        status_path = change_dir / "status.yaml"
+        state = load_state(status_path)
+        assert state.current_stage == Stage.PLAN
+        # specify stage completed after plan runs
+        assert state.stages[Stage.PLAN].status == TaskStatus.COMPLETED
