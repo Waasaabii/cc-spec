@@ -2,15 +2,15 @@
 
 import pytest
 
-from cc_spec.rag.chunker import _simple_text_chunks
+from cc_spec.rag.ast_utils import simple_text_chunks
 
 
 class TestSimpleTextChunks:
-    """测试 _simple_text_chunks 函数。"""
+    """测试 simple_text_chunks 函数。"""
 
     def test_empty_content_returns_empty_list(self) -> None:
         """空内容应返回空列表。"""
-        result = _simple_text_chunks(
+        result = simple_text_chunks(
             "",
             source_path="test.py",
             source_sha256="abc123",
@@ -20,7 +20,7 @@ class TestSimpleTextChunks:
     def test_small_file_returns_single_chunk(self) -> None:
         """小文件（行数 <= lines_per_chunk）应返回单个 chunk。"""
         content = "line1\nline2\nline3\n"
-        result = _simple_text_chunks(
+        result = simple_text_chunks(
             content,
             source_path="test.py",
             source_sha256="abc123",
@@ -39,7 +39,7 @@ class TestSimpleTextChunks:
         lines = [f"line {i}\n" for i in range(1, 251)]
         content = "".join(lines)
 
-        result = _simple_text_chunks(
+        result = simple_text_chunks(
             content,
             source_path="test.py",
             source_sha256="abc123",
@@ -74,7 +74,7 @@ class TestSimpleTextChunks:
         lines = [f"line {i}\n" for i in range(1, 201)]
         content = "".join(lines)
 
-        result = _simple_text_chunks(
+        result = simple_text_chunks(
             content,
             source_path="test.py",
             source_sha256="abc123",
@@ -88,7 +88,7 @@ class TestSimpleTextChunks:
     def test_chunks_contain_source_sha256(self) -> None:
         """每个 chunk 应包含 source_sha256。"""
         content = "line1\nline2\n"
-        result = _simple_text_chunks(
+        result = simple_text_chunks(
             content,
             source_path="test.py",
             source_sha256="test_sha_256",
@@ -102,7 +102,7 @@ class TestSimpleTextChunks:
         long_line = "x" * 5000 + "\n"
         content = long_line
 
-        result = _simple_text_chunks(
+        result = simple_text_chunks(
             content,
             source_path="test.py",
             source_sha256="abc123",
@@ -117,7 +117,7 @@ class TestSimpleTextChunks:
         lines = [f"line {i}\n" for i in range(1, 201)]
         content = "".join(lines)
 
-        result = _simple_text_chunks(
+        result = simple_text_chunks(
             content,
             source_path="test.py",
             source_sha256="abc123",
@@ -137,7 +137,7 @@ class TestSimpleTextChunks:
         lines = [f"line {i}\n" for i in range(1, 101)]
         content = "".join(lines)
 
-        result = _simple_text_chunks(
+        result = simple_text_chunks(
             content,
             source_path="test.py",
             source_sha256="abc123",

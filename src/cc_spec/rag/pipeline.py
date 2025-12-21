@@ -7,12 +7,15 @@ from pathlib import Path
 from typing import Any, Callable
 
 from cc_spec.codex.client import CodexClient
+from cc_spec.core.config import KBChunkingConfig
+from cc_spec.version import CONFIG_VERSION, TEMPLATE_VERSION, KB_SCHEMA_VERSION
 
-from .chunker import ChunkingOptions, CodexChunker
+from .chunker import ChunkingOptions, CodexChunker, build_smart_chunker
 from .incremental import detect_git_changes, diff_git_commits, get_git_head
 from .knowledge_base import KnowledgeBase
 from .models import Chunk, ChunkResult, ChunkStatus, ScannedFile
 from .scanner import ScanReport, ScanSettings, build_file_hash_map, diff_file_hash_map, scan_paths, scan_project
+from .smart_chunker import SmartChunkingOptions
 
 
 # 进度回调类型：(当前索引, 总数, 文件路径, ChunkResult)
@@ -20,6 +23,25 @@ ProgressCallback = Callable[[int, int, str, ChunkResult], None]
 
 DEFAULT_CODEX_BATCH_MAX_FILES = 8
 DEFAULT_CODEX_BATCH_MAX_CHARS = 120_000
+
+
+def _resolve_chunking_config(chunking_config: KBChunkingConfig | None) -> KBChunkingConfig:
+    return chunking_config if chunking_config is not None else KBChunkingConfig()
+
+
+def _build_chunking_manifest(cfg: KBChunkingConfig) -> dict[str, Any]:
+    return {
+        "strategy": cfg.strategy,
+        "config_version": CONFIG_VERSION,
+        "template_version": TEMPLATE_VERSION,
+        "kb_schema_version": KB_SCHEMA_VERSION,
+    }
+
+
+def _count_strategy(result: ChunkResult, *, default_strategy: str | None = None) -> str | None:
+    if result.strategy:
+        return result.strategy
+    return default_strategy
 
 
 def _estimate_prompt_chars(scanned: ScannedFile, *, options: ChunkingOptions) -> int:
@@ -58,6 +80,10 @@ class KBUpdateSummary:
     chunking_success: int = 0
     chunking_fallback: int = 0
     fallback_files: tuple[str, ...] = ()
+    # v0.1.8: 策略统计（AST/Line/LLM）
+    chunking_ast: int = 0
+    chunking_line: int = 0
+    chunking_llm: int = 0
 
 
 def scan_for_kb(project_root: Path, *, settings: ScanSettings | None = None) -> tuple[list, ScanReport]:
@@ -71,6 +97,7 @@ def init_kb(
     reference_mode: str = "index",
     codex_batch_max_files: int = DEFAULT_CODEX_BATCH_MAX_FILES,
     codex_batch_max_chars: int = DEFAULT_CODEX_BATCH_MAX_CHARS,
+    chunking_config: KBChunkingConfig | None = None,
     scan_settings: ScanSettings | None = None,
     attribution: dict[str, Any] | None = None,
     skip_list_fields: bool = False,
@@ -80,19 +107,48 @@ def init_kb(
     file_hashes = build_file_hash_map(scanned)
 
     kb = KnowledgeBase(project_root, embedding_model=embedding_model)
-    chunker = CodexChunker(CodexClient(), project_root)
+    codex_chunker = CodexChunker(CodexClient(), project_root)
 
     chunks_written = 0
 
     # reference 目录结构索引（轻量）
-    ref_chunk = chunker.build_reference_index_chunk(scanned)
+    ref_chunk = codex_chunker.build_reference_index_chunk(scanned)
     kb.upsert_chunks([ref_chunk], attribution=attribution, skip_list_fields=skip_list_fields)
     chunks_written += 1
 
-    options = ChunkingOptions(reference_mode=reference_mode)
+    cfg = _resolve_chunking_config(chunking_config)
+    options = ChunkingOptions(
+        reference_mode=reference_mode,
+        max_content_chars=cfg.llm.max_content_chars,
+        fallback_lines_per_chunk=cfg.line.lines_per_chunk,
+        fallback_overlap_lines=cfg.line.overlap_lines,
+    )
+    strategy = (cfg.strategy or "ast-only").strip().lower()
+    use_smart = strategy in {"smart", "ast-only"}
+    smart_chunker = None
+    if use_smart:
+        smart_chunker = build_smart_chunker(
+            codex_chunker,
+            project_root,
+            options=SmartChunkingOptions(
+                strategy=strategy,
+                reference_mode=reference_mode,
+                ast_max_chunk_chars=cfg.ast.max_chunk_chars,
+                ast_chunk_overlap_nodes=cfg.ast.chunk_overlap_nodes,
+                ast_supported_extensions=cfg.ast.supported_extensions if cfg.ast.enabled else [],
+                line_lines_per_chunk=cfg.line.lines_per_chunk,
+                line_overlap_lines=cfg.line.overlap_lines,
+                llm_enabled=cfg.llm.enabled,
+                llm_priority_files=cfg.llm.priority_files,
+                llm_max_content_chars=cfg.llm.max_content_chars,
+            ),
+        )
     chunking_success = 0
     chunking_fallback = 0
     fallback_files: list[str] = []
+    chunking_ast = 0
+    chunking_line = 0
+    chunking_llm = 0
     total_files = len(scanned)
 
     batch: list[ScannedFile] = []
@@ -101,9 +157,10 @@ def init_kb(
 
     def process_batch() -> None:
         nonlocal chunks_written, chunking_success, chunking_fallback, batch, batch_chars, batch_indices
+        nonlocal chunking_ast, chunking_line, chunking_llm
         if not batch:
             return
-        results = _flush_batch(batch, chunker=chunker, options=options)
+        results = _flush_batch(batch, chunker=codex_chunker, options=options)
 
         # 逐文件回调与统计（保持 idx/total 一致）
         collected: list[Chunk] = []
@@ -120,6 +177,14 @@ def init_kb(
                 chunking_fallback += 1
                 fallback_files.append(res.source_path)
 
+            strategy_name = _count_strategy(res, default_strategy="llm")
+            if strategy_name == "ast":
+                chunking_ast += 1
+            elif strategy_name == "line":
+                chunking_line += 1
+            elif strategy_name == "llm":
+                chunking_llm += 1
+
             collected.extend(res.chunks)
 
         if collected:
@@ -130,26 +195,51 @@ def init_kb(
         batch_chars = 0
         batch_indices = []
 
-    for idx, f in enumerate(scanned):
-        # 不可入库文件：保持原逻辑（仍输出进度，但不触发 Codex）
-        if not f.is_text or f.sha256 is None or f.reason:
-            process_batch()
-            res = chunker.chunk_file(f, options=options)
+    if use_smart and smart_chunker is not None:
+        for idx, f in enumerate(scanned):
+            res = smart_chunker.chunk_file(f)
             if progress_callback is not None:
                 progress_callback(idx, total_files, f.rel_path.as_posix(), res)
-            continue
 
-        est = _estimate_prompt_chars(f, options=options)
-        if batch and (
-            len(batch) >= codex_batch_max_files or batch_chars + est > codex_batch_max_chars
-        ):
-            process_batch()
+            if res.chunks:
+                if res.status == ChunkStatus.SUCCESS:
+                    chunking_success += 1
+                else:
+                    chunking_fallback += 1
+                    fallback_files.append(res.source_path)
 
-        batch.append(f)
-        batch_indices.append(idx)
-        batch_chars += est
+                strategy_name = _count_strategy(res)
+                if strategy_name == "ast":
+                    chunking_ast += 1
+                elif strategy_name == "line":
+                    chunking_line += 1
+                elif strategy_name == "llm":
+                    chunking_llm += 1
 
-    process_batch()
+                kb.upsert_chunks(res.chunks, attribution=attribution, skip_list_fields=skip_list_fields)
+                chunks_written += len(res.chunks)
+        # no batch processing needed
+    else:
+        for idx, f in enumerate(scanned):
+            # 不可入库文件：保持原逻辑（仍输出进度，但不触发 Codex）
+            if not f.is_text or f.sha256 is None or f.reason:
+                process_batch()
+                res = codex_chunker.chunk_file(f, options=options)
+                if progress_callback is not None:
+                    progress_callback(idx, total_files, f.rel_path.as_posix(), res)
+                continue
+
+            est = _estimate_prompt_chars(f, options=options)
+            if batch and (
+                len(batch) >= codex_batch_max_files or batch_chars + est > codex_batch_max_chars
+            ):
+                process_batch()
+
+            batch.append(f)
+            batch_indices.append(idx)
+            batch_chars += est
+
+        process_batch()
 
     # v0.1.6：记录当前 git HEAD 与 dirty 状态（用于后续增量更新的正确性）
     worktree = detect_git_changes(project_root)
@@ -161,6 +251,7 @@ def init_kb(
             if worktree is not None
             else None
         ),
+        chunking_meta=_build_chunking_manifest(cfg),
     )
     return (
         KBUpdateSummary(
@@ -173,6 +264,9 @@ def init_kb(
             chunking_success=chunking_success,
             chunking_fallback=chunking_fallback,
             fallback_files=tuple(fallback_files),
+            chunking_ast=chunking_ast,
+            chunking_line=chunking_line,
+            chunking_llm=chunking_llm,
         ),
         report,
     )
@@ -185,13 +279,35 @@ def update_kb(
     reference_mode: str = "index",
     codex_batch_max_files: int = DEFAULT_CODEX_BATCH_MAX_FILES,
     codex_batch_max_chars: int = DEFAULT_CODEX_BATCH_MAX_CHARS,
+    chunking_config: KBChunkingConfig | None = None,
     scan_settings: ScanSettings | None = None,
     attribution: dict[str, Any] | None = None,
     skip_list_fields: bool = False,
     progress_callback: ProgressCallback | None = None,
 ) -> tuple[KBUpdateSummary, ScanReport]:
     kb = KnowledgeBase(project_root, embedding_model=embedding_model)
-    chunker = CodexChunker(CodexClient(), project_root)
+    codex_chunker = CodexChunker(CodexClient(), project_root)
+    cfg = _resolve_chunking_config(chunking_config)
+    strategy = (cfg.strategy or "ast-only").strip().lower()
+    use_smart = strategy in {"smart", "ast-only"}
+    smart_chunker = None
+    if use_smart:
+        smart_chunker = build_smart_chunker(
+            codex_chunker,
+            project_root,
+            options=SmartChunkingOptions(
+                strategy=strategy,
+                reference_mode=reference_mode,
+                ast_max_chunk_chars=cfg.ast.max_chunk_chars,
+                ast_chunk_overlap_nodes=cfg.ast.chunk_overlap_nodes,
+                ast_supported_extensions=cfg.ast.supported_extensions if cfg.ast.enabled else [],
+                line_lines_per_chunk=cfg.line.lines_per_chunk,
+                line_overlap_lines=cfg.line.overlap_lines,
+                llm_enabled=cfg.llm.enabled,
+                llm_priority_files=cfg.llm.priority_files,
+                llm_max_content_chars=cfg.llm.max_content_chars,
+            ),
+        )
 
     manifest = kb.store.load_manifest()
     old_hashes = manifest.get("files", {})
@@ -279,11 +395,19 @@ def update_kb(
             kb.delete_chunks_for_file(path, attribution=attribution)
 
         # 对新增/变化文件重新切片
-        options = ChunkingOptions(reference_mode=reference_mode)
+        options = ChunkingOptions(
+            reference_mode=reference_mode,
+            max_content_chars=cfg.llm.max_content_chars,
+            fallback_lines_per_chunk=cfg.line.lines_per_chunk,
+            fallback_overlap_lines=cfg.line.overlap_lines,
+        )
         chunks_written = 0
         chunking_success = 0
         chunking_fallback = 0
         fallback_files: list[str] = []
+        chunking_ast = 0
+        chunking_line = 0
+        chunking_llm = 0
 
         lookup = {f.rel_path.as_posix(): f for f in scanned}
         paths_to_process = added + changed
@@ -296,15 +420,189 @@ def update_kb(
                 ordered.append(f)
                 ordered_paths.append(path)
 
+        if use_smart and smart_chunker is not None:
+            for idx, f in enumerate(ordered):
+                res = smart_chunker.chunk_file(f)
+                if progress_callback is not None:
+                    progress_callback(idx, total_files, ordered_paths[idx], res)
+
+                if res.chunks:
+                    if res.status == ChunkStatus.SUCCESS:
+                        chunking_success += 1
+                    else:
+                        chunking_fallback += 1
+                        fallback_files.append(res.source_path)
+
+                    strategy_name = _count_strategy(res)
+                    if strategy_name == "ast":
+                        chunking_ast += 1
+                    elif strategy_name == "line":
+                        chunking_line += 1
+                    elif strategy_name == "llm":
+                        chunking_llm += 1
+
+                    kb.upsert_chunks(res.chunks, attribution=attribution, skip_list_fields=skip_list_fields)
+                    chunks_written += len(res.chunks)
+        else:
+            batch: list[ScannedFile] = []
+            batch_chars = 0
+            batch_start_idx = 0
+
+            def process_batch(start_idx: int) -> int:
+                nonlocal chunks_written, chunking_success, chunking_fallback, batch, batch_chars
+                nonlocal chunking_ast, chunking_line, chunking_llm
+                if not batch:
+                    return start_idx
+                results = _flush_batch(batch, chunker=codex_chunker, options=options)
+
+                collected: list[Chunk] = []
+                for offset, (f, res) in enumerate(zip(batch, results, strict=True)):
+                    idx = start_idx + offset
+                    path = ordered_paths[idx]
+                    if progress_callback is not None:
+                        progress_callback(idx, total_files, path, res)
+
+                    if not res.chunks:
+                        continue
+
+                    if res.status == ChunkStatus.SUCCESS:
+                        chunking_success += 1
+                    else:
+                        chunking_fallback += 1
+                        fallback_files.append(res.source_path)
+
+                    strategy_name = _count_strategy(res, default_strategy="llm")
+                    if strategy_name == "ast":
+                        chunking_ast += 1
+                    elif strategy_name == "line":
+                        chunking_line += 1
+                    elif strategy_name == "llm":
+                        chunking_llm += 1
+
+                    collected.extend(res.chunks)
+
+                if collected:
+                    kb.upsert_chunks(collected, attribution=attribution, skip_list_fields=skip_list_fields)
+                    chunks_written += len(collected)
+
+                next_idx = start_idx + len(batch)
+                batch = []
+                batch_chars = 0
+                return next_idx
+
+            for f in ordered:
+                est = _estimate_prompt_chars(f, options=options)
+                if batch and (
+                    len(batch) >= codex_batch_max_files or batch_chars + est > codex_batch_max_chars
+                ):
+                    batch_start_idx = process_batch(batch_start_idx)
+
+                batch.append(f)
+                batch_chars += est
+
+            batch_start_idx = process_batch(batch_start_idx)
+
+        # 合并更新 manifest（仅改动部分）
+        merged_hashes = dict(old_hashes_str)
+        for p in removed:
+            merged_hashes.pop(p, None)
+        for p, sha in partial_hashes.items():
+            merged_hashes[p] = sha
+
+        kb.update_manifest_files(
+            merged_hashes,
+            git_head=current_head,
+            git_dirty=worktree_dirty,
+            chunking_meta=_build_chunking_manifest(cfg),
+        )
+
+        return (
+            KBUpdateSummary(
+                scanned=len(scanned),
+                added=len(added),
+                changed=len(changed),
+                removed=len(removed),
+                chunks_written=chunks_written,
+                reference_mode=reference_mode,
+                chunking_success=chunking_success,
+                chunking_fallback=chunking_fallback,
+                fallback_files=tuple(fallback_files),
+                chunking_ast=chunking_ast,
+                chunking_line=chunking_line,
+                chunking_llm=chunking_llm,
+            ),
+            report,
+        )
+
+    # fallback：全量 scan + diff
+    scanned, report = scan_project(project_root, settings=scan_settings)
+    new_hashes = build_file_hash_map(scanned)
+    added, changed, removed = diff_file_hash_map(old_hashes_str, new_hashes)
+
+    # 删除移除文件
+    for path in removed:
+        kb.delete_chunks_for_file(path, attribution=attribution)
+
+    # 对新增/变化文件重新切片
+    options = ChunkingOptions(
+        reference_mode=reference_mode,
+        max_content_chars=cfg.llm.max_content_chars,
+        fallback_lines_per_chunk=cfg.line.lines_per_chunk,
+        fallback_overlap_lines=cfg.line.overlap_lines,
+    )
+    chunks_written = 0
+    chunking_success = 0
+    chunking_fallback = 0
+    fallback_files: list[str] = []
+    chunking_ast = 0
+    chunking_line = 0
+    chunking_llm = 0
+
+    lookup = {f.rel_path.as_posix(): f for f in scanned}
+    paths_to_process = added + changed
+    total_files = len(paths_to_process)
+    ordered: list[ScannedFile] = []
+    ordered_paths: list[str] = []
+    for path in paths_to_process:
+        f = lookup.get(path)
+        if f:
+            ordered.append(f)
+            ordered_paths.append(path)
+
+    if use_smart and smart_chunker is not None:
+        for idx, f in enumerate(ordered):
+            res = smart_chunker.chunk_file(f)
+            if progress_callback is not None:
+                progress_callback(idx, total_files, ordered_paths[idx], res)
+
+            if res.chunks:
+                if res.status == ChunkStatus.SUCCESS:
+                    chunking_success += 1
+                else:
+                    chunking_fallback += 1
+                    fallback_files.append(res.source_path)
+
+                strategy_name = _count_strategy(res)
+                if strategy_name == "ast":
+                    chunking_ast += 1
+                elif strategy_name == "line":
+                    chunking_line += 1
+                elif strategy_name == "llm":
+                    chunking_llm += 1
+
+                kb.upsert_chunks(res.chunks, attribution=attribution, skip_list_fields=skip_list_fields)
+                chunks_written += len(res.chunks)
+    else:
         batch: list[ScannedFile] = []
         batch_chars = 0
         batch_start_idx = 0
 
         def process_batch(start_idx: int) -> int:
             nonlocal chunks_written, chunking_success, chunking_fallback, batch, batch_chars
+            nonlocal chunking_ast, chunking_line, chunking_llm
             if not batch:
                 return start_idx
-            results = _flush_batch(batch, chunker=chunker, options=options)
+            results = _flush_batch(batch, chunker=codex_chunker, options=options)
 
             collected: list[Chunk] = []
             for offset, (f, res) in enumerate(zip(batch, results, strict=True)):
@@ -321,6 +619,14 @@ def update_kb(
                 else:
                     chunking_fallback += 1
                     fallback_files.append(res.source_path)
+
+                strategy_name = _count_strategy(res, default_strategy="llm")
+                if strategy_name == "ast":
+                    chunking_ast += 1
+                elif strategy_name == "line":
+                    chunking_line += 1
+                elif strategy_name == "llm":
+                    chunking_llm += 1
 
                 collected.extend(res.chunks)
 
@@ -345,114 +651,11 @@ def update_kb(
 
         batch_start_idx = process_batch(batch_start_idx)
 
-        # 合并更新 manifest（仅改动部分）
-        merged_hashes = dict(old_hashes_str)
-        for p in removed:
-            merged_hashes.pop(p, None)
-        for p, sha in partial_hashes.items():
-            merged_hashes[p] = sha
-
-        kb.update_manifest_files(
-            merged_hashes,
-            git_head=current_head,
-            git_dirty=worktree_dirty,
-        )
-
-        return (
-            KBUpdateSummary(
-                scanned=len(scanned),
-                added=len(added),
-                changed=len(changed),
-                removed=len(removed),
-                chunks_written=chunks_written,
-                reference_mode=reference_mode,
-                chunking_success=chunking_success,
-                chunking_fallback=chunking_fallback,
-                fallback_files=tuple(fallback_files),
-            ),
-            report,
-        )
-
-    # fallback：全量 scan + diff
-    scanned, report = scan_project(project_root, settings=scan_settings)
-    new_hashes = build_file_hash_map(scanned)
-    added, changed, removed = diff_file_hash_map(old_hashes_str, new_hashes)
-
-    # 删除移除文件
-    for path in removed:
-        kb.delete_chunks_for_file(path, attribution=attribution)
-
-    # 对新增/变化文件重新切片
-    options = ChunkingOptions(reference_mode=reference_mode)
-    chunks_written = 0
-    chunking_success = 0
-    chunking_fallback = 0
-    fallback_files: list[str] = []
-
-    lookup = {f.rel_path.as_posix(): f for f in scanned}
-    paths_to_process = added + changed
-    total_files = len(paths_to_process)
-    ordered: list[ScannedFile] = []
-    ordered_paths: list[str] = []
-    for path in paths_to_process:
-        f = lookup.get(path)
-        if f:
-            ordered.append(f)
-            ordered_paths.append(path)
-
-    batch: list[ScannedFile] = []
-    batch_chars = 0
-    batch_start_idx = 0
-
-    def process_batch(start_idx: int) -> int:
-        nonlocal chunks_written, chunking_success, chunking_fallback, batch, batch_chars
-        if not batch:
-            return start_idx
-        results = _flush_batch(batch, chunker=chunker, options=options)
-
-        collected: list[Chunk] = []
-        for offset, (f, res) in enumerate(zip(batch, results, strict=True)):
-            idx = start_idx + offset
-            path = ordered_paths[idx]
-            if progress_callback is not None:
-                progress_callback(idx, total_files, path, res)
-
-            if not res.chunks:
-                continue
-
-            if res.status == ChunkStatus.SUCCESS:
-                chunking_success += 1
-            else:
-                chunking_fallback += 1
-                fallback_files.append(res.source_path)
-
-            collected.extend(res.chunks)
-
-        if collected:
-            kb.upsert_chunks(collected, attribution=attribution, skip_list_fields=skip_list_fields)
-            chunks_written += len(collected)
-
-        next_idx = start_idx + len(batch)
-        batch = []
-        batch_chars = 0
-        return next_idx
-
-    for f in ordered:
-        est = _estimate_prompt_chars(f, options=options)
-        if batch and (
-            len(batch) >= codex_batch_max_files or batch_chars + est > codex_batch_max_chars
-        ):
-            batch_start_idx = process_batch(batch_start_idx)
-
-        batch.append(f)
-        batch_chars += est
-
-    batch_start_idx = process_batch(batch_start_idx)
-
     kb.update_manifest_files(
         new_hashes,
         git_head=current_head,
         git_dirty=worktree_dirty,
+        chunking_meta=_build_chunking_manifest(cfg),
     )
 
     return (
@@ -466,6 +669,9 @@ def update_kb(
             chunking_success=chunking_success,
             chunking_fallback=chunking_fallback,
             fallback_files=tuple(fallback_files),
+            chunking_ast=chunking_ast,
+            chunking_line=chunking_line,
+            chunking_llm=chunking_llm,
         ),
         report,
     )

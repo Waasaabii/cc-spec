@@ -6,14 +6,17 @@ import json
 import time
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, TYPE_CHECKING
 
 from cc_spec.codex.client import CodexClient
 from cc_spec.codex.models import CodexErrorType
 
+from .ast_utils import finalize_chunk, infer_chunk_type, simple_text_chunks
 from .models import Chunk, ChunkResult, ChunkStatus, ChunkType, ScannedFile
 from .prompts import chunk_file_prompt, chunk_files_prompt, reference_index_prompt
 
+if TYPE_CHECKING:
+    from .smart_chunker import SmartChunker, SmartChunkingOptions
 
 @dataclass(frozen=True)
 class ChunkingOptions:
@@ -107,7 +110,7 @@ class CodexChunker:
                 }
             )
 
-            file_type = _infer_chunk_type(scanned.rel_path)
+            file_type = infer_chunk_type(scanned.rel_path)
             if scanned.is_reference:
                 file_type = ChunkType.REFERENCE
             type_by_path[rel_path_str] = file_type
@@ -145,7 +148,7 @@ class CodexChunker:
         def _fallback_chunks_for(path: str) -> list[dict[str, Any]]:
             raw = raw_by_path.get(path, "")
             sha = sha_by_path.get(path, "")
-            chunks = _simple_text_chunks(
+            chunks = simple_text_chunks(
                 raw,
                 source_path=path,
                 source_sha256=sha,
@@ -165,7 +168,7 @@ class CodexChunker:
                 typ = type_by_path.get(path, ChunkType.DOC)
                 dicts = _fallback_chunks_for(path)
                 chunks = [
-                    _finalize_chunk(c, chunk_type=typ, source_path=path, source_sha256=sha) for c in dicts
+                    finalize_chunk(c, chunk_type=typ, source_path=path, source_sha256=sha) for c in dicts
                 ]
                 out.append(
                     ChunkResult(
@@ -187,7 +190,7 @@ class CodexChunker:
                 typ = type_by_path.get(path, ChunkType.DOC)
                 dicts = _fallback_chunks_for(path)
                 chunks = [
-                    _finalize_chunk(c, chunk_type=typ, source_path=path, source_sha256=sha) for c in dicts
+                    finalize_chunk(c, chunk_type=typ, source_path=path, source_sha256=sha) for c in dicts
                 ]
                 out.append(
                     ChunkResult(
@@ -226,7 +229,7 @@ class CodexChunker:
             if not isinstance(chunks_raw, list):
                 dicts = _fallback_chunks_for(path)
                 chunks = [
-                    _finalize_chunk(c, chunk_type=typ, source_path=path, source_sha256=sha) for c in dicts
+                    finalize_chunk(c, chunk_type=typ, source_path=path, source_sha256=sha) for c in dicts
                 ]
                 out.append(
                     ChunkResult(
@@ -248,7 +251,7 @@ class CodexChunker:
             if not normalized:
                 dicts = _fallback_chunks_for(path)
                 chunks = [
-                    _finalize_chunk(c, chunk_type=typ, source_path=path, source_sha256=sha) for c in dicts
+                    finalize_chunk(c, chunk_type=typ, source_path=path, source_sha256=sha) for c in dicts
                 ]
                 out.append(
                     ChunkResult(
@@ -262,7 +265,7 @@ class CodexChunker:
                 continue
 
             chunks = [
-                _finalize_chunk(c, chunk_type=typ, source_path=path, source_sha256=sha) for c in normalized
+                finalize_chunk(c, chunk_type=typ, source_path=path, source_sha256=sha) for c in normalized
             ]
             out.append(
                 ChunkResult(
@@ -302,7 +305,12 @@ class CodexChunker:
                 options=options,
             )
             chunks = [
-                _finalize_chunk(c, chunk_type=ChunkType.REFERENCE, source_path=rel_path_str, source_sha256=scanned.sha256)
+                finalize_chunk(
+                    c,
+                    chunk_type=ChunkType.REFERENCE,
+                    source_path=rel_path_str,
+                    source_sha256=scanned.sha256,
+                )
                 for c in parsed.chunk_dicts
             ]
             return ChunkResult(
@@ -322,12 +330,12 @@ class CodexChunker:
             options=options,
         )
 
-        file_type = _infer_chunk_type(scanned.rel_path)
+        file_type = infer_chunk_type(scanned.rel_path)
         if scanned.is_reference:
             file_type = ChunkType.REFERENCE
 
         chunks = [
-            _finalize_chunk(c, chunk_type=file_type, source_path=rel_path_str, source_sha256=scanned.sha256)
+            finalize_chunk(c, chunk_type=file_type, source_path=rel_path_str, source_sha256=scanned.sha256)
             for c in parsed.chunk_dicts
         ]
         return ChunkResult(
@@ -352,6 +360,18 @@ class CodexChunker:
             source_sha256=sha,
             extra={"mode": "dir_index"},
         )
+
+
+def build_smart_chunker(
+    codex: CodexChunker,
+    project_root: Path,
+    *,
+    options: "SmartChunkingOptions | None" = None,
+) -> "SmartChunker":
+    """创建 SmartChunker（延迟导入避免循环依赖）。"""
+    from .smart_chunker import SmartChunker
+
+    return SmartChunker(codex, project_root, options=options)
 
     # ------------------------------------------------------------------
     # internal
@@ -393,7 +413,7 @@ class CodexChunker:
         result = last_result
 
         if not result.success:
-            fallback_chunks = _simple_text_chunks(
+            fallback_chunks = simple_text_chunks(
                 raw_content,
                 source_path=source_path,
                 source_sha256=source_sha256,
@@ -413,7 +433,7 @@ class CodexChunker:
 
         parsed = _extract_json_array(result.message)
         if parsed is None:
-            fallback_chunks = _simple_text_chunks(
+            fallback_chunks = simple_text_chunks(
                 raw_content,
                 source_path=source_path,
                 source_sha256=source_sha256,
@@ -437,7 +457,7 @@ class CodexChunker:
                 chunks.append(normalized)
 
         if not chunks:
-            fallback_chunks = _simple_text_chunks(
+            fallback_chunks = simple_text_chunks(
                 raw_content,
                 source_path=source_path,
                 source_sha256=source_sha256,
@@ -462,56 +482,6 @@ class CodexChunker:
         )
 
 
-def _infer_chunk_type(rel_path: Path) -> ChunkType:
-    p = rel_path.as_posix().lower()
-    if p.endswith((".py", ".ts", ".tsx", ".js", ".jsx", ".go", ".rs", ".java", ".kt")):
-        return ChunkType.CODE
-    if p.endswith((".md", ".rst", ".txt")):
-        return ChunkType.DOC
-    if p.endswith((".yaml", ".yml", ".toml", ".json", ".ini", ".cfg")):
-        return ChunkType.CONFIG
-    return ChunkType.DOC
-
-
-def _finalize_chunk(
-    item: dict[str, Any],
-    *,
-    chunk_type: ChunkType,
-    source_path: str,
-    source_sha256: str,
-) -> Chunk:
-    idx = int(item.get("_idx", 0))
-    raw_id = str(item.get("id", f"chunk_{idx}"))
-    chunk_id = f"{source_sha256[:12]}:{idx:04d}:{raw_id}"
-    summary = str(item.get("summary", "")).strip()
-    content = str(item.get("content", "")).strip()
-
-    start_line = _as_int_or_none(item.get("start_line"))
-    end_line = _as_int_or_none(item.get("end_line"))
-    language = str(item.get("language")).strip() if item.get("language") else None
-
-    extra = {"raw_type": item.get("type"), "raw_id": raw_id}
-    return Chunk(
-        chunk_id=chunk_id,
-        text=content,
-        summary=summary,
-        chunk_type=chunk_type,
-        source_path=source_path,
-        source_sha256=source_sha256,
-        start_line=start_line,
-        end_line=end_line,
-        language=language,
-        extra=extra,
-    )
-
-
-def _as_int_or_none(value: Any) -> int | None:
-    if value is None:
-        return None
-    try:
-        return int(value)
-    except Exception:
-        return None
 
 
 def _normalize_chunk_dict(item: Any, *, idx: int) -> dict[str, Any] | None:
@@ -555,79 +525,6 @@ def _fallback_chunk_dict(message: str, *, source_path: str, source_sha256: str) 
     }
 
 
-def _simple_text_chunks(
-    content: str,
-    *,
-    source_path: str,
-    source_sha256: str,
-    lines_per_chunk: int = 100,
-    overlap_lines: int = 10,
-) -> list[dict[str, Any]]:
-    """基于行的简单文本切分（用于 Codex 失败时的 fallback）。
-
-    Args:
-        content: 文件内容
-        source_path: 文件相对路径
-        source_sha256: 文件 SHA256
-        lines_per_chunk: 每个 chunk 的目标行数
-        overlap_lines: 相邻 chunk 的重叠行数
-
-    Returns:
-        chunk dict 列表，每个 dict 包含 id, type, summary, content, start_line, end_line
-    """
-    lines = content.splitlines(keepends=True)
-    total_lines = len(lines)
-
-    if total_lines == 0:
-        return []
-
-    # 小文件直接返回单个 chunk
-    if total_lines <= lines_per_chunk:
-        return [
-            {
-                "id": "fallback_0",
-                "type": "other",
-                "summary": f"fallback chunk for {source_path} (lines 1-{total_lines})",
-                "content": content[:4000],
-                "start_line": 1,
-                "end_line": total_lines,
-                "_idx": 0,
-                "_source_sha256": source_sha256,
-            }
-        ]
-
-    chunks: list[dict[str, Any]] = []
-    step = max(1, lines_per_chunk - overlap_lines)
-    idx = 0
-
-    for start in range(0, total_lines, step):
-        end = min(start + lines_per_chunk, total_lines)
-        chunk_lines = lines[start:end]
-        chunk_content = "".join(chunk_lines)
-
-        # 限制单个 chunk 内容长度
-        if len(chunk_content) > 4000:
-            chunk_content = chunk_content[:4000]
-
-        chunks.append(
-            {
-                "id": f"fallback_{idx}",
-                "type": "other",
-                "summary": f"fallback chunk for {source_path} (lines {start + 1}-{end})",
-                "content": chunk_content,
-                "start_line": start + 1,
-                "end_line": end,
-                "_idx": idx,
-                "_source_sha256": source_sha256,
-            }
-        )
-        idx += 1
-
-        # 如果已经到文件末尾，停止
-        if end >= total_lines:
-            break
-
-    return chunks
 
 
 def _merge_passthrough(

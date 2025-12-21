@@ -12,11 +12,13 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+from cc_spec.core.config import Config, KBChunkingConfig
 from cc_spec.utils.files import get_cc_spec_dir
 
+from .incremental import detect_git_changes
 from .knowledge_base import KnowledgeBase, new_record_id
 from .models import WorkflowRecord, WorkflowStep
-from .pipeline import KBUpdateSummary, update_kb
+from .pipeline import KBUpdateSummary, init_kb, update_kb
 from .scanner import ScanReport
 
 
@@ -86,6 +88,7 @@ def try_update_kb(
     embedding_model: str | None = None,
     reference_mode: str = "index",
     attribution: dict[str, Any] | None = None,
+    chunking_config: KBChunkingConfig | None = None,
 ) -> tuple[KBUpdateSummary, ScanReport] | None:
     """执行一次增量 KB 更新；失败时返回 None（降级）。"""
     model = embedding_model or default_embedding_model(project_root)
@@ -95,9 +98,102 @@ def try_update_kb(
             embedding_model=model,
             reference_mode=reference_mode,
             attribution=attribution,
+            chunking_config=chunking_config,
         )
     except Exception:
         return None
+
+
+def try_init_kb(
+    project_root: Path,
+    *,
+    embedding_model: str | None = None,
+    reference_mode: str = "index",
+    attribution: dict[str, Any] | None = None,
+    chunking_config: KBChunkingConfig | None = None,
+) -> tuple[KBUpdateSummary, ScanReport] | None:
+    """执行一次全量 KB 构建；失败时返回 None（降级）。"""
+    model = embedding_model or default_embedding_model(project_root)
+    try:
+        return init_kb(
+            project_root,
+            embedding_model=model,
+            reference_mode=reference_mode,
+            attribution=attribution,
+            chunking_config=chunking_config,
+        )
+    except Exception:
+        return None
+
+
+def _normalize_post_task_strategy(strategy: str | None) -> str:
+    raw = str(strategy or "smart").strip().lower()
+    aliases = {
+        "incremental": "smart",
+        "full_sync": "full",
+        "none": "skip",
+    }
+    normalized = aliases.get(raw, raw)
+    if normalized not in {"smart", "full", "skip"}:
+        return "smart"
+    return normalized
+
+
+def _has_worktree_changes(project_root: Path) -> bool | None:
+    change_set = detect_git_changes(project_root)
+    if change_set is None:
+        return None
+    return bool(change_set.changed or change_set.removed or change_set.untracked)
+
+
+def try_post_task_sync_kb(
+    project_root: Path,
+    *,
+    config: Config | None,
+    embedding_model: str | None = None,
+    reference_mode: str = "index",
+    attribution: dict[str, Any] | None = None,
+) -> tuple[KBUpdateSummary, ScanReport] | None:
+    """按 config.kb.update.post_task_sync 策略执行 KB 同步（失败时返回 None）。"""
+    if config is None:
+        return try_update_kb(
+            project_root,
+            embedding_model=embedding_model,
+            reference_mode=reference_mode,
+            attribution=attribution,
+        )
+
+    sync_cfg = config.kb.update.post_task_sync
+    if not sync_cfg.enabled:
+        return None
+
+    strategy = _normalize_post_task_strategy(sync_cfg.strategy)
+    chunking_cfg = config.kb.chunking
+
+    if strategy == "skip":
+        return None
+
+    if strategy == "full":
+        return try_init_kb(
+            project_root,
+            embedding_model=embedding_model,
+            reference_mode=reference_mode,
+            attribution=attribution,
+            chunking_config=chunking_cfg,
+        )
+
+    if strategy == "smart":
+        changed = _has_worktree_changes(project_root)
+        if changed is False:
+            return None
+
+    return try_update_kb(
+        project_root,
+        embedding_model=embedding_model,
+        reference_mode=reference_mode,
+        attribution=attribution,
+        chunking_config=chunking_cfg,
+    )
 
 
 def try_compact_kb(project_root: Path, *, embedding_model: str | None = None) -> bool:

@@ -299,6 +299,7 @@ class KnowledgeBase:
         *,
         git_head: str | None = None,
         git_dirty: bool | None = None,
+        chunking_meta: dict[str, Any] | None = None,
     ) -> None:
         """更新 manifest 中的文件 hash 映射（用于增量更新）。"""
         manifest = self.store.load_manifest()
@@ -316,6 +317,11 @@ class KnowledgeBase:
             if git_dirty is not None:
                 manifest["git"]["dirty"] = bool(git_dirty)
             manifest["git"]["updated_at"] = _now_iso()
+
+        if chunking_meta:
+            meta = dict(chunking_meta)
+            meta.setdefault("updated_at", _now_iso())
+            manifest["chunking"] = meta
 
         manifest.setdefault("embedding", {})
         manifest["embedding"]["provider"] = "fastembed"

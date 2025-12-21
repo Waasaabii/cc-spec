@@ -96,6 +96,7 @@ class ChunkResult:
     source_path: str
     error_message: str | None = None
     codex_exit_code: int | None = None
+    strategy: str | None = None
 
 
 @dataclass(frozen=True)
@@ -126,4 +127,3 @@ class WorkflowRecord:
             "changed_files": self.changed_files,
             "notes": self.notes,
         }
-
