@@ -81,7 +81,7 @@ from cc_spec.core.scoring import generate_failure_report
 
 report = generate_failure_report(result)
 
-# Write to file
+# Optional: write to file if you want a local report
 with open("checklist-result.md", "w") as f:
     f.write(report)
 ```
@@ -109,7 +109,7 @@ To continue with the workflow:
 4. Re-run the checklist validation after making changes
 ```
 
-### 5. Extract Checklists from tasks.md
+### 5. Extract Checklists from tasks.yaml
 
 ```python
 from cc_spec.core.scoring import extract_checklists_from_tasks_md
@@ -194,8 +194,8 @@ from cc_spec.core.scoring import (
     generate_failure_report,
 )
 
-# 1. Read tasks.md
-tasks_path = Path(".cc-spec/changes/my-change/tasks.md")
+# 1. Read tasks.yaml
+tasks_path = Path(".cc-spec/changes/my-change/tasks.yaml")
 tasks_content = tasks_path.read_text(encoding="utf-8")
 
 # 2. Extract all checklists
@@ -208,14 +208,14 @@ for items in checklists.values():
 
 result = calculate_score(all_items, threshold=80)
 
-# 4. Save results
+# 4. Save results (CLI default writes to KB; file output is optional)
 if result.passed:
     print("✓ All tasks completed successfully!")
     print(format_result(result))
 else:
     print("✗ Checklist validation failed")
 
-    # Save failure report
+    # Optional: save failure report to a file
     report_path = Path(".cc-spec/changes/my-change/checklist-result.md")
     report_path.write_text(generate_failure_report(result), encoding="utf-8")
 
@@ -238,21 +238,22 @@ Case insensitive: `[X]`, `[x]` both work.
 2. **FAILED items**: Earn 0 points
 3. **SKIPPED items**: Not included in total or max score
 4. **Percentage**: `(total_score / max_score) * 100`
-5. **Pass threshold**: Default 80%, customizable
+5. **Pass threshold**: Default 80%, customizable via config.yaml
 
 ## Integration with cc-spec Workflow
 
-This module is used in the `checklist` stage:
+This module is used in the `checklist` stage (tasks.yaml source):
 
-1. Parse checklists from `tasks.md`
+1. Parse checklists from `tasks.yaml`
 2. Calculate scores for all tasks
 3. If score >= threshold:
    - Move to `archive` stage
    - Mark change as completed
 4. If score < threshold:
-   - Generate `checklist-result.md`
+   - Write failure record to KB (default behavior)
+   - Optionally generate `checklist-result.md` with `--write-report`
    - Stay in `checklist` stage
-   - User can run `clarify` to rework tasks
+   - User can run `clarify` or `apply` to rework tasks
 
 ## Error Handling
 
@@ -263,3 +264,8 @@ The module is designed to be robust:
 - Unknown task IDs are skipped
 - Division by zero is handled (returns 0%)
 - Missing checklists return empty dict
+
+
+## 权重说明
+
+四维度权重以 `config.yaml` 为准（默认 30/25/25/20），评分计算按配置权重执行。

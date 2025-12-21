@@ -96,6 +96,21 @@ cc-spec archive
 | 7. checklist | 验收打分（默认 ≥80 通过） | `cc-spec checklist` | checklist 报告 |
 | 8. archive | 归档并合并 Delta specs | `cc-spec archive` | `.cc-spec/changes/archive/...` |
 
+### 人类流程 vs 系统 KB 动作
+
+| 人类步骤 | 系统 KB 动作（必须执行） |
+|---|---|
+| init | 建立项目结构；若 KB 未建，标记待入库 |
+| kb init/update | 生成/更新 code chunks 与 workflow records |
+| specify | `kb record`：Why/What/Impact/Success Criteria |
+| clarify | `kb record`：返工原因/歧义检测结果/需求补充摘要 |
+| plan | `kb record`：任务拆解摘要、依赖、验收点 |
+| apply | `kb record`：任务执行上下文与变更摘要；`kb update` 入库变更 |
+| checklist | `kb record`：评分、未完成项、改进建议 |
+| archive | `kb update/compact`：归档前确保 KB 最新 |
+
+> 评审主线以 **KB records** 为准，proposal/tasks 仅供人类阅读。
+
 ### 每步要点
 
 - **init**：只负责本地结构与配置，不入库。
@@ -104,7 +119,7 @@ cc-spec archive
 - **clarify**：对高影响歧义提问并写回 proposal；或对任务标记返工。
 - **plan**：输出 `tasks.yaml`（Gate-0 + Wave 并发结构、依赖、checklist）。
 - **apply**：按 Wave 并发执行；失败用 `--resume` 继续。
-- **checklist**：按四维度打分（功能/质量/测试/文档），低于阈值会回到 apply/clarify。
+- **checklist**：强 Gate；未通过不得归档，必须补齐后回到 apply/clarify。
 - **archive**：合并 Delta specs 到主 specs 并归档变更目录。
 
 ### 超简单模式
@@ -112,6 +127,29 @@ cc-spec archive
 ```bash
 # 小改动、紧急修复：一步记录
 cc-spec quick-delta "修复登录页面样式问题"
+```
+
+说明：
+- quick-delta 仅简化文档，系统仍会写入 KB record
+- 最小需求集：Why / What / Impact / Success Criteria
+
+---
+
+## 测试
+
+默认分层运行（integration 需显式开启）：
+
+```bash
+pytest -m unit
+pytest -m cli
+pytest -m rag
+pytest -m codex
+```
+
+集成测试（不默认跑）：
+
+```bash
+pytest -m integration
 ```
 
 ---

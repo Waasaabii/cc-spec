@@ -16,9 +16,10 @@
 
 ```
 cc-spec init        → 初始化项目
+cc-spec kb init     → 构建/更新 KB（推荐）
 cc-spec specify     → 编写需求规格
 cc-spec clarify     → 澄清/返工
-cc-spec plan        → 生成执行计划
+cc-spec plan        → 生成执行计划（tasks.yaml）
 cc-spec apply       → SubAgent 并发执行 (仅 Claude Code)
 cc-spec checklist   → 验收打分 (≥80 通过)
 cc-spec archive     → 归档变更

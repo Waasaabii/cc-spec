@@ -30,19 +30,25 @@ pip install cc-spec
 # 1. 初始化项目
 cc-spec init
 
-# 2. 创建变更规范
+# 2. （推荐）构建/更新知识库
+cc-spec kb init
+
+# 3. 创建变更规范
 cc-spec specify add-user-auth
 
-# 3. 生成任务计划
+# 4. 澄清需求/返工
+cc-spec clarify
+
+# 5. 生成任务计划
 cc-spec plan add-user-auth
 
-# 4. 执行任务 (SubAgent 并发)
+# 6. 执行任务 (SubAgent 并发)
 cc-spec apply add-user-auth
 
-# 5. 验证 checklist
+# 7. 验证 checklist
 cc-spec checklist add-user-auth
 
-# 6. 归档变更
+# 8. 归档变更
 cc-spec archive add-user-auth
 ```
 
@@ -54,6 +60,23 @@ cc-spec archive add-user-auth
 cc-spec quick-delta "Fix typo in README"
 ```
 
+## 测试
+
+分层运行（integration 需显式开启）：
+
+```bash
+pytest -m unit
+pytest -m cli
+pytest -m rag
+pytest -m codex
+```
+
+集成测试（不默认跑）：
+
+```bash
+pytest -m integration
+```
+
 ## 项目结构
 
 初始化后，项目会创建以下结构：
@@ -63,11 +86,11 @@ cc-spec quick-delta "Fix typo in README"
 ├── config.yaml          # 配置文件
 ├── templates/           # 模板文件
 │   ├── proposal.md
-│   └── tasks.md
+│   └── tasks.yaml
 └── changes/             # 变更目录
     ├── add-user-auth/   # 活跃变更
     │   ├── proposal.md
-    │   ├── tasks.md
+    │   ├── tasks.yaml
     │   └── status.yaml
     └── archive/         # 已归档变更
 ```

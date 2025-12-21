@@ -163,9 +163,8 @@ Archived to .cc-spec/changes/archive/2024-01-15-add-oauth
 └── changes/
     └── add-oauth/
         ├── proposal.md
-        ├── tasks.md
-        ├── design.md
-        ├── status.yaml
+        ├── tasks.yaml
+        ├──         ├── status.yaml
         └── specs/
             └── auth/
                 └── spec.md (Delta spec)
@@ -182,9 +181,8 @@ Archived to .cc-spec/changes/archive/2024-01-15-add-oauth
     └── archive/
         └── 2024-01-15-add-oauth/
             ├── proposal.md
-            ├── tasks.md
-            ├── design.md
-            ├── status.yaml
+            ├── tasks.yaml
+            ├──             ├── status.yaml
             └── specs/
                 └── auth/
                     └── spec.md (Delta spec)
@@ -265,8 +263,7 @@ cc-spec specify add-oauth
 # 3. 生成执行计划
 cc-spec plan
 
-# 4. 编辑 tasks.md 和 design.md
-# ...
+# 4. 编辑 tasks.yaml 和 # ...
 
 # 5. 执行任务（如果支持）
 cc-spec apply

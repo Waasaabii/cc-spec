@@ -75,6 +75,10 @@ cc-spec archive
 cc-spec quick-delta "Fix login page styling issue"
 ```
 
+Notes:
+- quick-delta only simplifies docs; the system still writes KB records
+- Minimum info set: Why / What / Impact / Success Criteria
+
 ---
 
 ## Workflow (Detailed)
@@ -89,7 +93,7 @@ cc-spec quick-delta "Fix login page styling issue"
 | 4. clarify | Resolve ambiguity or mark rework | `cc-spec clarify [task-id]` | Clarifications / rework markers |
 | 5. plan | Generate executable plan | `cc-spec plan` | `.cc-spec/changes/<change>/tasks.yaml` |
 | 6. apply | Run tasks concurrently | `cc-spec apply` | Task status updates & execution records |
-| 7. checklist | Acceptance scoring (default ≥80) | `cc-spec checklist` | Checklist report |
+| 7. checklist | Acceptance scoring (default ≥80) | `cc-spec checklist` | KB checklist record (optional checklist-result.md with --write-report) |
 | 8. archive | Merge Delta specs & archive | `cc-spec archive` | `.cc-spec/changes/archive/...` |
 
 ### Step Notes
@@ -100,8 +104,40 @@ cc-spec quick-delta "Fix login page styling issue"
 - **clarify**: Ask high-impact questions and write back to proposal; or mark tasks for rework.
 - **plan**: Outputs `tasks.yaml` (Gate-0 + Wave, deps, checklist).
 - **apply**: Runs Wave-by-Wave; retry failures with `--resume`.
-- **checklist**: Weighted scoring across Functionality/Quality/Tests/Docs.
+- **checklist**: Weighted scoring across Functionality/Quality/Tests/Docs; default writes to KB, use `--write-report` for `checklist-result.md`.
 - **archive**: Merges Delta specs into main specs and archives the change.
+
+### Human vs System KB Flow
+
+| Human Step | System KB Action (must run) |
+|---|---|
+| init | Create project structure; mark KB pending if not built |
+| kb init/update | Build/update code chunks and workflow records |
+| specify | `kb record`: Why/What/Impact/Success Criteria |
+| clarify | `kb record`: rework reasons, ambiguity findings, requirement clarifications |
+| plan | `kb record`: task breakdown summary, dependencies, acceptance points |
+| apply | `kb record`: execution context + change summary; `kb update` to ingest changes |
+| checklist | `kb record`: score, failed items, recommendations |
+| archive | `kb update/compact`: ensure KB is current before archive |
+
+> Review baseline is **KB records**; proposal/tasks are for human reading only.
+
+## Testing
+
+Layered runs (integration is opt-in):
+
+```bash
+pytest -m unit
+pytest -m cli
+pytest -m rag
+pytest -m codex
+```
+
+Integration tests (explicit only):
+
+```bash
+pytest -m integration
+```
 
 ## Using in AI Tools
 
