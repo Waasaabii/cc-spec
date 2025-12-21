@@ -22,6 +22,7 @@ from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
 
+from cc_spec.core.config import Config, KBChunkingConfig, KBRetrievalConfig, load_config
 from cc_spec.core.id_manager import IDManager
 from cc_spec.rag.knowledge_base import KnowledgeBase, new_record_id
 from cc_spec.rag.models import ChunkResult, ChunkStatus, WorkflowRecord, WorkflowStep
@@ -77,6 +78,115 @@ def _default_embedding_model(project_root: Path) -> str:
         except Exception:
             pass
     return "intfloat/multilingual-e5-small"
+
+
+def _load_kb_config(project_root: Path) -> tuple[KBChunkingConfig, KBRetrievalConfig]:
+    cc_spec_root = get_cc_spec_dir(project_root)
+    config_path = cc_spec_root / "config.yaml"
+    if config_path.exists():
+        try:
+            cfg = load_config(config_path)
+            return cfg.kb.chunking, cfg.kb.retrieval
+        except Exception as e:
+            console.print(f"[yellow]警告：[/yellow] 无法加载配置：{e}，将使用默认 KB 配置")
+    default_cfg = Config().kb
+    return default_cfg.chunking, default_cfg.retrieval
+
+
+def _normalize_chunking_strategy(value: str | None, *, fallback: str) -> str:
+    if value is None:
+        return fallback
+    raw = str(value).strip().lower()
+    aliases = {
+        "ast": "ast-only",
+        "ast_only": "ast-only",
+        "astonly": "ast-only",
+        "codex": "codex-only",
+        "codex_only": "codex-only",
+        "codexonly": "codex-only",
+        "llm": "codex-only",
+        "llm-only": "codex-only",
+        "llmonly": "codex-only",
+    }
+    normalized = aliases.get(raw, raw)
+    if normalized not in {"smart", "ast-only", "codex-only"}:
+        console.print(
+            f"[yellow]警告：[/yellow] 未识别的 chunking.strategy={value!r}，将使用 {fallback}"
+        )
+        return fallback
+    return normalized
+
+
+def _kb_config_payload(
+    chunking: KBChunkingConfig,
+    retrieval: KBRetrievalConfig,
+) -> dict[str, Any]:
+    return {
+        "chunking": {
+            "strategy": chunking.strategy,
+            "ast": {
+                "enabled": chunking.ast.enabled,
+                "max_chunk_chars": chunking.ast.max_chunk_chars,
+                "chunk_overlap_nodes": chunking.ast.chunk_overlap_nodes,
+                "supported_extensions": list(chunking.ast.supported_extensions),
+            },
+            "line": {
+                "lines_per_chunk": chunking.line.lines_per_chunk,
+                "overlap_lines": chunking.line.overlap_lines,
+            },
+            "llm": {
+                "enabled": chunking.llm.enabled,
+                "priority_files": list(chunking.llm.priority_files),
+                "max_content_chars": chunking.llm.max_content_chars,
+            },
+        },
+        "retrieval": {
+            "pre_execution": {
+                "enabled": retrieval.pre_execution.enabled,
+                "sources": list(retrieval.pre_execution.sources),
+                "max_chunks": retrieval.pre_execution.max_chunks,
+                "max_tokens": retrieval.pre_execution.max_tokens,
+            },
+            "strategy": {
+                "type": retrieval.strategy.type,
+            },
+            "relevance": {
+                "min_score": retrieval.relevance.min_score,
+                "boost_same_file": retrieval.relevance.boost_same_file,
+                "boost_recent_workflow": retrieval.relevance.boost_recent_workflow,
+            },
+        },
+    }
+
+
+def _kb_config_lines(chunking: KBChunkingConfig, retrieval: KBRetrievalConfig) -> list[str]:
+    ast_exts = chunking.ast.supported_extensions or []
+    llm_files = chunking.llm.priority_files or []
+    sources = ", ".join(retrieval.pre_execution.sources) if retrieval.pre_execution.sources else "-"
+    return [
+        f"切片策略：{chunking.strategy}",
+        (
+            "AST: "
+            f"{'on' if chunking.ast.enabled else 'off'}"
+            f" | max_chars={chunking.ast.max_chunk_chars}"
+            f" | overlap_nodes={chunking.ast.chunk_overlap_nodes}"
+            f" | ext={len(ast_exts)}"
+        ),
+        f"Line: lines={chunking.line.lines_per_chunk} | overlap={chunking.line.overlap_lines}",
+        (
+            "LLM: "
+            f"{'on' if chunking.llm.enabled else 'off'}"
+            f" | priority={len(llm_files)}"
+            f" | max_chars={chunking.llm.max_content_chars}"
+        ),
+        (
+            "Retrieval: "
+            f"max_chunks={retrieval.pre_execution.max_chunks}"
+            f" | max_tokens={retrieval.pre_execution.max_tokens}"
+            f" | strategy={retrieval.strategy.type}"
+            f" | sources={sources}"
+        ),
+    ]
 
 
 def _emit_agent_json(payload: Any) -> None:
@@ -339,6 +449,11 @@ def kb_init(
         "--codex-batch-chars",
         help="Codex 批处理：单次调用 prompt 估算字符上限（越大越快，但更易超时/格式不稳）",
     ),
+    chunking_strategy: Optional[str] = typer.Option(
+        None,
+        "--chunking-strategy",
+        help="切片策略：smart | ast-only | codex-only（优先于 config.yaml）",
+    ),
     preview_only: bool = typer.Option(
         False,
         "--preview-only",
@@ -351,6 +466,11 @@ def kb_init(
     """全量构建/刷新 KB。"""
     project_root = _require_project_root()
     model = embedding_model or _default_embedding_model(project_root)
+    chunking_cfg, retrieval_cfg = _load_kb_config(project_root)
+    chunking_cfg.strategy = _normalize_chunking_strategy(
+        chunking_strategy,
+        fallback=chunking_cfg.strategy,
+    )
 
     if preview_only:
         kb_preview(max_file_bytes=max_file_bytes, json_output=json_output)
@@ -365,6 +485,7 @@ def kb_init(
         reference_mode=reference_mode,
         codex_batch_max_files=codex_batch_max_files,
         codex_batch_max_chars=codex_batch_max_chars,
+        chunking_config=chunking_cfg,
         scan_settings=ScanSettings(max_file_bytes=max_file_bytes),
         attribution={"step": "kb.init", "by": "kb.init"},
         progress_callback=progress_callback,
@@ -380,7 +501,9 @@ def kb_init(
                     "max_file_bytes": int(max_file_bytes),
                     "codex_batch_max_files": int(codex_batch_max_files),
                     "codex_batch_max_chars": int(codex_batch_max_chars),
+                    "chunking_strategy": chunking_cfg.strategy,
                 },
+                "配置": _kb_config_payload(chunking_cfg, retrieval_cfg),
                 "统计": {
                     "扫描候选文件数": int(summary.scanned),
                     "已入库文件数_已调用Codex语义切片": int(summary.added),
@@ -389,6 +512,9 @@ def kb_init(
                     "排除文件数": int(getattr(report, "excluded", 0)),
                     "语义切片成功": int(summary.chunking_success),
                     "fallback切片": int(summary.chunking_fallback),
+                    "chunking_ast": int(summary.chunking_ast),
+                    "chunking_line": int(summary.chunking_line),
+                    "chunking_llm": int(summary.chunking_llm),
                 },
                 "fallback文件": list(summary.fallback_files),
                 "排除原因": [
@@ -407,6 +533,7 @@ def kb_init(
     chunking_info = [
         f"语义切片成功：{summary.chunking_success} 个文件",
         f"Fallback 切片：{summary.chunking_fallback} 个文件",
+        f"策略统计：AST {summary.chunking_ast} / Line {summary.chunking_line} / LLM {summary.chunking_llm}",
     ]
     if summary.fallback_files:
         chunking_info.append(f"  ↳ {', '.join(summary.fallback_files[:5])}" + ("..." if len(summary.fallback_files) > 5 else ""))
@@ -420,6 +547,9 @@ def kb_init(
                     f"写入切片：{summary.chunks_written} 个",
                     f"reference 模式：{summary.reference_mode}",
                     f"排除：{report.excluded} 个文件",
+                    "─" * 30,
+                    "配置摘要：",
+                    *[f"- {line}" for line in _kb_config_lines(chunking_cfg, retrieval_cfg)],
                     "─" * 30,
                     *chunking_info,
                 ]
@@ -444,12 +574,22 @@ def kb_update(
         "--codex-batch-chars",
         help="Codex 批处理：单次调用 prompt 估算字符上限（越大越快，但更易超时/格式不稳）",
     ),
+    chunking_strategy: Optional[str] = typer.Option(
+        None,
+        "--chunking-strategy",
+        help="切片策略：smart | ast-only | codex-only（优先于 config.yaml）",
+    ),
     verbose: bool = typer.Option(False, "--verbose", "-v", help="输出详细处理进度"),
     json_output: bool = typer.Option(False, "--json", help="输出 JSON（给 agent 使用）"),
 ) -> None:
     """增量更新 KB（基于 manifest 中的文件 hash）。"""
     project_root = _require_project_root()
     model = embedding_model or _default_embedding_model(project_root)
+    chunking_cfg, retrieval_cfg = _load_kb_config(project_root)
+    chunking_cfg.strategy = _normalize_chunking_strategy(
+        chunking_strategy,
+        fallback=chunking_cfg.strategy,
+    )
 
     # verbose 模式：创建进度回调
     progress_callback = _make_verbose_callback(console) if verbose else None
@@ -460,6 +600,7 @@ def kb_update(
         reference_mode=reference_mode,
         codex_batch_max_files=codex_batch_max_files,
         codex_batch_max_chars=codex_batch_max_chars,
+        chunking_config=chunking_cfg,
         scan_settings=ScanSettings(max_file_bytes=max_file_bytes),
         attribution={"step": "kb.update", "by": "kb.update"},
         progress_callback=progress_callback,
@@ -475,7 +616,9 @@ def kb_update(
                     "max_file_bytes": int(max_file_bytes),
                     "codex_batch_max_files": int(codex_batch_max_files),
                     "codex_batch_max_chars": int(codex_batch_max_chars),
+                    "chunking_strategy": chunking_cfg.strategy,
                 },
+                "配置": _kb_config_payload(chunking_cfg, retrieval_cfg),
                 "统计": {
                     "扫描候选文件数": int(summary.scanned),
                     "新增文件数_将调用Codex语义切片": int(summary.added),
@@ -487,6 +630,9 @@ def kb_update(
                     "排除文件数": int(getattr(report, "excluded", 0)),
                     "语义切片成功": int(summary.chunking_success),
                     "fallback切片": int(summary.chunking_fallback),
+                    "chunking_ast": int(summary.chunking_ast),
+                    "chunking_line": int(summary.chunking_line),
+                    "chunking_llm": int(summary.chunking_llm),
                 },
                 "fallback文件": list(summary.fallback_files),
                 "排除原因": [
@@ -505,6 +651,7 @@ def kb_update(
     chunking_info = [
         f"语义切片成功：{summary.chunking_success} 个文件",
         f"Fallback 切片：{summary.chunking_fallback} 个文件",
+        f"策略统计：AST {summary.chunking_ast} / Line {summary.chunking_line} / LLM {summary.chunking_llm}",
     ]
     if summary.fallback_files:
         chunking_info.append(f"  ↳ {', '.join(summary.fallback_files[:5])}" + ("..." if len(summary.fallback_files) > 5 else ""))
@@ -519,6 +666,9 @@ def kb_update(
                     f"写入切片：{summary.chunks_written} 个",
                     f"待入库：{summary.added + summary.changed} 个文件",
                     f"排除：{report.excluded} 个文件",
+                    "─" * 30,
+                    "配置摘要：",
+                    *[f"- {line}" for line in _kb_config_lines(chunking_cfg, retrieval_cfg)],
                     "─" * 30,
                     *chunking_info,
                 ]

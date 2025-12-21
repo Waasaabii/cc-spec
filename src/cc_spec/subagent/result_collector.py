@@ -6,6 +6,7 @@
 
 from dataclasses import dataclass, field
 from datetime import datetime
+from typing import Any
 
 from cc_spec.subagent.executor import ExecutionResult
 
@@ -170,6 +171,28 @@ class ResultCollector:
             "total_duration_seconds": total_duration,
             "success_rate": success_rate,
         }
+
+    @staticmethod
+    def build_progress_entry(result: ExecutionResult) -> dict[str, Any]:
+        """将执行结果转换为 progress.yaml 可写入的条目结构。"""
+        status = "completed" if result.success else "failed"
+        if result.exit_code == 124:
+            status = "timeout"
+
+        entry: dict[str, Any] = {
+            "id": result.task_id,
+            "status": status,
+            "retry_count": int(result.retry_count or 0),
+        }
+        if result.agent_id:
+            entry["agent_id"] = result.agent_id
+        if result.started_at:
+            entry["started_at"] = result.started_at.isoformat()
+        if result.completed_at:
+            entry["completed_at"] = result.completed_at.isoformat()
+        if result.error:
+            entry["notes"] = str(result.error)[:200]
+        return entry
 
     def generate_report(self) -> str:
         """生成 Markdown 格式的执行报告。

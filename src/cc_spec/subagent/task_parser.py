@@ -667,6 +667,56 @@ def update_task_status_yaml(
     )
 
 
+def update_progress_yaml(
+    content: str,
+    task_id: str,
+    *,
+    status: str,
+    agent_id: str | None = None,
+    started_at: str | None = None,
+    completed_at: str | None = None,
+    retry_count: int | None = None,
+    changed_files: list[str] | None = None,
+    notes: str | None = None,
+) -> str:
+    """更新 progress.yaml 中单个任务的状态条目。"""
+    data = yaml.safe_load(content) or {}
+    tasks = data.get("tasks")
+    if not isinstance(tasks, list):
+        tasks = []
+        data["tasks"] = tasks
+
+    entry: dict[str, Any] | None = None
+    for item in tasks:
+        if isinstance(item, dict) and item.get("id") == task_id:
+            entry = item
+            break
+    if entry is None:
+        entry = {"id": task_id}
+        tasks.append(entry)
+
+    entry["status"] = status
+    if agent_id:
+        entry["agent_id"] = agent_id
+    if started_at and not entry.get("started_at"):
+        entry["started_at"] = started_at
+    if completed_at:
+        entry["completed_at"] = completed_at
+    if retry_count is not None:
+        entry["retry_count"] = int(retry_count)
+    if changed_files:
+        entry["changed_files"] = list(changed_files)
+    if notes:
+        entry["notes"] = notes
+
+    return yaml.dump(
+        data,
+        allow_unicode=True,
+        default_flow_style=False,
+        sort_keys=False,
+    )
+
+
 def update_checklist_item_yaml(
     content: str,
     task_id: str,

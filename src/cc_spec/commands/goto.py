@@ -39,7 +39,7 @@ def goto_command(
         False,
         "--execute",
         "-x",
-        help=",
+        help="直接执行所选命令",
     ),
 ) -> None:
     """导航到指定的变更或任务。

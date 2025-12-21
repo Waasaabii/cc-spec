@@ -18,7 +18,12 @@ from cc_spec.commands import quick_delta as quick_delta_cmd
 from cc_spec.commands import specify as specify_cmd
 from cc_spec.commands import update as update_cmd
 from cc_spec.ui.banner import show_banner
-from cc_spec.version import PACKAGE_VERSION
+from cc_spec.version import (
+    CONFIG_VERSION,
+    KB_SCHEMA_VERSION,
+    PACKAGE_VERSION,
+    TEMPLATE_VERSION,
+)
 
 __version__ = PACKAGE_VERSION
 
@@ -40,6 +45,9 @@ def main_callback(
     if version:
         show_banner(console)
         console.print(f"[bold]cc-spec[/bold] 版本 {__version__}")
+        console.print(
+            f"template {TEMPLATE_VERSION} | config {CONFIG_VERSION} | kb {KB_SCHEMA_VERSION}"
+        )
         raise typer.Exit()
     # 如果没有子命令且不是帮助请求，显示 banner
     if ctx.invoked_subcommand is None and "--help" not in sys.argv and "-h" not in sys.argv:

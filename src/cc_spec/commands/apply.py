@@ -8,14 +8,14 @@
 import asyncio
 from datetime import datetime
 from pathlib import Path
-from typing import Optional
+from typing import Any, Optional
 
 import typer
 from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
 
-from cc_spec.core.config import load_config
+from cc_spec.core.config import Config, load_config
 from cc_spec.core.id_manager import IDManager
 from cc_spec.core.lock import LockManager
 from cc_spec.core.state import (
@@ -41,7 +41,7 @@ from cc_spec.rag.pipeline import update_kb
 from cc_spec.rag.workflow import (
     default_embedding_model,
     try_compact_kb,
-    try_update_kb,
+    try_post_task_sync_kb,
     try_write_record,
 )
 from cc_spec.subagent.executor import (
@@ -54,6 +54,7 @@ from cc_spec.subagent.task_parser import (
     TasksDocument,
     TaskStatus,
     parse_tasks_yaml,
+    update_progress_yaml,
 )
 from cc_spec.ui.banner import show_banner
 from cc_spec.ui.progress import WaveProgressTracker
@@ -64,6 +65,32 @@ console = Console()
 # 默认设置
 DEFAULT_MAX_CONCURRENT = 10
 DEFAULT_TIMEOUT_MS = 300000  # 5 分钟
+
+
+def _get_progress_path(project_root: Path | None, change_name: str | None) -> Path | None:
+    if project_root is None or not change_name:
+        return None
+    path = project_root / "docs" / "plan" / change_name / "progress.yaml"
+    return path if path.exists() else None
+
+
+def _try_update_progress(progress_path: Path, entry: dict[str, Any]) -> None:
+    try:
+        content = progress_path.read_text(encoding="utf-8")
+        updated = update_progress_yaml(
+            content,
+            entry.get("id", ""),
+            status=entry.get("status", "idle"),
+            agent_id=entry.get("agent_id"),
+            started_at=entry.get("started_at"),
+            completed_at=entry.get("completed_at"),
+            retry_count=entry.get("retry_count"),
+            changed_files=entry.get("changed_files"),
+            notes=entry.get("notes"),
+        )
+        progress_path.write_text(updated, encoding="utf-8")
+    except Exception as e:
+        console.print(f"[dim]progress.yaml 更新失败：{e}[/dim]")
 
 
 def apply_command(
@@ -100,29 +127,29 @@ def apply_command(
     use_lock: bool = typer.Option(
         True,
         "--lock/--no-lock",
-        help=",
+        help="使用锁机制防止并发执行冲突",
     ),
     force_unlock: Optional[str] = typer.Option(
         None,
         "--force-unlock",
         "-f",
-        help=",
+        help="执行前强制解锁指定任务（例如 --force-unlock 01-SETUP）",
     ),
     skip_locked: bool = typer.Option(
         False,
         "--skip-locked",
-        help=",
+        help="跳过被锁定的任务并继续执行其他任务",
     ),
     tech_check: bool = typer.Option(
         True,
         "--tech-check/--no-tech-check",
-        help=",
+        help="执行完成后运行技术检查（lint/type-check/test）",
     ),
     check_types: Optional[str] = typer.Option(
         None,
         "--check-types",
         "-C",
-        help=",type_check,test,build）",
+        help="指定检查类型，逗号分隔（lint,type_check,test,build）",
     ),
     kb_strict: bool = typer.Option(
         False,
@@ -393,6 +420,7 @@ def apply_command(
                 resume,  # v0.1.5：允许重试 FAILED/IN_PROGRESS
                 project_root,
                 change,
+                config=config,
                 kb_strict=kb_strict,
             )
         )
@@ -439,6 +467,7 @@ def apply_command(
                                 "change_id": change_id,
                                 "change_name": change,
                             },
+                            chunking_config=config.kb.chunking if config else None,
                         )
                         try_write_record(
                             project_root,
@@ -515,6 +544,7 @@ async def _execute_with_progress(
     resume: bool = False,  # v0.1.5：支持重试失败任务
     project_root: Path | None = None,
     change_name: str | None = None,
+    config: Config | None = None,
     kb_strict: bool = False,
 ) -> dict[int, list[ExecutionResult]]:
     """执行所有 wave，并展示进度。
@@ -553,6 +583,7 @@ async def _execute_with_progress(
             change_id = None
 
     kb_model: str | None = default_embedding_model(project_root) if project_root else None
+    progress_path = _get_progress_path(project_root, change_name)
 
     # v0.1.6：严格模式基线同步（避免把“历史脏状态”误归属到第一个任务）
     if kb_strict and project_root and change_name:
@@ -573,6 +604,7 @@ async def _execute_with_progress(
                 reference_mode="index",
                 attribution=baseline_attr,
                 skip_list_fields=True,
+                chunking_config=config.kb.chunking if config else None,
             )
             try_write_record(
                 project_root,
@@ -686,6 +718,7 @@ async def _execute_with_progress(
                                 "wave": wave.wave_number,
                                 "task_id": result.task_id,
                             },
+                            chunking_config=config.kb.chunking if config else None,
                         )
                         try_write_record(
                             project_root,
@@ -711,6 +744,10 @@ async def _execute_with_progress(
                     except Exception as e:
                         console.print(f"[red]KB 更新失败（严格模式）：[/red] {e}")
                         raise
+
+            if progress_path is not None:
+                entry = ResultCollector.build_progress_entry(result)
+                _try_update_progress(progress_path, entry)
 
         # 执行 wave 
         if kb_strict:
@@ -747,8 +784,10 @@ async def _execute_with_progress(
 
         # v0.1.5：Wave 完成后做一次增量 KB 更新（失败不阻断）
         if (not kb_strict) and project_root and change_name:
-            kb_res = try_update_kb(
+            kb_res = try_post_task_sync_kb(
                 project_root,
+                config=config,
+                embedding_model=kb_model,
                 reference_mode="index",
                 attribution={
                     "step": "apply",

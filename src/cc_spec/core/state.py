@@ -138,7 +138,6 @@ def load_state(state_path: Path) -> ChangeState:
                     id=task_data["id"],
                     status=status,
                     wave=task_data.get("wave", 0),
-                    字段
                     agent_id=task_data.get("agent_id"),
                     started_at=task_data.get("started_at"),
                     completed_at=task_data.get("completed_at"),

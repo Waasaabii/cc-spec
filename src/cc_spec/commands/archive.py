@@ -25,6 +25,7 @@ from cc_spec.core.delta import (
     parse_delta,
     validate_delta,
 )
+from cc_spec.core.config import load_config
 from cc_spec.core.id_manager import IDManager
 from cc_spec.core.state import (
     Stage,
@@ -35,7 +36,7 @@ from cc_spec.core.state import (
     update_state,
 )
 from cc_spec.rag.models import WorkflowStep
-from cc_spec.rag.workflow import try_compact_kb, try_update_kb, try_write_record
+from cc_spec.rag.workflow import try_compact_kb, try_post_task_sync_kb, try_write_record
 from cc_spec.ui.banner import show_banner
 from cc_spec.utils.files import (
     ensure_dir,
@@ -92,6 +93,13 @@ def archive_command(
 
     cc_spec_root = get_cc_spec_dir(project_root)
     id_manager = IDManager(cc_spec_root)
+    config = None
+    config_path = cc_spec_root / "config.yaml"
+    if config_path.exists():
+        try:
+            config = load_config(config_path)
+        except Exception as e:
+            console.print(f"[yellow]警告：[/yellow] 无法加载配置：{e}")
 
     # 确定变更目录
     changes_dir = get_changes_dir(project_root)
@@ -374,8 +382,9 @@ def archive_command(
     except Exception:
         change_id = None
 
-    kb_updated = try_update_kb(
+    kb_updated = try_post_task_sync_kb(
         project_root,
+        config=config,
         reference_mode="index",
         attribution={
             "step": "archive",

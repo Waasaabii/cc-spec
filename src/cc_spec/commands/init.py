@@ -10,6 +10,11 @@ from rich.tree import Tree
 
 from cc_spec.core.command_generator import CC_SPEC_COMMANDS, get_generator
 from cc_spec.core.config import Config, save_config
+from cc_spec.core.standards_renderer import (
+    render_agents_md,
+    render_skill_md,
+    write_managed_file,
+)
 from cc_spec.ui.banner import show_banner
 from cc_spec.utils.files import ensure_dir, get_cc_spec_dir, get_config_path
 
@@ -162,107 +167,21 @@ def init_command(
     )
     console.print()
 
-    # 步骤2.5: 生成AGENTS.md通用指令文件
-    agents_md_path = project_root / "AGENTS.md"
-    if not agents_md_path.exists():
-        console.print("[cyan]正在生成 AGENTS.md...[/cyan]")
-        try:
-            agents_md_content = """# CC-Spec 工作流指南
+    # 步骤2.5: 生成/更新 AGENTS.md 与 SKILL.md（规范产出物）
+    console.print("[cyan]正在生成/更新 AGENTS.md 与 SKILL.md...[/cyan]")
+    try:
+        agents_md_path = project_root / "AGENTS.md"
+        skill_md_path = project_root / ".claude" / "skills" / "cc-spec-standards" / "SKILL.md"
 
-本项目使用 **cc-spec** 进行规格驱动开发（Spec → Plan → Execute → Verify → Archive）。
+        agents_md_content = render_agents_md()
+        skill_md_content = render_skill_md()
 
-## 快速入口
+        write_managed_file(agents_md_path, agents_md_content)
+        write_managed_file(skill_md_path, skill_md_content)
 
-- 标准 7 步：`init → specify → clarify → plan → apply → checklist → archive`
-- 超简单模式：`quick-delta`
-
-## 在 Claude Code 中调用（由 `cc-spec init` 生成命令文件）
-
-| 工具 | 调用方式 | 示例 |
-|------|----------|------|
-| Claude Code | `/cc-spec:specify` | `/cc-spec:specify add-oauth` |
-
-## CLI 命令速查
-
-### init - 初始化项目
-```bash
-cc-spec init [project] [--force]
-```
-
-### kb - 知识库（RAG）
-```bash
-cc-spec kb status
-cc-spec kb preview
-cc-spec kb init
-cc-spec kb update
-cc-spec kb query "query"
-cc-spec kb context "query"
-cc-spec kb record --step specify --change my-change
-cc-spec kb compact
-```
-
-### specify - 创建/编辑变更提案
-```bash
-cc-spec specify <change-name | C-XXX>
-```
-
-### clarify - 审查任务 / 标记返工（可选歧义检测）
-```bash
-cc-spec clarify [C-XXX | C-XXX:task-id | task-id] [--detect]
-```
-
-### plan - 生成执行计划（tasks.yaml）
-```bash
-cc-spec plan [change-name | C-XXX]
-```
-
-### apply - 执行任务（SubAgent 并发）
-```bash
-cc-spec apply [change-name | C-XXX]
-```
-
-### checklist - 验收打分（默认 ≥80 通过）
-```bash
-cc-spec checklist [change-name | C-XXX] [--threshold 80]
-```
-
-### archive - 归档已完成变更
-```bash
-cc-spec archive <change-name | C-XXX>
-```
-
-### list - 列出 changes/tasks/specs/archive
-```bash
-cc-spec list <changes | tasks | specs | archive>
-```
-
-### goto - 导航到变更或任务
-```bash
-cc-spec goto <C-XXX | C-XXX:task-id | change-name>
-```
-
-### update - 更新命令/模板/配置
-```bash
-cc-spec update [commands|subagent|all] [--templates]
-```
-
-### quick-delta - 一步记录并归档小变更
-```bash
-cc-spec quick-delta \"<description>\"
-```
-
----
-
-*本文件由 `cc-spec init` 生成，可按需自行补充项目约定。*
-"""
-            agents_md_path.write_text(agents_md_content, encoding="utf-8")
-            console.print("[green]✓[/green] 已生成 AGENTS.md 通用指令文件")
-        except Exception as e:
-            console.print(
-                f"[yellow]⚠[/yellow] 警告: 生成 AGENTS.md 失败: {e}"
-            )
-    else:
-        console.print("[dim]AGENTS.md 已存在，跳过生成[/dim]")
+        console.print("[green]?[/green] 已生成/更新 AGENTS.md 与 SKILL.md")
+    except Exception as e:
+        console.print(f"[yellow]?[/yellow] 警告: 生成规范产出物失败: {e}")
 
     console.print()
 
@@ -363,9 +282,14 @@ cc-spec quick-delta \"<description>\"
             f"[cyan]编排工具:[/cyan] Claude Code\n"
             f"[cyan]执行工具:[/cyan] Codex CLI（由 cc-spec 调用）\n\n"
             f"[bold]下一步操作:[/bold]\n"
-            f"  1. 在 Claude Code 中执行 [cyan]/cc-spec:init[/cyan] 构建/更新 KB（先 scan 再入库）\n"
-            f"  2. 在 Claude Code 中执行 [cyan]/cc-spec:specify <变更名称>[/cyan] 创建变更规格\n"
-            f"  3. 继续执行 [cyan]/cc-spec:clarify[/cyan] → [cyan]/cc-spec:plan[/cyan] → [cyan]/cc-spec:apply[/cyan]",
+            f"  1. （已完成）终端执行 [cyan]cc-spec init[/cyan]\n"
+            f"  2. 在 Claude Code 中执行 [cyan]/cc-spec:init[/cyan] 构建/更新 KB（先 scan 再入库）\n"
+            f"  3. 在 Claude Code 中执行 [cyan]/cc-spec:specify <变更名称>[/cyan] 创建变更规格\n"
+            f"  4. 继续执行 [cyan]/cc-spec:clarify[/cyan]\n"
+            f"  5. 继续执行 [cyan]/cc-spec:plan[/cyan]\n"
+            f"  6. 继续执行 [cyan]/cc-spec:apply[/cyan]\n"
+            f"  7. 继续执行 [cyan]/cc-spec:checklist[/cyan]\n"
+            f"  8. 继续执行 [cyan]/cc-spec:archive[/cyan]",
             title="[bold green]快速开始[/bold green]",
             border_style="green",
         )
