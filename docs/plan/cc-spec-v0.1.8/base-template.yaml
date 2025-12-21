@@ -4,6 +4,11 @@
 #   - .claude/skills/cc-spec-standards/SKILL.md（给 Claude）
 #   - AGENTS.md（给 Codex）
 #
+# 说明：
+#   - docs/plan/ 仅供人类阅读，不参与运行时配置或决策
+#   - template_mapping 仅用于实现指引，运行时使用内置模板
+#   - SKILL.md / AGENTS.md 是 CLI/Agent 指令产物
+#
 # 生成时机：Claude /cc-spec:init 分析项目后填充 project_specific 字段
 
 version: "1.0.8"
@@ -17,6 +22,154 @@ meta:
   project_name: null          # init 时填充
   tech_stack: []              # init 时填充，如 [python, fastapi, postgresql]
   detected_frameworks: []     # init 时填充，如 [pydantic, sqlalchemy, alembic]
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# 版本策略
+# ═══════════════════════════════════════════════════════════════════════════════
+versioning:
+  description: cc-spec 版本号体系说明
+
+  package_version:
+    current: "0.1.8"
+    format: "0.x.y"
+    description: Python 包版本号，遵循语义化版本
+
+  template_version:
+    current: "1.0.8"
+    format: "1.x.y"
+    description: 规范模板版本号，1.0.x 表示初代稳定版
+
+  config_version:
+    current: "1.4"
+    format: "x.y"
+    description: config.yaml 格式版本，用于配置迁移
+
+  kb_schema_version:
+    current: "0.1.8"
+    format: "0.x.y"
+    description: KB 数据库 schema 版本，与包版本同步
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Init 生成规则
+# ═══════════════════════════════════════════════════════════════════════════════
+init:
+  description: |
+    cc-spec init 根据项目特点动态生成规范文件。
+    Claude 分析项目后填充 project 字段，然后生成 SKILL.md 和 AGENTS.md。
+
+  # ---------------------------------------------------------------------------
+  # 生成产物
+  # ---------------------------------------------------------------------------
+  outputs:
+    skill_md:
+      path: .claude/skills/cc-spec-standards/SKILL.md
+      target: Claude
+      description: Claude 专属规范，包含角色定位、产出物、工作流程
+      sections:
+        - source: common（通用规范）
+        - source: claude（Claude 专属规范）
+        - source: project.coding_rules（项目编码规范）
+        - source: project.architecture_rules（项目架构规范）
+        - source: kb.retrieval（KB 检索配置）
+
+    agents_md:
+      path: AGENTS.md
+      target: Codex
+      description: Codex 专属规范，包含角色定位、执行规则、命令说明
+      sections:
+        - source: common（通用规范）
+        - source: codex（Codex 专属规范）
+        - source: project.coding_rules（项目编码规范）
+        - source: project.naming_conventions（命名约定）
+
+    config_yaml:
+      path: .cc-spec/config.yaml
+      description: 项目配置文件，包含 KB 策略、打分阈值等
+      sections:
+        - source: kb.chunking（切片策略）
+        - source: kb.update（更新策略）
+        - source: kb.retrieval（检索配置）
+
+  # ---------------------------------------------------------------------------
+  # 项目分析流程
+  # ---------------------------------------------------------------------------
+  analysis:
+    description: Claude 分析项目的步骤
+
+    steps:
+      - step: 1
+        name: 检测技术栈
+        action: 扫描 pyproject.toml / package.json / go.mod 等
+        output: meta.tech_stack, meta.detected_frameworks
+
+      - step: 2
+        name: 识别项目结构
+        action: 分析目录结构和入口文件
+        output: project.detected.language, project.detected.framework
+
+      - step: 3
+        name: 提取编码规范
+        action: 读取 .editorconfig / .eslintrc / ruff.toml 等
+        output: project.coding_rules
+
+      - step: 4
+        name: 分析架构模式
+        action: 识别 MVC / DDD / 微服务等模式
+        output: project.architecture_rules
+
+      - step: 5
+        name: 生成规范文件
+        action: 根据模板和分析结果生成 SKILL.md / AGENTS.md
+        output: .claude/skills/cc-spec-standards/SKILL.md, AGENTS.md
+
+  # ---------------------------------------------------------------------------
+  # 模板映射规则
+  # ---------------------------------------------------------------------------
+  template_mapping:
+    description: base-template.yaml 字段到生成文件的映射
+
+    skill_md_template: |
+      # cc-spec Standards (for Claude)
+
+      ## 角色定位
+      {claude.role.rules}
+
+      ## 产出物
+      {claude.outputs.artifacts}
+
+      ### 禁止产出
+      {claude.outputs.forbidden}
+
+      ## 工作流程
+      {claude.workflow.phases}
+
+      ## 项目编码规范
+      {project.coding_rules}
+
+      ## KB 规则
+      ### 写入规则
+      {claude.kb_write_rules.rules}
+
+    agents_md_template: |
+      # AGENTS.md (for Codex)
+
+      ## 角色定位
+      {codex.role.rules}
+
+      ## 产出物
+      {codex.outputs.artifacts}
+
+      ### 禁止产出
+      {codex.outputs.forbidden}
+
+      ## 执行规则
+      {codex.execution_rules.rules}
+
+      ## 项目编码规范
+      {project.coding_rules}
+
+      ## 命令说明
+      {codex.commands.list}
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # 通用规范（所有 AI 工具共享）
@@ -73,6 +226,25 @@ claude:
       - 负责将需求/上下文写入 KB，供 Codex 读取
       - 不直接编写业务代码，代码实现由 Codex 完成
       - 负责审核 Codex 的执行结果，处理异常情况
+
+  outputs:
+    title: Claude 产出物
+    description: Claude 的主要产出是 YAML/Markdown 规范文件，不产出业务代码
+    artifacts:
+      - type: proposal.md
+        description: 变更提案（需求描述、影响范围、技术方案）
+      - type: tasks.yaml
+        description: 任务拆分（Wave/Task 结构、依赖关系、检查清单）
+      - type: config.yaml
+        description: 项目配置（工具选项、打分阈值、KB 策略）
+      - type: base-template.yaml
+        description: 规范模板（编码规范、架构约束、安全规则）
+      - type: KB records
+        description: 工作流记录（需求摘要、任务上下文、执行结果）
+    forbidden:
+      - 业务代码（.py, .ts, .js 等）
+      - 测试代码（test_*.py, *.spec.ts 等）
+      - 配置代码（除 cc-spec 相关的 yaml 外）
 
   core_principle:
     title: KB 信息桥梁原则
@@ -167,6 +339,23 @@ codex:
       - 从 KB 获取上下文（需求 + 代码），理解任务目标
       - 直接执行任务，修改代码文件
       - 遵循项目规范，输出高质量代码
+
+  outputs:
+    title: Codex 产出物
+    description: Codex 的主要产出是业务代码，不产出规范文件
+    artifacts:
+      - type: 业务代码
+        description: 功能实现（.py, .ts, .js, .go 等）
+      - type: 测试代码
+        description: 单元测试、集成测试（test_*.py, *.spec.ts 等）
+      - type: 配置文件
+        description: 应用配置（非 cc-spec 相关）
+      - type: 数据库迁移
+        description: Schema 变更（migrations/）
+    forbidden:
+      - cc-spec 规范文件（proposal.md, tasks.yaml, base-template.yaml）
+      - KB 记录（由 Claude 通过 cc-spec kb record 写入）
+      - 工作流状态文件（status.yaml）
 
   core_principle:
     title: KB 驱动执行原则
@@ -336,10 +525,37 @@ kb:
     KB（Knowledge Base）是 Claude 和 Codex 之间的信息桥梁。
     包含两类数据：代码切片（code chunks）和工作流记录（workflow records）。
 
-  # AST Chunking 算法来源：
-  # - astchunk (https://github.com/yilinjz/astchunk) - MIT License
-  # - 基于 cAST 论文 (https://arxiv.org/abs/2506.15655)
-  # - 语言支持：tree-sitter-language-pack (100+ languages)
+  # ---------------------------------------------------------------------------
+  # 参考项目与代码复用
+  # ---------------------------------------------------------------------------
+  references:
+    description: Smart Chunking 功能的开源项目参考
+
+    astchunk:
+      repo: https://github.com/yilinjz/astchunk
+      license: MIT
+      paper: https://arxiv.org/abs/2506.15655
+      description: AST-based 代码切片核心算法
+      copy_files:
+        - source: astchunk/chunker.py
+          target: src/cc_spec/rag/chunker.py
+          modifications:
+            - 替换语言检测逻辑，使用 tree-sitter-language-pack
+            - 移除 Java/C# 特定的硬编码，改为动态语言支持
+            - 添加 fallback 到 line-based chunking
+        - source: astchunk/utils.py
+          target: src/cc_spec/rag/ast_utils.py
+          modifications:
+            - 仅复制 AST 遍历相关函数
+            - 适配 cc-spec 的日志和错误处理
+
+    tree_sitter_language_pack:
+      package: tree-sitter-language-pack
+      pypi: https://pypi.org/project/tree-sitter-language-pack/
+      description: 100+ 编程语言的 tree-sitter parser 支持
+      usage: |
+        替代 astchunk 原有的 4 语言硬编码支持，
+        通过 get_language() 动态获取任意语言的 parser
 
   # ---------------------------------------------------------------------------
   # Smart Chunking 策略配置

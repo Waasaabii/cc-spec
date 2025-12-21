@@ -12,7 +12,7 @@ cc-spec is a spec-driven development CLI tool that combines the best of [OpenSpe
 
 ### Key Features
 
-- **7-Step Standard Workflow**: `init → specify → clarify → plan → apply → checklist → archive`
+- **8-Step Standard Workflow**: `init → kb init/update → specify → clarify → plan → apply → checklist → archive`
 - **SubAgent Concurrent Execution**: Up to 10 SubAgents in parallel during apply phase (Claude Code only)
 - **Multi-AI Tool Support**: Command integration for 17+ AI tools (Claude, Cursor, Gemini, Copilot, etc.)
 - **Delta Change Tracking**: ADDED / MODIFIED / REMOVED / RENAMED format
@@ -44,22 +44,27 @@ uv tool install cc-spec --force --from git+https://github.com/Waasaabii/cc-spec.
 # 1. Initialize project (select AI tools to support)
 cc-spec init --ai claude,cursor
 
-# 2. Create change specification
+# 2. (Recommended) build/update KB
+cc-spec kb init
+# or in Claude Code:
+# /cc-spec:init
+
+# 3. Create change specification
 cc-spec specify add-user-auth
 
-# 3. Clarify requirements
+# 4. Clarify requirements or rework tasks
 cc-spec clarify
 
-# 4. Generate execution plan
+# 5. Generate execution plan
 cc-spec plan
 
-# 5. Execute tasks (SubAgent concurrent, Claude Code only)
+# 6. Execute tasks (SubAgent concurrent, Claude Code only)
 cc-spec apply
 
-# 6. Acceptance scoring
+# 7. Acceptance scoring
 cc-spec checklist
 
-# 7. Archive changes
+# 8. Archive changes
 cc-spec archive
 ```
 
@@ -71,6 +76,32 @@ cc-spec quick-delta "Fix login page styling issue"
 ```
 
 ---
+
+## Workflow (Detailed)
+
+> Core principle: **Claude orchestrates/reviews, Codex implements**; KB bridges context.
+
+| Step | Purpose | Command | Key Output |
+|------|---------|---------|-----------|
+| 1. init | Project setup & config | `cc-spec init` | `.cc-spec/`, `config.yaml` |
+| 2. kb init/update | Build/update KB (recommended) | `cc-spec kb init` / `cc-spec kb update` | `.cc-spec/vectordb/`, workflow records |
+| 3. specify | Define scope & success criteria | `cc-spec specify <change>` | `.cc-spec/changes/<change>/proposal.md` |
+| 4. clarify | Resolve ambiguity or mark rework | `cc-spec clarify [task-id]` | Clarifications / rework markers |
+| 5. plan | Generate executable plan | `cc-spec plan` | `.cc-spec/changes/<change>/tasks.yaml` |
+| 6. apply | Run tasks concurrently | `cc-spec apply` | Task status updates & execution records |
+| 7. checklist | Acceptance scoring (default ≥80) | `cc-spec checklist` | Checklist report |
+| 8. archive | Merge Delta specs & archive | `cc-spec archive` | `.cc-spec/changes/archive/...` |
+
+### Step Notes
+
+- **init**: Prepares local structure only (no KB write).
+- **kb init/update**: Use `kb preview` before indexing if needed.
+- **specify**: Capture Why / What Changes / Impact / Success Criteria (avoid implementation details).
+- **clarify**: Ask high-impact questions and write back to proposal; or mark tasks for rework.
+- **plan**: Outputs `tasks.yaml` (Gate-0 + Wave, deps, checklist).
+- **apply**: Runs Wave-by-Wave; retry failures with `--resume`.
+- **checklist**: Weighted scoring across Functionality/Quality/Tests/Docs.
+- **archive**: Merges Delta specs into main specs and archives the change.
 
 ## Using in AI Tools
 

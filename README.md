@@ -22,9 +22,10 @@ openspec缺少打分环节。speckit又对模型的改造太大，完全忽略�
 
 ### 核心特性
 
-- **7 步标准工作流**: `init → specify → clarify → plan → apply → checklist → archive`
+- **8 步标准工作流**: `init → kb init/update → specify → clarify → plan → apply → checklist → archive`
 - **Claude 编排 / Codex 执行（v0.1.6）**: Claude 只负责编排，Codex CLI 负责产出代码/文件
 - **智能上下文 + RAG 知识库（v0.1.6）**: ChromaDB 向量库 + fastembed embeddings + workflow records
+- **Smart Chunking（v0.1.8）**: AST / Line / LLM 三层切片策略，速度提升、token 成本降低
 - **Delta 变更追踪**: ADDED / MODIFIED / REMOVED / RENAMED 格式
 - **打分验收机制**: checklist 打分 ≥80 通过，否则打回 apply
 - **超简单模式**: `quick-delta` 一步生成变更记录
@@ -54,13 +55,15 @@ uv tool install cc-spec --force --from git+https://github.com/Waasaabii/cc-spec.
 # 1. 初始化项目（生成 Claude Code 的 /cc-spec:* 命令）
 cc-spec init
 
-# 2. （推荐）先构建/更新知识库（在 Claude Code 中执行）
+# 2. （推荐）构建/更新知识库（任选其一）
+cc-spec kb init
+# 或在 Claude Code 中执行：
 # /cc-spec:init
 
 # 3. 创建变更规格
 cc-spec specify add-user-auth
 
-# 4. 澄清需求
+# 4. 澄清需求/返工
 cc-spec clarify
 
 # 5. 生成执行计划
@@ -76,6 +79,34 @@ cc-spec checklist
 cc-spec archive
 ```
 
+---
+
+## 工作流（细化）
+
+> 核心原则：**Claude 负责编排与审核，Codex 负责落地代码**；KB 作为上下文桥梁。
+
+| 步骤 | 目的 | 主要命令 | 关键产物 |
+|------|------|----------|----------|
+| 1. init | 初始化项目结构与配置 | `cc-spec init` | `.cc-spec/`、`config.yaml` |
+| 2. kb init/update | 构建/更新知识库（推荐） | `cc-spec kb init` / `cc-spec kb update` | `.cc-spec/vectordb/`、workflow records |
+| 3. specify | 需求规格与范围 | `cc-spec specify <change>` | `.cc-spec/changes/<change>/proposal.md` |
+| 4. clarify | 澄清需求或标记返工 | `cc-spec clarify [task-id]` | proposal 澄清记录 / 任务返工标记 |
+| 5. plan | 生成可执行计划 | `cc-spec plan` | `.cc-spec/changes/<change>/tasks.yaml` |
+| 6. apply | 并发执行任务 | `cc-spec apply` | 任务状态更新、执行记录 |
+| 7. checklist | 验收打分（默认 ≥80 通过） | `cc-spec checklist` | checklist 报告 |
+| 8. archive | 归档并合并 Delta specs | `cc-spec archive` | `.cc-spec/changes/archive/...` |
+
+### 每步要点
+
+- **init**：只负责本地结构与配置，不入库。
+- **kb init/update**：生成/更新 KB；推荐先 `kb preview` 再入库。
+- **specify**：写清 Why / What Changes / Impact / Success Criteria，避免实现细节。
+- **clarify**：对高影响歧义提问并写回 proposal；或对任务标记返工。
+- **plan**：输出 `tasks.yaml`（Gate-0 + Wave 并发结构、依赖、checklist）。
+- **apply**：按 Wave 并发执行；失败用 `--resume` 继续。
+- **checklist**：按四维度打分（功能/质量/测试/文档），低于阈值会回到 apply/clarify。
+- **archive**：合并 Delta specs 到主 specs 并归档变更目录。
+
 ### 超简单模式
 
 ```bash
@@ -89,8 +120,16 @@ cc-spec quick-delta "修复登录页面样式问题"
 
 cc-spec init 会生成 Claude Code 的命令文件到 `.claude/commands/cc-spec/`，在 Claude Code 中可直接调用：
 
-- `/cc-spec:init`（构建/更新 KB：先 scan，再入库）
+- `/cc-spec:init`（构建/更新 KB：先 scan，再入库，默认使用 Smart Chunking）
 - `/cc-spec:specify` / `/cc-spec:clarify` / `/cc-spec:plan` / `/cc-spec:apply` / `/cc-spec:checklist` / `/cc-spec:archive`
+
+---
+
+## 文档与规范产物
+
+- `docs/plan/` 仅供人类阅读的规划文档，不作为运行时配置来源。
+- `base-template.yaml` 的 `template_mapping` 仅用于实现指引，运行时使用内置模板渲染。
+- `SKILL.md` / `AGENTS.md` 是 `cc-spec init` 生成的 CLI/Agent 指令产物。
 
 ---
 
