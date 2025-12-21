@@ -75,3 +75,11 @@ strict = true
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-v --cov=cc_spec --cov-report=term-missing"
+markers = [
+    "unit: unit tests",
+    "cli: CLI command tests",
+    "rag: KB/RAG tests",
+    "codex: Codex integration/unit tests",
+    "integration: full workflow/integration tests",
+    "slow: slow tests",
+]

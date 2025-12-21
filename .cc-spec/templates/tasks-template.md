@@ -40,7 +40,7 @@ description: "Task list template for feature implementation"
   - 独立测试
   - 作为 MVP 的一个增量交付
   
-  不要在生成的 tasks.md 中保留这些示例任务。
+  不要在生成的 tasks.yaml 中保留这些示例任务。
   ============================================================================
 -->
 
