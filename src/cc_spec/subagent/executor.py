@@ -285,7 +285,7 @@ class ExecutionResult:
 class SubAgentExecutor:
     """SubAgent 并行任务执行器。
 
-    处理 tasks.md 文件中的任务，按 Wave 组织并在 Wave 内并发执行任务，
+    处理 tasks.yaml 文件中的任务，按 Wave 组织并在 Wave 内并发执行任务，
     同时保持 Wave 之间的顺序执行。
 
     
@@ -293,13 +293,13 @@ class SubAgentExecutor:
     
 
     属性：
-        tasks_md_path: tasks.md 文件路径
+        tasks_md_path: tasks.yaml 文件路径
         max_concurrent: 最大并发任务数
         timeout_ms: 默认任务超时时间 (毫秒)
         config: 可选的 Config 配置对象
         lock_manager: 
         doc: 解析后的 TasksDocument
-        tasks_md_content: tasks.md 的原始内容
+        tasks_md_content: tasks.yaml 的原始内容
         change_summary: 
     """
 
@@ -318,7 +318,7 @@ class SubAgentExecutor:
         """初始化执行器。
 
         参数：
-            tasks_md_path: tasks.md 文件路径
+            tasks_md_path: tasks.yaml 文件路径
             max_concurrent: 最大并发任务数
             timeout_ms: 默认任务超时时间 (毫秒)
             config: 可选的 Config 配置对象
@@ -328,10 +328,10 @@ class SubAgentExecutor:
 
         异常：
             FileNotFoundError: 如果 tasks_md_path 不存在
-            ValueError: 如果 tasks.md 格式无效
+            ValueError: 如果 tasks.yaml 格式无效
         """
         if not tasks_md_path.exists():
-            raise FileNotFoundError(f"tasks.md 文件不存在: {tasks_md_path}")
+            raise FileNotFoundError(f"tasks.yaml 文件不存在: {tasks_md_path}")
 
         self.tasks_md_path = tasks_md_path
         self.max_concurrent = max_concurrent

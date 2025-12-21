@@ -28,6 +28,7 @@ from cc_spec.rag.workflow import try_write_record
 from cc_spec.ui.banner import show_banner
 from cc_spec.ui.display import show_task_table
 from cc_spec.utils.files import find_project_root, get_cc_spec_dir
+from cc_spec.version import TASKS_YAML_VERSION
 
 console = Console()
 
@@ -205,7 +206,7 @@ def plan_command(
 def _create_basic_tasks_yaml(tasks_yaml_path: Path, change_name: str) -> None:
     """创建基础 tasks.yaml 结构。"""
     data = {
-        "version": "1.6",
+        "version": TASKS_YAML_VERSION,
         "change": change_name,
         "tasks": {
             "01-SETUP": {

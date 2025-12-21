@@ -21,6 +21,7 @@ from cc_spec.core.command_templates import (
     CommandTemplateContext,
     InitTemplate,
     PlanTemplate,
+    QuickDeltaTemplate,
     SpecifyTemplate,
 )
 
@@ -51,6 +52,7 @@ COMMAND_TEMPLATES: dict[str, type[CommandTemplate]] = {
     "plan": PlanTemplate,
     "apply": ApplyTemplate,
     "checklist": ChecklistTemplate,
+    "quick-delta": QuickDeltaTemplate,
 }
 
 
@@ -247,4 +249,3 @@ def get_generator(agent: str) -> CommandGenerator | None:
 
 def get_available_agents() -> list[str]:
     return list(COMMAND_GENERATORS.keys())
-

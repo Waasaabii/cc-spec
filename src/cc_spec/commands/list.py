@@ -14,6 +14,7 @@ from rich.table import Table
 
 from cc_spec.core.id_manager import IDManager
 from cc_spec.core.state import ChangeState, Stage, load_state
+from cc_spec.subagent.task_parser import parse_tasks_yaml
 from cc_spec.ui.banner import show_banner
 from cc_spec.ui.display import STAGE_NAMES, STATUS_ICONS, STATUS_NAMES, THEME
 from cc_spec.utils.files import find_project_root, get_cc_spec_dir
@@ -280,12 +281,12 @@ def _list_tasks(
         console.print(f"[red]错误：[/red] 加载状态失败：{e}")
         raise typer.Exit(1)
 
-    # 如果存在则从 tasks.md 加载任务
-    tasks_file = change_path / "tasks.md"
+    # 如果存在则从 tasks.yaml 加载任务
+    tasks_file = change_path / "tasks.yaml"
     task_data: list[dict[str, Any]] = []
 
     if tasks_file.exists():
-        # 解析 tasks.md 中的任务
+        # 解析 tasks.yaml 中的任务
         task_data = _parse_tasks_from_file(tasks_file, resolved_change_id)
     else:
         # 使用状态文件中的任务
@@ -327,10 +328,10 @@ def _parse_tasks_from_file(
     tasks_file: Path,
     change_id: str,
 ) -> list[dict[str, Any]]:
-    """从 tasks.md 文件解析任务。
+    """从 tasks.yaml 文件解析任务。
 
     参数：
-        tasks_file：tasks.md 文件路径
+        tasks_file：tasks.yaml 文件路径
         change_id：用于给任务 ID 加前缀的变更 ID
 
     返回：
@@ -343,117 +344,25 @@ def _parse_tasks_from_file(
     except (OSError, UnicodeDecodeError):
         return tasks
 
-    import re
+    cc_spec_dir = tasks_file.parent.parent.parent
+    if not cc_spec_dir.exists():
+        cc_spec_dir = None
 
-    # 优先从「概览」表格解析（与 apply 解析逻辑保持一致）
-    overview_pattern = re.compile(
-        r"^\|\s*(\d+)\s*\|\s*([A-Z0-9-]+)\s*\|\s*([^|]+?)\s*\|\s*([^|]+?)\s*\|\s*([^|]+?)\s*\|$",
-        re.MULTILINE,
-    )
-
-    overview_matches = list(overview_pattern.finditer(content))
-    if overview_matches:
-        status_map = {
-            "🟦": "pending",
-            "🟨": "in_progress",
-            "🟩": "completed",
-            "🟥": "failed",
-            "⏰": "timeout",
-            "○": "pending",
-            "…": "in_progress",
-            "√": "completed",
-            "×": "failed",
-            "!": "timeout",
-        }
-
-        for match in overview_matches:
-            wave_str, task_id, estimate, status_str, deps_str = match.groups()
-            wave = int(wave_str)
-
-            status = "pending"
-            for icon, status_name in status_map.items():
-                if icon in status_str:
-                    status = status_name
-                    break
-            else:
-                # fallback: 根据中文关键词推断
-                if "完成" in status_str:
-                    status = "completed"
-                elif "进行中" in status_str:
-                    status = "in_progress"
-                elif "失败" in status_str:
-                    status = "failed"
-
-            deps_text = deps_str.strip()
-            dependencies = (
-                []
-                if deps_text in ("-", "无", "无依赖")
-                else [d.strip() for d in deps_text.split(",") if d.strip()]
-            )
-
-            tasks.append(
-                {
-                    "id": f"{change_id}:{task_id}",
-                    "task_id": task_id,
-                    "wave": wave,
-                    "status": status,
-                    "estimate": estimate.strip(),
-                    "dependencies": dependencies,
-                }
-            )
-
+    try:
+        doc = parse_tasks_yaml(content, cc_spec_dir=cc_spec_dir)
+    except ValueError:
         return tasks
 
-    # 兼容旧格式：按任务区块解析
-    task_pattern = re.compile(r"^###\s+(?:Task|任务)[:：]\s*(.+)", re.MULTILINE)
-
-    for match in task_pattern.finditer(content):
-        task_id = match.group(1).strip()
-        task_start = match.end()
-
-        next_match = task_pattern.search(content, task_start)
-        task_end = next_match.start() if next_match else len(content)
-        task_content = content[task_start:task_end]
-
-        wave = 0
-        status = "pending"
-        estimate = "-"
-        dependencies: list[str] = []
-
-        wave_match = re.search(r"\*\*(?:Wave|波次)\*\*[:：]\s*(\d+)", task_content)
-        if wave_match:
-            wave = int(wave_match.group(1))
-
-        status_match = re.search(r"\*\*状态\*\*:\s*([^\n]+)", task_content)
-        if status_match:
-            status_text = status_match.group(1).strip()
-            if "完成" in status_text or "🟩" in status_text or "√" in status_text:
-                status = "completed"
-            elif "进行中" in status_text or "🟨" in status_text or "…" in status_text:
-                status = "in_progress"
-            elif "失败" in status_text or "🟥" in status_text or "×" in status_text:
-                status = "failed"
-            elif "超时" in status_text or "⏰" in status_text or "!" in status_text:
-                status = "timeout"
-
-        estimate_match = re.search(r"\*\*预估上下文\*\*:\s*~?(\d+[kK]?)", task_content)
-        if estimate_match:
-            estimate = estimate_match.group(1)
-
-        deps_match = re.search(r"\*\*依赖\*\*:\s*([^\n]+)", task_content)
-        if deps_match:
-            deps_text = deps_match.group(1).strip()
-            if deps_text and deps_text != "-" and deps_text.lower() != "无":
-                dependencies = [d.strip() for d in deps_text.split(",")]
-
+    for task in sorted(doc.all_tasks.values(), key=lambda t: (t.wave, t.task_id)):
+        estimate = str(task.estimated_tokens) if task.estimated_tokens else "-"
         tasks.append(
             {
-                "id": f"{change_id}:{task_id}",
-                "task_id": task_id,
-                "wave": wave,
-                "status": status,
+                "id": f"{change_id}:{task.task_id}",
+                "task_id": task.task_id,
+                "wave": task.wave,
+                "status": task.status,
                 "estimate": estimate,
-                "dependencies": dependencies,
+                "dependencies": task.dependencies,
             }
         )
 

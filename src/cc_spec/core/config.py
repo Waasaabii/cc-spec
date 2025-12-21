@@ -15,6 +15,7 @@ from typing import Any
 
 import yaml
 
+from cc_spec.version import CONFIG_VERSION, is_version_gte
 
 class Dimension(Enum):
     """四维评分机制的评分维度。"""
@@ -651,7 +652,7 @@ class Config:
         lock：分布式锁配置
     """
 
-    version: str = "1.4"
+    version: str = CONFIG_VERSION
     agent: str = "claude"  
     agents: AgentsConfig = field(default_factory=AgentsConfig)  
     project_name: str = "my-project"
@@ -688,7 +689,7 @@ class Config:
         返回：
             通过阈值百分比（0-100）
         """
-        if self.version >= "1.3":
+        if is_version_gte(self.version, "1.3"):
             return self.scoring.pass_threshold
         # 兼容旧配置：回退到 checklist.pass_threshold
         return self.checklist.pass_threshold
@@ -706,13 +707,13 @@ class Config:
             "subagent": self.subagent.to_dict(),
         }
 
-        if self.version >= "1.2":
+        if is_version_gte(self.version, "1.2"):
             result["agents"] = self.agents.to_dict()
         else:
             # 旧格式：包含 agent 字段
             result["agent"] = self.agent
 
-        if self.version >= "1.3":
+        if is_version_gte(self.version, "1.3"):
             result["scoring"] = self.scoring.to_dict()
             result["lock"] = self.lock.to_dict()
         else:
@@ -722,7 +723,7 @@ class Config:
                 "auto_retry": self.checklist.auto_retry,
             }
 
-        if self.version >= "1.4":
+        if is_version_gte(self.version, "1.4"):
             result["kb"] = self.kb.to_dict()
 
         return result
@@ -772,7 +773,7 @@ class Config:
         kb = KBConfig.from_dict(kb_data) if kb_data else KBConfig()
 
         return cls(
-            version=data.get("version", "1.4"),
+            version=data.get("version", CONFIG_VERSION),
             agent=agent,  # 为了向后兼容保留
             agents=agents,
             project_name=data.get("project_name", "my-project"),

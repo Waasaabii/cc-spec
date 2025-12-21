@@ -82,6 +82,43 @@ def try_write_record(
         return None
 
 
+def try_write_mode_decision(
+    project_root: Path,
+    *,
+    change_name: str,
+    mode: str,
+    reason: str,
+    file_count: int | None = None,
+    user_phrase: str | None = None,
+    skipped_steps: list[str] | None = None,
+    requirements: dict[str, Any] | None = None,
+    extra_outputs: dict[str, Any] | None = None,
+) -> str | None:
+    """记录工作流模式决策（quick/standard）到 KB。"""
+    outputs: dict[str, Any] = {
+        "mode": mode,
+        "reason": reason,
+    }
+    if file_count is not None:
+        outputs["file_count"] = file_count
+    if skipped_steps:
+        outputs["skipped_steps"] = skipped_steps
+    if user_phrase:
+        outputs["user_phrase"] = user_phrase
+    if requirements:
+        outputs["requirements"] = requirements
+    if extra_outputs:
+        outputs["extra"] = extra_outputs
+
+    return try_write_record(
+        project_root,
+        step=WorkflowStep.SPECIFY,
+        change_name=change_name,
+        outputs=outputs,
+        notes="mode_decision",
+    )
+
+
 def try_update_kb(
     project_root: Path,
     *,

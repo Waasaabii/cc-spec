@@ -225,10 +225,10 @@ def rework_task(
     )
     console.print()
 
-    # 若 tasks.md 中有记录则展示执行历史
-    tasks_md = change_dir / "tasks.md"
-    if tasks_md.exists():
-        console.print("[dim]正在检查 tasks.md 中的执行历史...[/dim]")
+    # 若 tasks.yaml 中有记录则展示执行历史
+    tasks_yaml = change_dir / "tasks.yaml"
+    if tasks_yaml.exists():
+        console.print("[dim]正在检查 tasks.yaml 中的执行历史...[/dim]")
         console.print()
 
     # 确认返工
@@ -263,7 +263,7 @@ def rework_task(
     console.print(f"[green]✓[/green] 已将任务 '{task_id}' 标记为返工")
     console.print()
     console.print(
-        "[dim]你现在可以在 [cyan]tasks.md[/cyan] 中更新任务详情，并重新运行 "
+        "[dim]你现在可以在 [cyan]tasks.yaml[/cyan] 中更新任务详情，并重新运行 "
         "[cyan]cc-spec apply[/cyan][/dim]"
     )
 

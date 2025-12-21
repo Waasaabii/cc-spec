@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Any
 
 import typer
+import yaml
 from rich.console import Console
 from rich.panel import Panel
 from rich.prompt import Prompt
@@ -230,7 +231,7 @@ def _show_stage_options(
         options = [
             ("1", "编辑计划", f"cc-spec plan {change_id}"),
             ("2", "继续执行", f"cc-spec apply {change_id}"),
-            ("3", "查看 tasks.md", "tasks.md"),
+            ("3", "查看 tasks.yaml", "tasks.yaml"),
         ]
 
     elif stage == Stage.APPLY:
@@ -383,22 +384,17 @@ def _show_task_panel(
         f"[cyan]状态：[/cyan] {status_icon} [{status_color}]{status_text}[/{status_color}]",
     ]
 
-    # 尝试从 tasks.md 读取补充信息
-    tasks_file = change_path / "tasks.md"
+    # 尝试从 tasks.yaml 读取补充信息
+    tasks_file = change_path / "tasks.yaml"
     if tasks_file.exists():
         try:
-            content = tasks_file.read_text(encoding="utf-8")
-            # 查找任务段落
-            import re
-            pattern = rf"###\s+(?:Task|任务)[:：]\s*{re.escape(task_id)}.*?\n(.*?)(?=###\s+(?:Task|任务)[:：]|$)"
-            match = re.search(pattern, content, re.DOTALL)
-            if match:
-                task_section = match.group(1)
-                # 提取预估信息
-                est_match = re.search(r"\*\*预估上下文\*\*:\s*~?(\d+[kK]?)", task_section)
-                if est_match:
-                    lines.append(f"[cyan]预估：[/cyan] {est_match.group(1)} token")
-        except (OSError, UnicodeDecodeError):
+            data = yaml.safe_load(tasks_file.read_text(encoding="utf-8")) or {}
+            task_info_yaml = data.get("tasks", {}).get(task_id)
+            if isinstance(task_info_yaml, dict):
+                tokens = task_info_yaml.get("tokens") or task_info_yaml.get("estimate")
+                if tokens:
+                    lines.append(f"[cyan]预估：[/cyan] {tokens}")
+        except (OSError, UnicodeDecodeError, yaml.YAMLError):
             pass
 
     panel = Panel(
@@ -433,12 +429,12 @@ def _show_task_options(
     if status == "pending":
         options = [
             ("1", "开始执行", f"cc-spec apply {change_id}"),
-            ("2", "查看任务详情", "tasks.md"),
+            ("2", "查看任务详情", "tasks.yaml"),
         ]
     elif status == "in_progress":
         options = [
             ("1", "继续执行", f"cc-spec apply {change_id}"),
-            ("2", "查看任务详情", "tasks.md"),
+            ("2", "查看任务详情", "tasks.yaml"),
         ]
     elif status == "completed":
         options = [

@@ -1,6 +1,6 @@
-"""cc-spec v0.1.5 的 update 命令。
+"""cc-spec update 命令。
 
-v0.1.5：只面向 Claude Code 生成/更新 `/cc-spec:*` 命令文件；
+只面向 Claude Code 生成/更新 `/cc-spec:*` 命令文件；
 Codex CLI 作为执行层由 cc-spec 调用，不再生成 Codex prompts。
 """
 
@@ -19,6 +19,7 @@ from cc_spec.core.config import Config, load_config
 from cc_spec.ui.banner import show_banner
 from cc_spec.utils.download import download_file, get_github_raw_url
 from cc_spec.utils.files import find_project_root, get_cc_spec_dir
+from cc_spec.version import CONFIG_VERSION, is_version_gte
 
 console = Console()
 
@@ -173,7 +174,9 @@ def _update_subagent_config(cc_spec_root: Path, force: bool) -> None:
 
     if updated:
         data["subagent"] = subagent
-        data["version"] = data.get("version", "1.3")
+        current_version = data.get("version")
+        if current_version is None or not is_version_gte(current_version, CONFIG_VERSION):
+            data["version"] = CONFIG_VERSION
 
         with open(config_path, "w", encoding="utf-8") as f:
             yaml.safe_dump(
@@ -237,4 +240,3 @@ def _update_templates(cc_spec_root: Path, force: bool) -> None:
         console.print(f"\n[green]√[/green] 已更新 {updated_count} 个模板")
     if skipped_count > 0:
         console.print(f"[dim]已跳过 {skipped_count} 个模板[/dim]")
-

@@ -16,10 +16,16 @@ from rich.panel import Panel
 from rich.table import Table
 
 from cc_spec.core.delta import DeltaOperation
+from cc_spec.rag.incremental import detect_git_changes
+from cc_spec.rag.workflow import try_write_mode_decision
 from cc_spec.ui.banner import show_banner
 from cc_spec.utils.files import ensure_dir, get_changes_dir
 
 console = Console()
+
+# 快速流程阈值（文件数 > 5 强制标准流程）
+MAX_QUICK_DELTA_FILES = 5
+QUICK_DELTA_SKIPPED_STEPS = ["clarify", "plan", "apply", "checklist"]
 
 
 # ============================================================================
@@ -61,6 +67,33 @@ class DiffStats:
     def count_by_operation(self, operation: DeltaOperation) -> int:
         """统计指定操作类型的文件数。"""
         return sum(1 for c in self.changes if c.operation == operation)
+
+
+def _count_changed_files(project_root: Path) -> int | None:
+    """统计当前工作区的变更文件数（含 untracked）。"""
+    change_set = detect_git_changes(project_root)
+    if change_set is None:
+        return None
+    paths = [*change_set.changed, *change_set.removed, *change_set.untracked]
+    filtered: list[str] = []
+    for path in paths:
+        norm = path.replace("\\", "/")
+        if norm == ".cc-spec" or norm.startswith(".cc-spec/"):
+            continue
+        filtered.append(path)
+    return len(filtered)
+
+
+def _build_quick_requirements(message: str) -> dict[str, object]:
+    """构建 quick-delta 的最小需求集结构（写入 KB 记录）。"""
+    text = (message or "").strip()
+    return {
+        "why": "",
+        "what": text,
+        "impact": "",
+        "success_criteria": "",
+        "missing_fields": ["why", "impact", "success_criteria"],
+    }
 
 
 def _parse_git_diff() -> DiffStats | None:
@@ -239,10 +272,6 @@ def quick_delta_command(
         )
         raise typer.Exit(1)
 
-    console.print(
-        "[cyan]正在创建 quick-delta 记录...[/cyan]\n",
-    )
-
     # 1. 生成变更名称（格式：quick-YYYYMMDD-HHMMSS-{slug}）
     now = datetime.now()
     timestamp = now.strftime("%Y%m%d-%H%M%S")
@@ -250,6 +279,27 @@ def quick_delta_command(
     # 从 message 生成 slug（取前30个字符，转换为 kebab-case）
     slug = _generate_slug(message)
     change_name = f"quick-{timestamp}-{slug}"
+
+    # quick-delta 预检：文件数阈值 > 5 强制标准流程
+    file_count = _count_changed_files(project_root)
+    if file_count is not None and file_count > MAX_QUICK_DELTA_FILES:
+        try_write_mode_decision(
+            project_root,
+            change_name=change_name,
+            mode="standard",
+            reason=f"file_count>{MAX_QUICK_DELTA_FILES}",
+            file_count=file_count,
+            user_phrase=message,
+        )
+        console.print(
+            f"[red]检测到 {file_count} 个文件变更，超过 quick-delta 阈值 "
+            f"{MAX_QUICK_DELTA_FILES}。请改用标准流程（cc-spec specify）。[/red]"
+        )
+        raise typer.Exit(1)
+
+    console.print(
+        "[cyan]正在创建 quick-delta 记录...[/cyan]\n",
+    )
 
     console.print(f"[dim]变更名称：[/dim] [bold]{change_name}[/bold]")
 
@@ -271,6 +321,28 @@ def quick_delta_command(
         _display_file_changes_table(diff_stats)
     else:
         console.print("[dim]文件变更：[/dim] 未检测到暂存区变更")
+
+    # 记录 quick-delta 模式判定与最小需求集（尽力写入 KB）
+    extra_outputs: dict[str, object] = {}
+    if git_info:
+        extra_outputs["git"] = git_info
+    if diff_stats:
+        extra_outputs["diff"] = {
+            "files": len(diff_stats.changes),
+            "additions": diff_stats.total_additions,
+            "deletions": diff_stats.total_deletions,
+        }
+    try_write_mode_decision(
+        project_root,
+        change_name=change_name,
+        mode="quick",
+        reason="quick-delta invoked",
+        file_count=file_count,
+        user_phrase=message,
+        skipped_steps=QUICK_DELTA_SKIPPED_STEPS,
+        requirements=_build_quick_requirements(message),
+        extra_outputs=extra_outputs or None,
+    )
 
     # 3. 创建归档目录结构
     changes_dir = get_changes_dir(project_root)

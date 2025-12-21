@@ -14,6 +14,7 @@ from .checklist_template import ChecklistTemplate
 from .clarify_template import ClarifyTemplate
 from .init_template import InitTemplate
 from .plan_template import PlanTemplate
+from .quick_delta_template import QuickDeltaTemplate
 from .specify_template import SpecifyTemplate
 
 __all__ = [
@@ -24,5 +25,6 @@ __all__ = [
     "CommandTemplateContext",
     "InitTemplate",
     "PlanTemplate",
+    "QuickDeltaTemplate",
     "SpecifyTemplate",
 ]
