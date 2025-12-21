@@ -41,7 +41,7 @@ class TestGotoExecuteWorkflow:
         from cc_spec.commands.goto import _execute_command
 
         with patch("cc_spec.commands.goto.console") as mock_console:
-            _execute_command("tasks.md")
+            _execute_command("tasks.yaml")
             assert mock_console.print.called
 
         with patch("cc_spec.commands.goto.subprocess.run") as mock_run:

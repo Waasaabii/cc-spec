@@ -20,6 +20,8 @@ from cc_spec.utils.files import get_cc_spec_dir
 # Add src directory to Python path for tests
 src_path = Path(__file__).parent.parent / "src"
 sys.path.insert(0, str(src_path))
+tests_path = Path(__file__).parent
+sys.path.insert(0, str(tests_path))
 
 
 @dataclass
@@ -82,18 +84,6 @@ tasks:
       - Prepare workspace
 """
         tasks_path = change_dir / "tasks.yaml"
-        tasks_path.write_text(content, encoding="utf-8")
-        return tasks_path
-
-    def write_tasks_md(self, change_dir: Path, content: str | None = None) -> Path:
-        if content is None:
-            content = """# Tasks
-
-### 01-SETUP
-**Checklist**:
-- [ ] Prepare workspace
-"""
-        tasks_path = change_dir / "tasks.md"
         tasks_path.write_text(content, encoding="utf-8")
         return tasks_path
 
@@ -161,3 +151,61 @@ def project(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> TestProject:
     proj.init_structure()
     monkeypatch.chdir(tmp_path)
     return proj
+
+
+@pytest.fixture
+def project_factory(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    def _factory(init_structure: bool = True) -> TestProject:
+        proj = TestProject(root=tmp_path)
+        if init_structure:
+            proj.init_structure()
+        monkeypatch.chdir(tmp_path)
+        return proj
+
+    return _factory
+
+
+@pytest.fixture
+def change_name() -> str:
+    return "test-change"
+
+
+@pytest.fixture
+def change_dir(project: TestProject, change_name: str) -> Path:
+    return project.create_change(change_name)
+
+
+@pytest.fixture
+def proposal_file(project: TestProject, change_dir: Path) -> Path:
+    return project.write_proposal(change_dir)
+
+
+@pytest.fixture
+def tasks_yaml(project: TestProject, change_dir: Path) -> Path:
+    return project.write_tasks_yaml(change_dir)
+
+
+@pytest.fixture
+def status_yaml(
+    project: TestProject,
+    change_dir: Path,
+    change_name: str,
+) -> Path:
+    return project.write_status(change_dir, change_name)
+
+
+def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item]) -> None:
+    del config
+    for item in items:
+        path = Path(str(item.fspath))
+        if "tests" not in path.parts:
+            continue
+        try:
+            tests_index = path.parts.index("tests")
+        except ValueError:
+            continue
+        if len(path.parts) <= tests_index + 1:
+            continue
+        group = path.parts[tests_index + 1]
+        if group in {"unit", "cli", "rag", "codex", "integration"}:
+            item.add_marker(getattr(pytest.mark, group))

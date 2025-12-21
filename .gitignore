@@ -49,6 +49,8 @@ Thumbs.db
 htmlcov/
 .pytest_cache/
 .mypy_cache/
+tests/**/__pycache__/
+tests/**/*.pyc
 
 # Documentation
 docs/_build/
