@@ -177,12 +177,13 @@ class TestConfig:
     def test_default_values(self) -> None:
         """Test Config default values."""
         config = Config()
-        assert config.version == "1.3"  # default
+        assert config.version == "1.4"  # default
         assert config.agent == "claude"
         assert config.project_name == "my-project"
         assert ".claude/CLAUDE.md" in config.tech_requirements_sources
         assert isinstance(config.subagent, SubAgentConfig)
         assert isinstance(config.checklist, ChecklistConfig)
+        assert config.kb.chunking.strategy == "ast-only"
 
     def test_custom_values(self) -> None:
         """Test Config with custom values."""
@@ -256,7 +257,7 @@ class TestConfig:
         }
         config = Config.from_dict(data)
 
-        assert config.version == "1.3"  # default
+        assert config.version == "1.4"  # default
         assert config.agent == "claude"
         assert config.project_name == "my-project"
         assert config.subagent.max_concurrent == 10
@@ -355,7 +356,7 @@ class TestLoadConfig:
 
             config = load_config(config_path)
 
-            assert config.version == "1.3"  # default
+            assert config.version == "1.4"  # default
             assert config.agent == "claude"
             assert config.project_name == "my-project"
 

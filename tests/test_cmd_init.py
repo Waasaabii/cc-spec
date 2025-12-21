@@ -37,7 +37,7 @@ def test_init_creates_config_file(tmp_path, monkeypatch):
     # Load and verify config
     config = load_config(config_path)
     assert config.project_name == "test-project"
-    assert config.version == "1.3"  # Current default schema
+    assert config.version == "1.4"  # Current default schema
     assert config.agents.default == "claude"
 
 

@@ -90,7 +90,7 @@ class TestGotoCommand:
         cc_spec_dir.mkdir(parents=True)
 
         config = Config(
-            version="1.3",  # Updated to current version
+            version="1.4",  # Updated to current version
             agent="claude",
             project_name="test",
         )
