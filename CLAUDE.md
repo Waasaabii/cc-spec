@@ -1,6 +1,26 @@
 # CLAUDE.md
 
-本文件为 Claude Code (claude.ai/code) 在此代码库中工作时提供指导。
+本文件为 Claude Code (claude.ai/code) 和 Codex CLI 在此代码库中工作时提供指导。
+
+## 语言偏好
+
+请使用中文回答问题和编写注释。
+
+## 可用工具
+
+本项目提供 RAG 知识库查询功能，可以使用以下命令：
+
+```bash
+# 语义搜索知识库
+uv run cc-spec kb query "搜索关键词"
+uv run cc-spec kb query "关键词" --top-k 10  # 返回更多结果
+
+# 查看知识库统计
+uv run cc-spec kb stats
+
+# 重建知识库（如果查询报错）
+uv run cc-spec kb init
+```
 
 ## 项目概述
 

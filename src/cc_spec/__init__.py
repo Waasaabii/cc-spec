@@ -7,6 +7,7 @@ from rich.console import Console
 
 from cc_spec.commands import apply as apply_cmd
 from cc_spec.commands import archive as archive_cmd
+from cc_spec.commands import chat as chat_cmd
 from cc_spec.commands import checklist as checklist_cmd
 from cc_spec.commands import clarify as clarify_cmd
 from cc_spec.commands import goto as goto_cmd
@@ -70,6 +71,7 @@ app.command(name="quick-delta", help="快速模式：一步创建并归档简单
 app.command(name="list", help="列出变更、任务、规格或归档")(list_cmd.list_command)
 app.command(name="goto", help="导航到特定变更或任务")(goto_cmd.goto_command)
 app.command(name="update", help="更新配置、命令或模板")(update_cmd.update_command)
+app.command(name="chat", help="与Codex进行多轮交互式对话")(chat_cmd.chat_command)
 app.add_typer(kb_cmd.kb_app, name="kb")
 
 
