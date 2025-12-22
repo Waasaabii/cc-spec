@@ -357,10 +357,16 @@ class CodexChunker:
     ) -> _ParseResult:
         retry_count = 0
         last_result = None
+        exec_error_message: str | None = None
 
         # 执行 Codex，支持超时重试
         for attempt in range(options.max_retries + 1):
-            result = self.codex.execute(prompt, self.project_root)
+            try:
+                result = self.codex.execute(prompt, self.project_root)
+            except Exception as exc:
+                exec_error_message = f"Codex execution failed: {type(exc).__name__}: {exc}"
+                last_result = None
+                break
             last_result = result
 
             # 成功执行，跳出重试循环
@@ -377,8 +383,25 @@ class CodexChunker:
                 time.sleep(options.retry_delay_s)
             # 否则结束重试
 
+        if last_result is None:
+            fallback_chunks = simple_text_chunks(
+                raw_content,
+                source_path=source_path,
+                source_sha256=source_sha256,
+                lines_per_chunk=options.fallback_lines_per_chunk,
+                overlap_lines=options.fallback_overlap_lines,
+            )
+            if not fallback_chunks:
+                fallback_chunks = [_fallback_chunk_dict(raw_content, source_path=source_path, source_sha256=source_sha256)]
+            return _ParseResult(
+                chunk_dicts=fallback_chunks,
+                status=ChunkStatus.FALLBACK_EXEC,
+                error_message=exec_error_message or "Codex execution failed",
+                exit_code=None,
+                retry_count=retry_count,
+            )
+
         # 此时 last_result 一定不为 None
-        assert last_result is not None
         result = last_result
 
         if not result.success:

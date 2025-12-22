@@ -19,7 +19,7 @@ from cc_spec.utils.files import get_cc_spec_dir
 from .models import CodexErrorType, CodexResult
 from .parser import parse_codex_jsonl
 from .progress import CodexProgressIndicator, OutputMode
-from .streaming import get_sse_server
+from .streaming import get_sse_client
 
 
 def _now_iso() -> str:
@@ -51,6 +51,17 @@ def _env_timeout_ms(default_ms: int) -> int:
         return int(raw)
     except ValueError:
         return default_ms
+
+
+def _env_idle_timeout_s(default_s: int = 60) -> int:
+    """获取 idle 超时时间（秒），用于检测 Codex 是否卡住。"""
+    raw = (os.environ.get("CC_SPEC_CODEX_IDLE_TIMEOUT") or "").strip()
+    if not raw:
+        return default_s
+    try:
+        return int(raw)
+    except ValueError:
+        return default_s
 
 
 def _env_bool(name: str, *, default: bool | None = None) -> bool | None:
@@ -151,10 +162,16 @@ class CodexClient:
             session_id,
             "-",
         ]
-        return self._run(cmd, task, workdir, timeout_ms=timeout_ms)
+        return self._run(cmd, task, workdir, timeout_ms=timeout_ms, known_session_id=session_id)
 
     def _run(
-        self, cmd: list[str], task: str, workdir: Path, *, timeout_ms: int | None = None
+        self,
+        cmd: list[str],
+        task: str,
+        workdir: Path,
+        *,
+        timeout_ms: int | None = None,
+        known_session_id: str | None = None,
     ) -> CodexResult:
         effective_timeout_ms = timeout_ms if timeout_ms is not None else _env_timeout_ms(self.timeout_ms)
         timeout_s = max(1.0, effective_timeout_ms / 1000.0)
@@ -170,10 +187,17 @@ class CodexClient:
 
         run_id = f"run_{int(started * 1000)}_{uuid.uuid4().hex[:8]}"
         output_mode = _get_output_mode()
-        sse = get_sse_server(workdir)
-        session_id: str | None = None
+        viewer = get_sse_client(workdir)
+        session_id: str | None = known_session_id  # resume 时使用已知的 session_id
         seq = 0
         seq_lock = threading.Lock()
+
+        # idle 检测：如果长时间无输出，打印警告
+        idle_timeout_s = _env_idle_timeout_s(60)
+        last_activity_time = time.time()
+        activity_lock = threading.Lock()
+        idle_warned = False
+        stop_idle_monitor = threading.Event()
 
         # 创建进度指示器（仅 progress 模式）
         progress: CodexProgressIndicator | None = None
@@ -188,9 +212,15 @@ class CodexClient:
                 return seq
 
         def _emit_event(stream: str, line: str) -> None:
-            nonlocal session_id
+            nonlocal session_id, last_activity_time, idle_warned
             if not line:
                 return
+
+            # 更新活跃时间
+            with activity_lock:
+                last_activity_time = time.time()
+                idle_warned = False  # 收到输出后重置警告状态
+
             if stream == "stdout":
                 sid = _extract_session_id(line)
                 if sid and session_id is None:
@@ -207,8 +237,8 @@ class CodexClient:
                 else:
                     print(line, file=sys.stderr, flush=True)
 
-            if sse is not None:
-                sse.publish_event(
+            if viewer is not None:
+                viewer.publish_event(
                     {
                         "type": "codex.stream",
                         "ts": _now_iso(),
@@ -220,13 +250,43 @@ class CodexClient:
                     }
                 )
 
-        if sse is not None:
-            sse.publish_event(
+        def _idle_monitor() -> None:
+            """监控线程：检测 Codex 是否长时间无输出。"""
+            nonlocal idle_warned
+            while not stop_idle_monitor.is_set():
+                stop_idle_monitor.wait(10)  # 每 10 秒检查一次
+                if stop_idle_monitor.is_set():
+                    break
+                with activity_lock:
+                    idle_duration = time.time() - last_activity_time
+                    if idle_duration >= idle_timeout_s and not idle_warned:
+                        idle_warned = True
+                        elapsed = time.time() - started
+                        print(
+                            f"[cc-spec] ⚠️ Codex 已 {int(idle_duration)}s 无输出 "
+                            f"(总耗时 {int(elapsed)}s)，可能卡住或正在思考...",
+                            file=sys.stderr,
+                            flush=True,
+                        )
+                        if viewer is not None:
+                            viewer.publish_event(
+                                {
+                                    "type": "codex.idle_warning",
+                                    "ts": _now_iso(),
+                                    "run_id": run_id,
+                                    "session_id": session_id,
+                                    "idle_seconds": int(idle_duration),
+                                    "total_seconds": int(elapsed),
+                                }
+                            )
+
+        if viewer is not None:
+            viewer.publish_event(
                 {
                     "type": "codex.started",
                     "ts": _now_iso(),
                     "run_id": run_id,
-                    "session_id": None,
+                    "session_id": session_id,  # resume 时会有已知的 session_id
                 }
             )
 
@@ -259,8 +319,8 @@ class CodexClient:
                 )
             except Exception as e:
                 print(f"[cc-spec] warning: failed to write codex log to {log_path}: {e}", file=sys.stderr)
-            if sse is not None:
-                sse.publish_event(
+            if viewer is not None:
+                viewer.publish_event(
                     {
                         "type": "codex.error",
                         "ts": _now_iso(),
@@ -270,7 +330,7 @@ class CodexClient:
                         "message": f"未找到 Codex CLI：{self.codex_bin}",
                     }
                 )
-                sse.publish_event(
+                viewer.publish_event(
                     {
                         "type": "codex.completed",
                         "ts": _now_iso(),
@@ -324,8 +384,10 @@ class CodexClient:
 
         stdout_thread = threading.Thread(target=_read_stdout, daemon=True)
         stderr_thread = threading.Thread(target=_read_stderr, daemon=True)
+        idle_thread = threading.Thread(target=_idle_monitor, daemon=True)
         stdout_thread.start()
         stderr_thread.start()
+        idle_thread.start()
 
         timed_out = False
         try:
@@ -344,6 +406,10 @@ class CodexClient:
                     pass
         else:
             exit_code = process.returncode if process.returncode is not None else exit_code
+
+        # 停止 idle 监控线程
+        stop_idle_monitor.set()
+        idle_thread.join(timeout=2)
 
         stdout_thread.join(timeout=5)
         stderr_thread.join(timeout=5)
@@ -388,8 +454,8 @@ class CodexClient:
         if progress is not None:
             progress.stop(success=success, duration=duration, message=parsed.message)
 
-        if sse is not None:
-            sse.publish_event(
+        if viewer is not None:
+            viewer.publish_event(
                 {
                     "type": "codex.completed",
                     "ts": _now_iso(),

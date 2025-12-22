@@ -8,12 +8,19 @@
 
 from __future__ import annotations
 
+import json
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Literal
 
+import yaml
+
+from cc_spec.utils.files import get_cc_spec_dir
+
 from .knowledge_base import KnowledgeBase
+
+DEFAULT_EMBEDDING_MODEL = "intfloat/multilingual-e5-small"
 
 
 def _estimate_tokens(text: str) -> int:
@@ -163,8 +170,9 @@ class ContextProvider:
     def _get_kb(self) -> KnowledgeBase:
         if self._kb is not None:
             return self._kb
-        # 允许注入 embedding_model；否则使用 KB 默认（manifest/默认值）
-        self._kb = KnowledgeBase(self.project_root, embedding_model=self._embedding_model or "intfloat/multilingual-e5-small")
+        # 允许注入 embedding_model；否则从 manifest/config 读取，回退默认值
+        model = _resolve_embedding_model(self.project_root, override=self._embedding_model)
+        self._kb = KnowledgeBase(self.project_root, embedding_model=model)
         return self._kb
 
     def _cache_key(self, *, query: str, n: int, where: dict[str, Any] | None) -> str:
@@ -222,15 +230,22 @@ class ContextProvider:
     def _read_related_files(self, refs: list[str]) -> list[ContextChunk]:
         """将 related_files 引用转成少量可注入片段。"""
         chunks: list[ContextChunk] = []
+        root = self.project_root.resolve()
         for raw in refs:
             path_str, start, end = _parse_file_ref(raw)
             if not path_str:
                 continue
-            abs_path = (self.project_root / path_str).resolve()
+            rel_candidate = Path(path_str)
+            # 安全限制：只允许项目根目录内的相对路径，拒绝绝对路径与 ".." 逃逸
+            if rel_candidate.is_absolute():
+                continue
+            if any(part == ".." for part in rel_candidate.parts):
+                continue
+            abs_path = (root / rel_candidate).resolve()
             try:
-                rel_path = abs_path.relative_to(self.project_root).as_posix()
+                rel_path = abs_path.relative_to(root).as_posix()
             except Exception:
-                rel_path = path_str
+                continue
 
             if not abs_path.exists() or not abs_path.is_file():
                 continue
@@ -308,3 +323,60 @@ def _slice_lines(lines: list[str], *, start: int | None, end: int | None, max_li
         sliced = sliced[:max_lines]
     return "\n".join(sliced)
 
+
+def _resolve_embedding_model(project_root: Path, *, override: str | None) -> str:
+    if isinstance(override, str) and override.strip():
+        return override.strip()
+    model = _read_embedding_model_from_manifest(project_root)
+    if model:
+        return model
+    model = _read_embedding_model_from_config(project_root)
+    if model:
+        return model
+    return DEFAULT_EMBEDDING_MODEL
+
+
+def _read_embedding_model_from_manifest(project_root: Path) -> str | None:
+    cc_spec_root = get_cc_spec_dir(project_root)
+    manifest = cc_spec_root / "kb.manifest.json"
+    if not manifest.exists():
+        return None
+    try:
+        data = json.loads(manifest.read_text(encoding="utf-8"))
+    except Exception:
+        return None
+    if not isinstance(data, dict):
+        return None
+    embedding = data.get("embedding")
+    if isinstance(embedding, dict):
+        model = embedding.get("model")
+        if isinstance(model, str) and model.strip():
+            return model.strip()
+    return None
+
+
+def _read_embedding_model_from_config(project_root: Path) -> str | None:
+    cc_spec_root = get_cc_spec_dir(project_root)
+    config_path = cc_spec_root / "config.yaml"
+    if not config_path.exists():
+        return None
+    try:
+        data = yaml.safe_load(config_path.read_text(encoding="utf-8"))
+    except Exception:
+        return None
+    if not isinstance(data, dict):
+        return None
+    kb = data.get("kb")
+    if isinstance(kb, dict):
+        model = kb.get("embedding_model")
+        if isinstance(model, str) and model.strip():
+            return model.strip()
+        embedding = kb.get("embedding")
+        if isinstance(embedding, dict):
+            model = embedding.get("model") or embedding.get("embedding_model")
+            if isinstance(model, str) and model.strip():
+                return model.strip()
+    model = data.get("embedding_model")
+    if isinstance(model, str) and model.strip():
+        return model.strip()
+    return None

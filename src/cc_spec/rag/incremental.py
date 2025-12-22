@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import subprocess
 from dataclasses import dataclass
 from pathlib import Path
@@ -92,6 +93,24 @@ def detect_git_changes(project_root: Path) -> GitChangeSet | None:
         p = line[3:].strip()
         if p:
             untracked.add(p)
+
+    # 展开未跟踪目录为文件列表（scan_paths 会跳过目录）
+    if untracked:
+        expanded_untracked: set[str] = set()
+        for p in untracked:
+            abs_path = project_root / p
+            if abs_path.is_dir():
+                for root, _, files in os.walk(abs_path):
+                    for name in files:
+                        file_path = Path(root) / name
+                        try:
+                            rel = file_path.relative_to(project_root)
+                        except Exception:
+                            continue
+                        expanded_untracked.add(rel.as_posix())
+            else:
+                expanded_untracked.add(p)
+        untracked = expanded_untracked
 
     # 防御：去掉空字符串
     changed = {p for p in changed if p}
