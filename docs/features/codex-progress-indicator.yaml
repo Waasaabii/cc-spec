@@ -1,0 +1,135 @@
+# Codex 输出进度指示器功能设计
+# 解决问题：调用 Codex 时 JSONL 流式输出占用终端大部分内容
+# 参考：reference/skills/collaborating-with-codex/scripts/codex_bridge.py
+
+feature:
+  name: codex-progress-indicator
+  description: 用简洁的进度指示器替代原始 JSONL 流式输出
+  status: in_progress
+
+# 输出模式设计
+output_modes:
+  - name: stream
+    description: 原始流式输出（打印所有 JSONL 行）
+    env_value: "stream"
+    use_case: 调试或需要查看完整输出时
+
+  - name: progress
+    description: 进度指示模式（Spinner + 状态更新 + 完成摘要）
+    env_value: "progress"
+    use_case: 日常使用，简洁明了
+    is_default: true  # 终端环境默认
+
+  - name: quiet
+    description: 静默模式（只显示最终结果）
+    env_value: "quiet"
+    use_case: CI/CD 或脚本调用
+
+# 环境变量控制
+env_variables:
+  - name: CC_SPEC_CODEX_OUTPUT
+    values: ["stream", "progress", "quiet"]
+    description: 新的输出模式控制变量
+    priority: 1
+
+  - name: CC_SPEC_CODEX_STREAM
+    values: ["true", "false"]
+    description: 兼容旧变量（true=stream, false=quiet）
+    priority: 2
+    deprecated: true
+
+# 进度指示器显示内容
+progress_indicator:
+  spinner_type: dots
+
+  status_messages:
+    - event: thread.started
+      display: "🟢 会话已启动"
+
+    - event: item.started (tool_call)
+      display: "⚙️ 执行: {tool_name}"
+
+    - event: item.completed (agent_message)
+      display: "💬 响应: {preview_30_chars}..."
+
+    - event: turn.completed
+      display: "✅ 执行完成"
+
+  elapsed_time: true  # 显示已耗时
+
+# 完成摘要格式
+completion_summary:
+  success_format: |
+    ✅ Codex 执行成功
+       ⏱️  耗时: {duration}s
+       🔑 会话: {session_id_short}...
+       🔧 工具: {tool_list}
+       📊 事件: {events_count}
+       💬 回复: {message_preview_100_chars}...
+
+  failure_format: |
+    ❌ Codex 执行失败
+       ⏱️  耗时: {duration}s
+       💬 回复: {error_message}
+
+# 实现文件
+implementation:
+  new_files:
+    - path: src/cc_spec/codex/progress.py
+      description: 进度指示器类和事件解析
+      classes:
+        - OutputMode  # 输出模式枚举
+        - CodexEventInfo  # 事件信息数据类
+        - CodexProgressIndicator  # 进度指示器主类
+      functions:
+        - parse_codex_event  # 解析单行 JSONL 事件
+
+  modified_files:
+    - path: src/cc_spec/codex/client.py
+      changes:
+        - description: 添加导入 CodexProgressIndicator, OutputMode
+          location: imports
+
+        - description: 添加 _get_output_mode() 函数
+          location: after _env_bool function
+
+        - description: 修改 _should_stream_to_terminal() 使用新模式
+          location: function body
+
+        - description: 在 _run() 中根据模式使用进度指示器
+          location: _run method
+          details:
+            - 创建 CodexProgressIndicator 实例（progress 模式）
+            - 调用 progress.start() 开始显示
+            - 在 _emit_event 中调用 progress.process_line()
+            - 完成后调用 progress.stop() 显示摘要
+
+# Codex JSONL 事件类型（供解析参考）
+codex_events:
+  - type: thread.started
+    key_fields: [thread_id]
+
+  - type: item.started
+    key_fields: [item.type, item.name]
+    item_types: [function_call_request, tool_use, function_call]
+
+  - type: item.completed
+    key_fields: [item.type, item.text]
+    item_types: [agent_message]
+
+  - type: turn.completed
+    key_fields: []
+
+# 测试用例
+test_cases:
+  - name: test_output_mode_env_priority
+    description: 测试环境变量优先级
+
+  - name: test_progress_indicator_start_stop
+    description: 测试进度指示器启动和停止
+
+  - name: test_event_parsing
+    description: 测试 JSONL 事件解析
+
+  - name: test_summary_output
+    description: 测试完成摘要输出格式

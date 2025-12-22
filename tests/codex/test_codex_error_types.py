@@ -1,6 +1,7 @@
 """测试 Codex 模型和客户端。"""
 
-from unittest.mock import MagicMock, patch
+from io import StringIO
+from unittest.mock import patch
 
 import pytest
 
@@ -86,9 +87,9 @@ class TestCodexClientErrorTypes:
         """FileNotFoundError 应返回 NOT_FOUND 错误类型。"""
         from cc_spec.codex.client import CodexClient
 
-        # 使用一个不存在的命令
-        client = CodexClient(codex_bin="nonexistent-codex-command-12345")
-        result = client.execute("test task", tmp_path)
+        with patch("subprocess.Popen", side_effect=FileNotFoundError):
+            client = CodexClient(codex_bin="nonexistent-codex-command-12345")
+            result = client.execute("test task", tmp_path)
 
         assert result.success is False
         assert result.exit_code == 127
@@ -100,13 +101,23 @@ class TestCodexClientErrorTypes:
 
         from cc_spec.codex.client import CodexClient
 
-        with patch("subprocess.run") as mock_run:
-            # TimeoutExpired 需要手动设置 stdout/stderr 属性
-            exc = subprocess.TimeoutExpired(cmd=["codex"], timeout=1.0)
-            exc.stdout = ""
-            exc.stderr = ""
-            mock_run.side_effect = exc
+        class FakeProcess:
+            def __init__(self) -> None:
+                self.stdin = StringIO()
+                self.stdout = StringIO("")
+                self.stderr = StringIO("")
+                self.returncode = None
 
+            def wait(self, timeout: float | None = None) -> int:
+                raise subprocess.TimeoutExpired(cmd=["codex"], timeout=timeout or 0)
+
+            def terminate(self) -> None:
+                return
+
+            def kill(self) -> None:
+                return
+
+        with patch("subprocess.Popen", return_value=FakeProcess()):
             client = CodexClient(codex_bin="codex")
             result = client.execute("test task", tmp_path, timeout_ms=1000)
 
@@ -116,16 +127,28 @@ class TestCodexClientErrorTypes:
 
     def test_exec_failed_returns_exec_failed_error_type(self, tmp_path) -> None:
         """非零退出码应返回 EXEC_FAILED 错误类型。"""
-        import subprocess
-
         from cc_spec.codex.client import CodexClient
 
-        mock_completed = MagicMock()
-        mock_completed.returncode = 1
-        mock_completed.stdout = ""
-        mock_completed.stderr = "error message"
+        class FakeProcess:
+            def __init__(self) -> None:
+                self.stdin = StringIO()
+                self.stdout = StringIO(
+                    '{"type":"thread.started","thread_id":"sess-1"}\n'
+                    '{"type":"item.completed","item":{"type":"agent_message","text":"fail"}}\n'
+                )
+                self.stderr = StringIO("error message\n")
+                self.returncode = 1
 
-        with patch("subprocess.run", return_value=mock_completed):
+            def wait(self, timeout: float | None = None) -> int:
+                return self.returncode
+
+            def terminate(self) -> None:
+                return
+
+            def kill(self) -> None:
+                return
+
+        with patch("subprocess.Popen", return_value=FakeProcess()):
             client = CodexClient(codex_bin="codex")
             result = client.execute("test task", tmp_path)
 
@@ -135,16 +158,28 @@ class TestCodexClientErrorTypes:
 
     def test_success_returns_none_error_type(self, tmp_path) -> None:
         """成功执行应返回 NONE 错误类型。"""
-        import subprocess
-
         from cc_spec.codex.client import CodexClient
 
-        mock_completed = MagicMock()
-        mock_completed.returncode = 0
-        mock_completed.stdout = '{"type":"session.start","session_id":"test-sess"}\n'
-        mock_completed.stderr = ""
+        class FakeProcess:
+            def __init__(self) -> None:
+                self.stdin = StringIO()
+                self.stdout = StringIO(
+                    '{"type":"thread.started","thread_id":"test-sess"}\n'
+                    '{"type":"item.completed","item":{"type":"agent_message","text":"ok"}}\n'
+                )
+                self.stderr = StringIO("")
+                self.returncode = 0
 
-        with patch("subprocess.run", return_value=mock_completed):
+            def wait(self, timeout: float | None = None) -> int:
+                return self.returncode
+
+            def terminate(self) -> None:
+                return
+
+            def kill(self) -> None:
+                return
+
+        with patch("subprocess.Popen", return_value=FakeProcess()):
             client = CodexClient(codex_bin="codex")
             result = client.execute("test task", tmp_path)
 
