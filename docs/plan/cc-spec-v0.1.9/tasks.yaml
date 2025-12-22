@@ -36,6 +36,42 @@ waves:
     type: wave
     tasks:
       - FEAT-002
+  - id: 3
+    type: wave
+    tasks:
+      - BUG-002
+  - id: 4
+    type: wave
+    tasks:
+      - BUG-003
+  - id: 5
+    type: wave
+    tasks:
+      - FEAT-003
+  - id: 6
+    type: wave
+    tasks:
+      - FEAT-004
+  - id: 7
+    type: wave
+    tasks:
+      - DOC-001
+  # ========== Codex 代码审查发现的新 wave (2025-12-22) ==========
+  - id: 8
+    type: wave
+    tasks:
+      - BUG-004
+      - BUG-005
+  - id: 9
+    type: wave
+    tasks:
+      - BUG-006
+      - BUG-007
+      - BUG-008
+  - id: 10
+    type: wave
+    tasks:
+      - TEST-001
 
 tasks:
   BUG-001:
@@ -154,3 +190,266 @@ tasks:
       - 可从 stream.json 解析 SSE 入口并连接
       - UI 可区分多个 run_id 且完成态停止更新
       - 有断开/重连/错误/空态提示
+
+  BUG-002:
+    name: viewer-tauri-bridge-and-csp-fix
+    status: completed
+    wave: 3
+    deps:
+      - FEAT-002
+    desc: |
+      ## 问题
+      Viewer 中出现 “无法读取 stream.json：unknown error / 打开目录失败：unknown error”。
+
+      ## 目标
+      修复 Tauri 侧能力与前端对接，确保选择目录与读取 stream.json 可用，
+      并放行 SSE 的 connect-src 以避免 EventSource 被 CSP 阻断。
+
+      ## 修复方向
+      - Rust 增加 `load_manifest` command：拼接路径并读取/解析 stream.json
+      - 前端改用 invoke 调用 Rust command，降低 fs 插件失败率
+      - 更新 tauri.conf.json CSP 允许 http://127.0.0.1:* 与 http://localhost:*
+      - 校验 capabilities 权限满足 dialog/fs/path
+
+    code:
+      - apps/cc-spec-viewer/src-tauri/src/main.rs
+      - apps/cc-spec-viewer/src-tauri/tauri.conf.json
+      - apps/cc-spec-viewer/src-tauri/capabilities/default.json
+      - apps/cc-spec-viewer/src/App.tsx
+      - apps/cc-spec-viewer/package.json
+    checklist:
+      - 目录选择不再报 unknown error
+      - load_manifest 可读取/解析 stream.json
+      - CSP 放行 SSE 连接
+      - 前端可稳定连接并展示 SSE 事件
+
+  BUG-003:
+    name: viewer-tauri-args-and-dialog-fix
+    status: completed
+    wave: 4
+    deps:
+      - BUG-002
+    desc: |
+      ## 问题
+      - invoke 报错：missing required key projectRoot
+      - 打开目录失败：unknown error（缺少错误细节）
+
+      ## 目标
+      - 修正 invoke 参数命名，保证 confirm to Tauri 命名规则
+      - 打开目录失败时输出可读错误信息
+      - 如需，补充 dialog 权限以避免 unknown error
+
+    code:
+      - apps/cc-spec-viewer/src/App.tsx
+      - apps/cc-spec-viewer/src-tauri/capabilities/default.json
+    checklist:
+      - load_manifest 调用不再提示 missing required key
+      - 目录选择失败时给出明确错误原因
+
+  FEAT-003:
+    name: global-sse-viewer-ingest
+    status: completed
+    wave: 5
+    deps:
+      - BUG-003
+    desc: |
+      ## 目标
+      实现“零配置 Viewer + 固定端口 38888”方案：
+      - Viewer 启动即监听 38888（SSE + ingest）
+      - Codex 调用仅负责向 viewer 推送事件（若 viewer 未启动可丢弃）
+      - 事件携带 project_root，viewer 按项目分组展示
+
+      ## 约束
+      - 不再启动每项目 SSE 服务器
+      - 不需要 manifest / 目录选择
+      - 端口固定 38888
+
+    code:
+      - src/cc_spec/codex/client.py
+      - src/cc_spec/codex/streaming.py
+      - apps/cc-spec-viewer/src-tauri/src/main.rs
+      - apps/cc-spec-viewer/src/App.tsx
+      - apps/cc-spec-viewer/src-tauri/tauri.conf.json
+    checklist:
+      - Viewer 启动即监听 38888（/events + /ingest）
+      - Codex 事件通过 HTTP 推送到 viewer（失败可忽略）
+      - 事件包含 project_root
+      - Viewer 连接固定端口并按项目分组展示
+
+  FEAT-004:
+    name: viewer-port-settings-and-global-config
+    status: completed
+    wave: 6
+    deps:
+      - FEAT-003
+    desc: |
+      ## 目标
+      支持 Viewer 设置端口，并通过用户目录 ~/.cc-spec/viewer.json 共享端口配置：
+      - Viewer 可在设置中修改端口
+      - Viewer 启动时读取 ~/.cc-spec/viewer.json
+      - Codex 侧读取同一配置用于推送
+
+      ## 约束
+      - 端口修改后提示需重启 Viewer 生效
+      - 不需要目录选择/manifest
+
+    code:
+      - apps/cc-spec-viewer/src-tauri/src/main.rs
+      - apps/cc-spec-viewer/src/App.tsx
+      - src/cc_spec/codex/streaming.py
+    checklist:
+      - Viewer 可查看/修改端口设置
+      - ~/.cc-spec/viewer.json 可读写
+      - Codex 推送端口来自全局配置
+
+  DOC-001:
+    name: update-readme-viewer
+    status: completed
+    wave: 7
+    deps:
+      - FEAT-004
+    desc: |
+      ## 目标
+      更新 README，补充 Codex Viewer 的使用方式与端口配置说明。
+    code:
+      - README.md
+    checklist:
+      - README 说明 Viewer 启动方式
+      - README 说明端口配置与默认值
+
+  # ========== Codex 代码审查发现的问题 (2025-12-22) ==========
+
+  BUG-004:
+    name: incremental-update-untracked-dirs
+    status: completed
+    wave: 8
+    deps:
+      - DOC-001
+    desc: |
+      ## 问题
+      增量更新可能漏掉"未跟踪目录"里的新文件。
+      `git status --porcelain` 不会展开目录，`scan_paths` 会把目录当成非文件跳过，
+      导致 KB 直到全量扫描才会收录这些文件。
+
+      ## 影响
+      - 新建目录下的文件不会被增量更新捕获
+      - 需要手动运行 `kb init` 全量扫描才能入库
+
+      ## 修复方向
+      调整增量策略，对未跟踪目录递归展开。
+    code:
+      - src/cc_spec/rag/incremental.py
+      - src/cc_spec/rag/pipeline.py
+    checklist:
+      - 未跟踪目录中的新文件能被增量更新捕获
+      - 现有增量更新逻辑不受影响
+
+  BUG-005:
+    name: context-provider-path-traversal
+    status: completed
+    wave: 8
+    deps:
+      - DOC-001
+    desc: |
+      ## 问题
+      `ContextProvider._read_related_files` 允许读取项目根目录外的路径
+      （绝对路径或 `..`），在共享配置或不可信输入场景下有潜在数据泄露风险。
+
+      ## 影响
+      - 安全风险：可能读取敏感文件
+      - 仅在 related_files 来自不可信输入时有实际风险
+
+      ## 修复方向
+      限制路径到项目根目录内，拒绝 `..` 和绝对路径。
+    code:
+      - src/cc_spec/rag/context_provider.py
+    checklist:
+      - 路径遍历攻击被阻止
+      - 正常的相对路径仍可读取
+
+  BUG-006:
+    name: context-provider-hardcoded-embedding
+    status: pending
+    wave: 9
+    deps:
+      - BUG-005
+    desc: |
+      ## 问题
+      `ContextProvider._get_kb` 默认硬编码 embedding 模型，
+      若 KB 实际是用其它模型构建，会造成检索质量下降。
+
+      ## 影响
+      - 检索质量下降（embedding 不匹配）
+
+      ## 修复方向
+      从 KB manifest 或配置读取 embedding 模型。
+    code:
+      - src/cc_spec/rag/context_provider.py
+    checklist:
+      - embedding 模型从配置/manifest 读取
+      - 默认值仍可用于兼容
+
+  BUG-007:
+    name: chunker-json-path-fragile
+    status: pending
+    wave: 9
+    deps:
+      - BUG-005
+    desc: |
+      ## 问题
+      批量 chunker 的 JSON 抽取和路径匹配较脆弱，
+      输出里多余的 `[`/`]` 或 `./path`、绝对路径等都可能触发不必要的 fallback。
+
+      ## 影响
+      - 触发不必要的 fallback，降低切片质量
+
+      ## 修复方向
+      增强 JSON 抽取和路径归一化逻辑。
+    code:
+      - src/cc_spec/rag/chunker.py
+    checklist:
+      - JSON 抽取更健壮
+      - 路径归一化处理 `./`、绝对路径等
+
+  BUG-008:
+    name: run-and-parse-exception-handling
+    status: pending
+    wave: 9
+    deps:
+      - BUG-005
+    desc: |
+      ## 问题
+      `_run_and_parse` 未包裹 `codex.execute` 的异常；
+      一旦底层抛异常会直接中断 KB 更新而不是走 fallback。
+
+      ## 影响
+      - KB 更新中断
+      - 未走 fallback 降级策略
+
+      ## 修复方向
+      包裹异常，走 fallback 逻辑。
+    code:
+      - src/cc_spec/rag/chunker.py
+    checklist:
+      - codex.execute 异常被捕获
+      - 异常时走 fallback 逻辑
+
+  TEST-001:
+    name: chunker-unit-tests
+    status: pending
+    wave: 10
+    deps:
+      - BUG-008
+    desc: |
+      ## 问题
+      缺少针对 `_run_and_parse` 的超时重试、解析失败 fallback、
+      批量路径归一化的单元测试覆盖。
+
+      ## 目标
+      补充单元测试，提高代码覆盖率。
+    code:
+      - tests/rag/test_chunker.py
+    checklist:
+      - 超时重试测试
+      - 解析失败 fallback 测试
+      - 路径归一化测试

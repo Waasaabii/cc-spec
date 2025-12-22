@@ -40,3 +40,60 @@ tasks:
   - apps/cc-spec-viewer/src-tauri/capabilities/default.json
   - apps/cc-spec-viewer/src-tauri/src/main.rs
   notes: Added React + Vite + Tailwind v4 viewer with Tauri dialog/fs integration for SSE stream.json.
+- id: BUG-002
+  status: completed
+  agent_id: codex
+  started_at: '2025-12-22T11:45:40.594360'
+  completed_at: '2025-12-22T11:45:47.468260'
+  retry_count: 0
+  changed_files:
+  - apps/cc-spec-viewer/package.json
+  - apps/cc-spec-viewer/src/App.tsx
+  - apps/cc-spec-viewer/src-tauri/tauri.conf.json
+  - apps/cc-spec-viewer/src-tauri/src/main.rs
+  notes: Added Rust load_manifest command and CSP/capabilities fixes; switched UI to invoke for manifest loading.
+- id: BUG-003
+  status: completed
+  agent_id: codex
+  started_at: '2025-12-22T12:38:00.994069'
+  completed_at: '2025-12-22T12:38:14.723816'
+  retry_count: 0
+  changed_files:
+  - apps/cc-spec-viewer/src/App.tsx
+  notes: Fixed invoke argument key (projectRoot) and improved dialog error formatting.
+- id: FEAT-003
+  status: completed
+  agent_id: codex
+  started_at: '2025-12-22T14:31:43.083495'
+  completed_at: '2025-12-22T14:32:11.452073'
+  retry_count: 0
+  changed_files:
+  - src/cc_spec/codex/streaming.py
+  - src/cc_spec/codex/client.py
+  - apps/cc-spec-viewer/package.json
+  - apps/cc-spec-viewer/src/App.tsx
+  - apps/cc-spec-viewer/src-tauri/Cargo.toml
+  - apps/cc-spec-viewer/src-tauri/capabilities/default.json
+  - apps/cc-spec-viewer/src-tauri/src/main.rs
+  - apps/cc-spec-viewer/src-tauri/tauri.conf.json
+  notes: Implemented fixed-port viewer server with ingest/SSE and refactored Codex to push events with project_root.
+- id: FEAT-004
+  status: completed
+  agent_id: codex
+  started_at: '2025-12-22T14:44:58.295409'
+  completed_at: '2025-12-22T14:45:08.951036'
+  retry_count: 0
+  changed_files:
+  - src/cc_spec/codex/streaming.py
+  - apps/cc-spec-viewer/src/App.tsx
+  - apps/cc-spec-viewer/src-tauri/src/main.rs
+  notes: Added viewer port settings stored in ~/.cc-spec/viewer.json and Codex reads global config.
+- id: DOC-001
+  status: completed
+  agent_id: codex
+  started_at: '2025-12-22T14:48:29.631959'
+  completed_at: '2025-12-22T14:48:40.054909'
+  retry_count: 0
+  changed_files:
+  - README.md
+  notes: Documented Codex Viewer usage and port configuration in README.
