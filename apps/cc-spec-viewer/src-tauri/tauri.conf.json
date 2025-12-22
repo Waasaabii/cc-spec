@@ -10,6 +10,10 @@
     "beforeBuildCommand": "npm run build"
   },
   "app": {
+    "security": {
+      "capabilities": ["default"],
+      "csp": "default-src 'self' http://localhost:5173 http://127.0.0.1:5173; connect-src 'self' http://127.0.0.1:* http://localhost:* ws://127.0.0.1:* ws://localhost:*; img-src 'self' data:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' data: https://fonts.gstatic.com; script-src 'self' 'unsafe-inline' 'unsafe-eval'"
+    },
     "windows": [
       {
         "title": "cc-spec viewer",
