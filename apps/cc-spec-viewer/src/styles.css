@@ -5,6 +5,21 @@
   --ink: #0f172a;
   --accent: #ff7a59;
   --paper: #f7f4ee;
+  --page-bg:
+    radial-gradient(1200px 700px at 10% 10%, rgba(255, 231, 199, 0.8), transparent 60%),
+    radial-gradient(900px 600px at 90% 20%, rgba(203, 232, 255, 0.8), transparent 55%),
+    linear-gradient(180deg, #f8f5f0 0%, #f1ede6 100%);
+  --grid-color: rgba(15, 23, 42, 0.05);
+}
+
+:root[data-theme="dark"] {
+  --ink: #e2e8f0;
+  --paper: #0f172a;
+  --page-bg:
+    radial-gradient(900px 600px at 12% 12%, rgba(67, 56, 202, 0.18), transparent 60%),
+    radial-gradient(900px 600px at 85% 20%, rgba(14, 116, 144, 0.2), transparent 55%),
+    linear-gradient(180deg, #0b1020 0%, #0f172a 100%);
+  --grid-color: rgba(148, 163, 184, 0.08);
 }
 
 * {
@@ -15,10 +30,7 @@ body {
   margin: 0;
   font-family: "Space Grotesk", "Segoe UI", sans-serif;
   color: var(--ink);
-  background:
-    radial-gradient(1200px 700px at 10% 10%, rgba(255, 231, 199, 0.8), transparent 60%),
-    radial-gradient(900px 600px at 90% 20%, rgba(203, 232, 255, 0.8), transparent 55%),
-    linear-gradient(180deg, #f8f5f0 0%, #f1ede6 100%);
+  background: var(--page-bg);
   min-height: 100vh;
 }
 
@@ -31,8 +43,8 @@ body::before {
   position: fixed;
   inset: 0;
   background-image:
-    linear-gradient(rgba(15, 23, 42, 0.05) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(15, 23, 42, 0.05) 1px, transparent 1px);
+    linear-gradient(var(--grid-color) 1px, transparent 1px),
+    linear-gradient(90deg, var(--grid-color) 1px, transparent 1px);
   background-size: 24px 24px;
   opacity: 0.2;
   pointer-events: none;

@@ -2,11 +2,14 @@
 
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use std::collections::hash_map::DefaultHasher;
 use std::env;
 use std::fs;
+use std::hash::{Hash, Hasher};
 use std::io::{Read, Write};
 use std::net::{TcpListener, TcpStream};
 use std::path::PathBuf;
+use std::process::Command;
 use std::sync::{mpsc, Arc, Mutex};
 use std::thread;
 use std::time::Duration;
@@ -210,6 +213,82 @@ fn save_settings(settings: &ViewerSettings) -> Result<(), String> {
     Ok(())
 }
 
+fn hash_project_path(project_path: &str) -> String {
+    let mut hasher = DefaultHasher::new();
+    project_path.hash(&mut hasher);
+    format!("{:x}", hasher.finish())
+}
+
+fn history_path(project_path: &str) -> PathBuf {
+    let hash = hash_project_path(project_path);
+    home_dir()
+        .join(".cc-spec")
+        .join("viewer")
+        .join(hash)
+        .join("history.json")
+}
+
+fn sessions_path(project_path: &str) -> PathBuf {
+    PathBuf::from(project_path)
+        .join(".cc-spec")
+        .join("runtime")
+        .join("codex")
+        .join("sessions.json")
+}
+
+fn find_session_pid(sessions_json: &Value, session_id: &str) -> Option<i64> {
+    let sessions = sessions_json
+        .get("sessions")
+        .and_then(|value| value.as_object())
+        .or_else(|| sessions_json.as_object());
+    let record = sessions.and_then(|map| map.get(session_id))?;
+    record.get("pid").and_then(|value| value.as_i64())
+}
+
+fn is_process_running(pid: i64) -> Result<bool, String> {
+    let pid_str = pid.to_string();
+    if cfg!(windows) {
+        let output = Command::new("tasklist")
+            .args(["/FI", &format!("PID eq {}", pid_str)])
+            .output()
+            .map_err(|err| format!("检查进程失败: {}", err))?;
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        let running = stdout
+            .lines()
+            .any(|line| line.split_whitespace().any(|token| token == pid_str));
+        Ok(running)
+    } else {
+        let status = Command::new("kill")
+            .args(["-0", &pid_str])
+            .status()
+            .map_err(|err| format!("检查进程失败: {}", err))?;
+        Ok(status.success())
+    }
+}
+
+fn terminate_process(pid: i64) -> Result<(), String> {
+    let pid_str = pid.to_string();
+    if cfg!(windows) {
+        let output = Command::new("taskkill")
+            .args(["/PID", &pid_str, "/F"])
+            .output()
+            .map_err(|err| format!("终止进程失败: {}", err))?;
+        if !output.status.success() {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            return Err(format!("终止进程失败: {}", stderr.trim()));
+        }
+    } else {
+        let status = Command::new("kill")
+            .args(["-9", &pid_str])
+            .status()
+            .map_err(|err| format!("终止进程失败: {}", err))?;
+        if !status.success() {
+            return Err("终止进程失败".to_string());
+        }
+    }
+    Ok(())
+}
+
 #[tauri::command]
 fn get_settings() -> ViewerSettings {
     load_settings()
@@ -223,6 +302,60 @@ fn set_settings(port: u16) -> Result<ViewerSettings, String> {
     let settings = ViewerSettings { port };
     save_settings(&settings)?;
     Ok(settings)
+}
+
+#[tauri::command]
+fn save_history(project_path: String, history_json: String) -> Result<(), String> {
+    let path = history_path(&project_path);
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent).map_err(|err| format!("创建历史记录目录失败: {}", err))?;
+    }
+    fs::write(&path, history_json).map_err(|err| format!("保存历史记录失败: {}", err))?;
+    Ok(())
+}
+
+#[tauri::command]
+fn load_history(project_path: String) -> Result<String, String> {
+    let path = history_path(&project_path);
+    if !path.exists() {
+        return Ok("[]".to_string());
+    }
+    fs::read_to_string(&path).map_err(|err| format!("加载历史记录失败: {}", err))
+}
+
+#[tauri::command]
+fn load_sessions(project_path: String) -> Result<String, String> {
+    let path = sessions_path(&project_path);
+    if !path.exists() {
+        return Ok("{\"schema_version\":1,\"updated_at\":\"\",\"sessions\":{}}".to_string());
+    }
+    fs::read_to_string(&path).map_err(|err| format!("加载会话状态失败: {}", err))
+}
+
+#[tauri::command]
+fn stop_session(project_path: String, session_id: String) -> Result<String, String> {
+    if session_id.trim().is_empty() {
+        return Err("session_id 为空".to_string());
+    }
+    let path = sessions_path(&project_path);
+    if !path.exists() {
+        return Err("会话状态文件不存在".to_string());
+    }
+    let raw = fs::read_to_string(&path).map_err(|err| format!("读取会话状态失败: {}", err))?;
+    let sessions_json =
+        serde_json::from_str::<Value>(&raw).map_err(|err| format!("解析会话状态失败: {}", err))?;
+    let pid = match find_session_pid(&sessions_json, &session_id) {
+        Some(pid) if pid > 0 => pid,
+        Some(_) => return Ok("pid 无效".to_string()),
+        None => return Ok("pid 未记录".to_string()),
+    };
+
+    if !is_process_running(pid)? {
+        return Ok("进程未运行".to_string());
+    }
+
+    terminate_process(pid)?;
+    Ok("已终止进程".to_string())
 }
 
 fn start_server(port: u16) {
@@ -264,7 +397,14 @@ fn main() {
     thread::spawn(move || start_server(port));
 
     tauri::Builder::default()
-        .invoke_handler(tauri::generate_handler![get_settings, set_settings])
+        .invoke_handler(tauri::generate_handler![
+            get_settings,
+            set_settings,
+            save_history,
+            load_history,
+            load_sessions,
+            stop_session
+        ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }
