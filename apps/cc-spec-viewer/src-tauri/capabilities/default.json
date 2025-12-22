@@ -1,0 +1,18 @@
+{
+  "$schema": "https://schema.tauri.app/capabilities/2",
+  "identifier": "default",
+  "description": "Default capabilities for cc-spec viewer",
+  "permissions": [
+    "core:default",
+    "dialog:default",
+    "fs:allow-read-text-file",
+    {
+      "identifier": "fs:scope",
+      "allow": [
+        {
+          "path": "**"
+        }
+      ]
+    }
+  ]
+}
