@@ -1,0 +1,42 @@
+tasks:
+- id: BUG-001
+  status: completed
+  agent_id: codex
+  started_at: '2025-12-21T17:19:09.899300'
+  completed_at: '2025-12-21T17:20:23.960767'
+  retry_count: 0
+  changed_files:
+  - src/cc_spec/rag/chunker.py
+  notes: Moved _run_and_parse into CodexChunker to fix AttributeError in KB init.
+- id: FEAT-001
+  status: completed
+  agent_id: codex
+  started_at: '2025-12-21T17:20:23.960767'
+  completed_at: '2025-12-21T17:26:31.918129'
+  retry_count: 0
+  changed_files:
+  - src/cc_spec/codex/client.py
+  - src/cc_spec/codex/streaming.py
+  - tests/codex/test_codex_error_types.py
+  notes: Added Popen streaming + SSE events with run_id and completed signal; updated Codex client tests.
+- id: FEAT-002
+  status: completed
+  agent_id: codex
+  started_at: '2025-12-21T18:11:48.576563'
+  completed_at: '2025-12-21T18:11:56.416558'
+  retry_count: 0
+  changed_files:
+  - apps/cc-spec-viewer/.gitignore
+  - apps/cc-spec-viewer/index.html
+  - apps/cc-spec-viewer/package.json
+  - apps/cc-spec-viewer/tsconfig.json
+  - apps/cc-spec-viewer/tsconfig.node.json
+  - apps/cc-spec-viewer/vite.config.ts
+  - apps/cc-spec-viewer/src/App.tsx
+  - apps/cc-spec-viewer/src/main.tsx
+  - apps/cc-spec-viewer/src/styles.css
+  - apps/cc-spec-viewer/src-tauri/Cargo.toml
+  - apps/cc-spec-viewer/src-tauri/tauri.conf.json
+  - apps/cc-spec-viewer/src-tauri/capabilities/default.json
+  - apps/cc-spec-viewer/src-tauri/src/main.rs
+  notes: Added React + Vite + Tailwind v4 viewer with Tauri dialog/fs integration for SSE stream.json.

@@ -34,3 +34,6 @@ __pycache__/
 .cc-spec/kb.snapshot.jsonl
 .cc-spec/kb.manifest.json
 .cc-spec/kb.attribution.json
+
+# Reference materials (external projects, skip for now)
+reference/
