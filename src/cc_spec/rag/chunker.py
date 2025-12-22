@@ -346,37 +346,6 @@ class CodexChunker:
             codex_exit_code=parsed.exit_code,
         )
 
-    def build_reference_index_chunk(self, reference_files: list[ScannedFile]) -> Chunk:
-        """构建 reference/** 的目录结构索引（不依赖 Codex）。"""
-        paths = sorted(sf.rel_path.as_posix() for sf in reference_files if sf.is_reference)
-        text = "\n".join(paths[:5000])
-        sha = "reference-index"
-        return Chunk(
-            chunk_id=f"{sha}:dir",
-            text=text,
-            summary="reference 目录索引（路径列表）",
-            chunk_type=ChunkType.REFERENCE,
-            source_path="reference/",
-            source_sha256=sha,
-            extra={"mode": "dir_index"},
-        )
-
-
-def build_smart_chunker(
-    codex: CodexChunker,
-    project_root: Path,
-    *,
-    options: "SmartChunkingOptions | None" = None,
-) -> "SmartChunker":
-    """创建 SmartChunker（延迟导入避免循环依赖）。"""
-    from .smart_chunker import SmartChunker
-
-    return SmartChunker(codex, project_root, options=options)
-
-    # ------------------------------------------------------------------
-    # internal
-    # ------------------------------------------------------------------
-
     def _run_and_parse(
         self,
         prompt: str,
@@ -480,6 +449,33 @@ def build_smart_chunker(
             exit_code=result.exit_code,
             retry_count=retry_count,
         )
+
+    def build_reference_index_chunk(self, reference_files: list[ScannedFile]) -> Chunk:
+        """构建 reference/** 的目录结构索引（不依赖 Codex）。"""
+        paths = sorted(sf.rel_path.as_posix() for sf in reference_files if sf.is_reference)
+        text = "\n".join(paths[:5000])
+        sha = "reference-index"
+        return Chunk(
+            chunk_id=f"{sha}:dir",
+            text=text,
+            summary="reference 目录索引（路径列表）",
+            chunk_type=ChunkType.REFERENCE,
+            source_path="reference/",
+            source_sha256=sha,
+            extra={"mode": "dir_index"},
+        )
+
+
+def build_smart_chunker(
+    codex: CodexChunker,
+    project_root: Path,
+    *,
+    options: "SmartChunkingOptions | None" = None,
+) -> "SmartChunker":
+    """创建 SmartChunker（延迟导入避免循环依赖）。"""
+    from .smart_chunker import SmartChunker
+
+    return SmartChunker(codex, project_root, options=options)
 
 
 
