@@ -19,6 +19,7 @@ from cc_spec.utils.files import get_cc_spec_dir
 from .models import CodexErrorType, CodexResult
 from .parser import parse_codex_jsonl
 from .progress import CodexProgressIndicator, OutputMode
+from .session_state import SessionStateManager
 from .streaming import get_sse_client
 
 
@@ -127,6 +128,15 @@ def _extract_session_id(line: str) -> str | None:
     return None
 
 
+def _summarize_task(task: str, limit: int = 200) -> str:
+    summary = " ".join(line.strip() for line in task.strip().splitlines() if line.strip())
+    if not summary:
+        summary = task.strip()
+    if len(summary) > limit:
+        return summary[:limit].rstrip() + "..."
+    return summary
+
+
 @dataclass(frozen=True)
 class CodexClient:
     codex_bin: str = "codex"
@@ -179,6 +189,8 @@ class CodexClient:
         runtime_dir = get_cc_spec_dir(workdir) / "runtime" / "codex"
         runtime_dir.mkdir(parents=True, exist_ok=True)
         log_path = runtime_dir / f"codex-{int(time.time())}.log"
+        session_state = SessionStateManager(runtime_dir)
+        task_summary = _summarize_task(task)
 
         started = time.time()
         stdout_lines: list[str] = []
@@ -189,6 +201,8 @@ class CodexClient:
         output_mode = _get_output_mode()
         viewer = get_sse_client(workdir)
         session_id: str | None = known_session_id  # resume 时使用已知的 session_id
+        session_registered = False
+        process_pid: int | None = None
         seq = 0
         seq_lock = threading.Lock()
 
@@ -204,6 +218,12 @@ class CodexClient:
         if output_mode == OutputMode.PROGRESS:
             progress = CodexProgressIndicator()
             progress.start()
+
+        def _register_session_if_needed() -> None:
+            nonlocal session_registered
+            if session_id and not session_registered:
+                session_state.register_session(session_id, task_summary, process_pid)
+                session_registered = True
 
         def _next_seq() -> int:
             nonlocal seq
@@ -225,6 +245,7 @@ class CodexClient:
                 sid = _extract_session_id(line)
                 if sid and session_id is None:
                     session_id = sid
+                    _register_session_if_needed()
 
                 # 进度模式：更新进度指示器
                 if progress is not None:
@@ -278,6 +299,15 @@ class CodexClient:
                                     "idle_seconds": int(idle_duration),
                                     "total_seconds": int(elapsed),
                                 }
+                            )
+                        _register_session_if_needed()
+                        if session_id:
+                            session_state.update_session(
+                                session_id,
+                                state="idle",
+                                message=f"idle warning: no output for {int(idle_duration)}s",
+                                exit_code=None,
+                                elapsed_s=elapsed,
                             )
 
         if viewer is not None:
@@ -342,6 +372,16 @@ class CodexClient:
                         "duration_s": round(duration, 2),
                     }
                 )
+            _register_session_if_needed()
+            if session_id:
+                session_state.update_session(
+                    session_id,
+                    state="failed",
+                    message=f"FileNotFoundError: {self.codex_bin}",
+                    exit_code=127,
+                    elapsed_s=duration,
+                    pid=None,
+                )
             return CodexResult(
                 success=False,
                 exit_code=127,
@@ -351,6 +391,9 @@ class CodexClient:
                 duration_seconds=duration,
                 error_type=CodexErrorType.NOT_FOUND,
             )
+
+        process_pid = process.pid
+        _register_session_if_needed()
 
         if process.stdin is not None:
             try:
@@ -449,6 +492,17 @@ class CodexClient:
             error_type = CodexErrorType.TIMEOUT
         else:
             error_type = CodexErrorType.EXEC_FAILED
+
+        _register_session_if_needed()
+        if session_id:
+            session_state.update_session(
+                session_id,
+                state="done" if success else "failed",
+                message=parsed.message,
+                exit_code=exit_code,
+                elapsed_s=duration,
+                pid=None,
+            )
 
         # 停止进度指示器并显示摘要
         if progress is not None:

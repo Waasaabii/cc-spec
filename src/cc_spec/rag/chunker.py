@@ -212,9 +212,9 @@ class CodexChunker:
                 path_val = item.get("path") or item.get("file") or item.get("rel_path")
                 chunks_val = item.get("chunks")
                 if isinstance(path_val, str) and isinstance(chunks_val, list):
-                    by_path[path_val] = chunks_val
+                    by_path[_normalize_path_key(path_val)] = chunks_val
         elif len(prepared) == 1:
-            by_path[str(prepared[0]["path"])] = parsed
+            by_path[_normalize_path_key(str(prepared[0]["path"]))] = parsed
 
         out: list[ChunkResult] = []
         for item in prepared:
@@ -222,9 +222,8 @@ class CodexChunker:
             sha = sha_by_path.get(path, "")
             typ = type_by_path.get(path, ChunkType.DOC)
 
-            chunks_raw = by_path.get(path)
-            if chunks_raw is None:
-                chunks_raw = by_path.get(path.replace("/", "\\"))
+            path_key = _normalize_path_key(path)
+            chunks_raw = by_path.get(path_key)
 
             if not isinstance(chunks_raw, list):
                 dicts = _fallback_chunks_for(path)
@@ -518,6 +517,15 @@ def _normalize_chunk_dict(item: Any, *, idx: int) -> dict[str, Any] | None:
         item["type"] = "other"
     item["_idx"] = idx
     return item
+
+
+def _normalize_path_key(path: str) -> str:
+    normalized = path.replace("\\", "/")
+    while normalized.startswith("./"):
+        normalized = normalized[2:]
+    while "/./" in normalized:
+        normalized = normalized.replace("/./", "/")
+    return normalized
 
 
 def _extract_json_array(text: str) -> list[Any] | None:

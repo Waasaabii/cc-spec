@@ -7,6 +7,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 import typer
+import time
+
 from rich.console import Console
 from rich.panel import Panel
 from rich.prompt import Prompt
@@ -145,8 +147,8 @@ def chat_command(
             "text": text,
         })
 
-    def _process_message(user_input: str, max_retries: int = 2) -> bool:
-        """处理单条消息，返回是否继续。支持自动重试。"""
+    def _process_message(user_input: str) -> bool:
+        """处理单条消息，返回是否继续。"""
         nonlocal session_id, is_first
 
         if not user_input.strip():
@@ -162,46 +164,45 @@ def chat_command(
         # 构建提示
         prompt = _build_prompt(user_input, context, is_first)
 
-        # 调用 Codex（支持重试）
+        # 调用 Codex
         if interactive:
             console.print("[bold blue]Codex[/bold blue]: ", end="")
         else:
             print(f"[You] {user_input}", flush=True)
 
+        started = time.time()
         result = None
-        for attempt in range(max_retries + 1):
-            try:
+        try:
+            if session_id:
+                result = client.resume(session_id, prompt, project_root)
+            else:
+                result = client.execute(prompt, project_root)
+
+            # 更新 session_id
+            if result.session_id:
+                session_id = result.session_id
+
+        except Exception as e:
+            elapsed = int(time.time() - started)
+            if interactive:
+                console.print(f"\n[red]调用失败: {e}[/red]")
                 if session_id:
-                    result = client.resume(session_id, prompt, project_root)
-                else:
-                    result = client.execute(prompt, project_root)
+                    console.print(f"[dim]可用 -r {session_id} 手动继续会话[/dim]")
+            else:
+                # 结构化输出：方便 Claude 解析
+                print(f"[STATUS] state=error elapsed={elapsed}s session={session_id or 'none'}", flush=True)
+                print(f"[Error] {e}", flush=True)
+            return True
 
-                # 更新 session_id
-                if result.session_id:
-                    session_id = result.session_id
-
-                # 成功或有明确结果，跳出重试
-                if result.success or result.message:
-                    break
-
-            except Exception as e:
-                if attempt < max_retries:
-                    if interactive:
-                        console.print(f"\n[yellow]连接中断，正在重试 ({attempt + 1}/{max_retries})...[/yellow]")
-                    # 如果有 session_id，下次重试会自动继续
-                    continue
-                else:
-                    if interactive:
-                        console.print(f"\n[red]重试失败: {e}[/red]")
-                    else:
-                        print(f"[Error] 重试失败: {e}", flush=True)
-                    return True
+        elapsed = int(time.time() - started)
 
         # 显示结果
         if result and result.success:
             if interactive:
                 console.print(f"[white]{result.message}[/white]")
             else:
+                # 结构化输出：方便 Claude 解析
+                print(f"[STATUS] state=done elapsed={elapsed}s session={session_id or 'none'}", flush=True)
                 print(f"[Codex] {result.message}", flush=True)
         elif result:
             error_msg = result.message or "执行失败"
@@ -210,6 +211,8 @@ def chat_command(
                 if result.stderr:
                     console.print(f"[dim]{result.stderr[:500]}[/dim]")
             else:
+                # 结构化输出：方便 Claude 解析
+                print(f"[STATUS] state=failed elapsed={elapsed}s session={session_id or 'none'}", flush=True)
                 print(f"[Error] {error_msg}", flush=True)
 
         is_first = False
