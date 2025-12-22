@@ -369,7 +369,7 @@ tasks:
 
   BUG-006:
     name: context-provider-hardcoded-embedding
-    status: pending
+    status: completed
     wave: 9
     deps:
       - BUG-005
@@ -391,7 +391,7 @@ tasks:
 
   BUG-007:
     name: chunker-json-path-fragile
-    status: pending
+    status: completed
     wave: 9
     deps:
       - BUG-005
@@ -413,7 +413,7 @@ tasks:
 
   BUG-008:
     name: run-and-parse-exception-handling
-    status: pending
+    status: completed
     wave: 9
     deps:
       - BUG-005
@@ -436,7 +436,7 @@ tasks:
 
   TEST-001:
     name: chunker-unit-tests
-    status: pending
+    status: completed
     wave: 10
     deps:
       - BUG-008

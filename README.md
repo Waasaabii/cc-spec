@@ -4,7 +4,7 @@
 
 [English](./docs/README.en.md) | 中文
 
-[![Version](https://img.shields.io/badge/version-0.1.8-blue.svg)](https://github.com/Waasaabii/cc-spec)
+[![Version](https://img.shields.io/badge/version-0.1.9-blue.svg)](https://github.com/Waasaabii/cc-spec)
 
 ---
 
@@ -163,6 +163,162 @@ cc-spec init 会生成 Claude Code 的命令文件到 `.claude/commands/cc-spec/
 
 ---
 
+## Codex 会话状态管理
+
+cc-spec 提供完整的 Codex 会话状态持久化和可视化机制，支持 Claude 高效监控多个并行 Codex 会话。
+
+### 架构概览
+
+```
+┌─────────────────┐     ┌──────────────────────┐     ┌─────────────────┐
+│   Claude Code   │     │      cc-spec         │     │     Viewer      │
+│   (编排者)       │     │   (会话管理)          │     │   (可视化)       │
+└────────┬────────┘     └──────────┬───────────┘     └────────┬────────┘
+         │                         │                          │
+         │  cc-spec chat -m "..."  │                          │
+         │ ───────────────────────>│                          │
+         │                         │                          │
+         │                         │ 写入 sessions.json       │
+         │                         │ ─────────────────────>   │
+         │                         │                          │
+         │                         │ SSE 事件流               │
+         │                         │ ═══════════════════════> │
+         │                         │                          │
+         │  [STATUS] state=done    │                          │
+         │ <───────────────────────│                          │
+         │                         │                          │
+         │  cat sessions.json      │  load_sessions()         │
+         │ ───────────────────────>│ <─────────────────────── │
+         │                         │                          │
+```
+
+### 数据文件
+
+会话状态存储在项目目录下：
+
+```
+.cc-spec/
+└── runtime/
+    └── codex/
+        ├── sessions.json    # 会话状态（持久化）
+        └── sessions.lock    # 文件锁（并发安全）
+```
+
+### sessions.json 结构
+
+```json
+{
+  "schema_version": 1,
+  "updated_at": "2025-01-15T10:30:00+00:00",
+  "sessions": {
+    "019b459f-2c65-7b83-834c-44e8a721272d": {
+      "session_id": "019b459f-2c65-7b83-834c-44e8a721272d",
+      "state": "running",
+      "task_summary": "修改 App.tsx 添加会话状态显示...",
+      "message": null,
+      "exit_code": null,
+      "elapsed_s": null,
+      "pid": 12345,
+      "created_at": "2025-01-15T10:25:00+00:00",
+      "updated_at": "2025-01-15T10:30:00+00:00"
+    }
+  }
+}
+```
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `session_id` | string | Codex 会话唯一标识（UUID v7） |
+| `state` | string | 状态：`running` / `done` / `failed` / `idle` |
+| `task_summary` | string | 任务摘要（前 200 字符） |
+| `message` | string | 完成消息或错误信息 |
+| `exit_code` | int | 退出码（0=成功） |
+| `elapsed_s` | float | 执行耗时（秒） |
+| `pid` | int | Codex 进程 PID（运行中有值，完成后为 null） |
+| `created_at` | string | 会话创建时间（ISO 8601） |
+| `updated_at` | string | 最后更新时间（ISO 8601） |
+
+### 状态流转
+
+```
+                    ┌─────────┐
+                    │ running │ ←── 会话开始
+                    └────┬────┘
+                         │
+           ┌─────────────┼─────────────┐
+           ↓             ↓             ↓
+      ┌────────┐    ┌────────┐    ┌────────┐
+      │  done  │    │ failed │    │  idle  │
+      └────────┘    └────────┘    └────────┘
+       成功完成       执行失败      60s 无输出
+```
+
+### Claude 高效监控
+
+Claude 可以通过读取单个 JSON 文件快速获取所有会话状态：
+
+```bash
+# 一次性获取所有会话状态
+cat .cc-spec/runtime/codex/sessions.json
+
+# 继续未完成的会话
+cc-spec chat -m "继续" -r <session_id>
+```
+
+### chat 命令结构化输出
+
+非交互模式下，chat 命令输出结构化状态行便于 Claude 解析：
+
+```
+[STATUS] state=done elapsed=60s session=019b459f-...
+[Codex] 任务完成消息...
+```
+
+### Viewer 集成
+
+cc-spec-viewer 每 5 秒自动读取 sessions.json 并合并显示：
+
+- **状态标签**: Running / Done / Failed / Idle
+- **任务摘要**: 显示 task_summary 前 50 字符
+- **执行时间**: 优先显示 sessions.json 的 elapsed_s
+- **SSE 流合并**: 实时事件流 + 持久化状态双重保障
+- **停止按钮**: 运行中的会话可一键终止
+
+### 停止会话功能
+
+Viewer 支持从界面直接停止正在运行的 Codex 会话：
+
+```
+┌─────────────────┐                ┌─────────────────┐
+│     Viewer      │   stop_session │    cc-spec      │
+│   (点击停止)     │ ─────────────> │  sessions.json  │
+└─────────────────┘                └────────┬────────┘
+                                            │ 读取 pid
+                                            ↓
+                                   ┌─────────────────┐
+                                   │  taskkill/kill  │
+                                   │   终止进程       │
+                                   └─────────────────┘
+```
+
+**工作原理**：
+1. cc-spec 启动 Codex 时将进程 PID 写入 sessions.json
+2. Viewer 读取 sessions.json 获取会话的 PID
+3. 点击停止按钮时，Viewer 调用系统命令终止进程
+   - Windows: `taskkill /PID <pid> /F`
+   - Unix/Linux: `kill -9 <pid>`
+4. 会话完成后自动清除 PID
+
+### 并发安全
+
+SessionStateManager 使用跨平台文件锁确保并发写入安全：
+
+- **Windows**: `msvcrt.locking()`
+- **Unix/Linux**: `fcntl.flock()`
+- **原子写入**: 先写临时文件，再 `os.replace()` 原子替换
+
+---
+
 ## 文档与规范产物
 
 - `docs/plan/` 仅供人类阅读的规划文档，不作为运行时配置来源。
@@ -222,6 +378,16 @@ cc-spec 使用的模板基于 OpenSpec 和 Spec-Kit 的模板设计：
 ---
 
 ## 更新日志
+
+### v0.1.9 (2025-01)
+
+- **Codex 会话状态管理**: SessionStateManager 持久化会话状态到 sessions.json
+- **Viewer sessions.json 集成**: 每 5 秒自动读取并合并显示会话状态
+- **Viewer 停止会话功能**: 一键终止运行中的 Codex 会话（支持 Windows/Unix）
+- **PID 追踪**: 会话记录包含进程 PID，支持精确终止
+- **chat 结构化输出**: `[STATUS] state=done elapsed=60s session=...` 格式便于 Claude 解析
+- **跨平台文件锁**: Windows msvcrt / Unix fcntl 确保并发写入安全
+- **idle 状态检测**: 60 秒无输出自动标记为 idle 状态
 
 ### v0.1.8 (2025-01)
 
