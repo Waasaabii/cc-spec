@@ -35,7 +35,7 @@ class WorkflowStep(str, Enum):
     CLARIFY = "clarify"
     PLAN = "plan"
     APPLY = "apply"
-    CHECKLIST = "checklist"
+    ACCEPT = "accept"
     ARCHIVE = "archive"
 
 

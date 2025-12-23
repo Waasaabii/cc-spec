@@ -43,10 +43,11 @@ STATUS_NAMES = {
 # 阶段显示名称
 STAGE_NAMES = {
     "specify": "编写规格",
-    "clarify": "澄清",
+    "detail": "细化",
+    "review": "评审",
     "plan": "计划",
     "apply": "执行",
-    "checklist": "验收",
+    "accept": "验收",
     "archive": "归档",
 }
 
@@ -62,7 +63,7 @@ def show_status_panel(
     参数：
         console: Rich 控制台实例
         change_name: 当前变更名称
-        current_stage: 当前阶段（specify/clarify/plan/apply/checklist/archive）
+        current_stage: 当前阶段（specify/detail/review/plan/apply/accept/archive）
         progress: 可选的进度信息（waves_completed、waves_total 等）
     """
     content_lines = []
