@@ -335,6 +335,39 @@ class ChecklistConfig:
     auto_retry: bool = False
 
 
+@dataclass
+class AcceptanceConfig:
+    """Accept 验收配置。
+
+    属性：
+        commands：自动化检查命令列表（默认运行 lint/test/build/type-check）
+        auto_generate_criteria：是否自动生成 acceptance.md
+    """
+
+    commands: list[str] = field(default_factory=lambda: [
+        "lint",
+        "test",
+        "build",
+        "type-check",
+    ])
+    auto_generate_criteria: bool = True
+
+    def to_dict(self) -> dict[str, Any]:
+        """转换为字典以便 YAML 序列化。"""
+        return {
+            "commands": self.commands,
+            "auto_generate_criteria": self.auto_generate_criteria,
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> "AcceptanceConfig":
+        """从字典创建实例。"""
+        return cls(
+            commands=data.get("commands", ["lint", "test", "build", "type-check"]),
+            auto_generate_criteria=data.get("auto_generate_criteria", True),
+        )
+
+
 # ---------------------------------------------------------------------------
 # KB 配置
 # ---------------------------------------------------------------------------
@@ -663,10 +696,11 @@ class Config:
         "package.json",
     ])
     subagent: SubAgentConfig = field(default_factory=SubAgentConfig)
-    checklist: ChecklistConfig = field(default_factory=ChecklistConfig)  
+    checklist: ChecklistConfig = field(default_factory=ChecklistConfig)
     scoring: ScoringConfig = field(default_factory=ScoringConfig)
     lock: LockConfig = field(default_factory=LockConfig)
     kb: KBConfig = field(default_factory=KBConfig)
+    acceptance: AcceptanceConfig = field(default_factory=AcceptanceConfig)
 
     def get_active_agent(self) -> str:
         """获取当前激活的 AI agent。
@@ -726,6 +760,9 @@ class Config:
         if is_version_gte(self.version, "1.4"):
             result["kb"] = self.kb.to_dict()
 
+        # acceptance 配置
+        result["acceptance"] = self.acceptance.to_dict()
+
         return result
 
     @classmethod
@@ -771,6 +808,8 @@ class Config:
 
         lock = LockConfig.from_dict(lock_data) if lock_data else LockConfig()
         kb = KBConfig.from_dict(kb_data) if kb_data else KBConfig()
+        acceptance_data = data.get("acceptance", {})
+        acceptance = AcceptanceConfig.from_dict(acceptance_data) if acceptance_data else AcceptanceConfig()
 
         return cls(
             version=data.get("version", CONFIG_VERSION),
@@ -791,6 +830,7 @@ class Config:
             scoring=scoring,
             lock=lock,
             kb=kb,
+            acceptance=acceptance,
         )
 
 

@@ -25,7 +25,7 @@ console = Console()
 
 # 快速流程阈值（文件数 > 5 强制标准流程）
 MAX_QUICK_DELTA_FILES = 5
-QUICK_DELTA_SKIPPED_STEPS = ["clarify", "plan", "apply", "checklist"]
+QUICK_DELTA_SKIPPED_STEPS = ["clarify", "plan", "apply", "accept"]
 
 
 # ============================================================================
@@ -655,7 +655,7 @@ def _generate_mini_proposal(
         "2. `cc-spec clarify` - 澄清需求",
         "3. `cc-spec plan` - 生成执行计划",
         "4. `cc-spec apply` - 执行任务",
-        "5. `cc-spec checklist` - 验收打分",
+        "5. `cc-spec accept` - 端到端验收",
         "6. `cc-spec archive` - 归档变更",
         "",
     ])

@@ -70,10 +70,14 @@ AGENTS_MD_TEMPLATE = """# AGENTS.md (for Codex)
 # ---------------------------------------------------------------------------
 
 CLAUDE_ROLE_RULES = [
-    "作为主控 Agent（Orchestrator），负责需求分析和任务编排",
+    "你是 CC (Claude Code)，在 cc-spec 工作流中担任 **决策者和编排者**",
+    "与用户沟通，理解需求；做最终决策，拍板方案",
+    "编写文档（proposal、review、acceptance 等）",
+    "快速修复 CX 产生的 bug；质量把控，确保功能端到端可用",
     "负责将需求/上下文写入 KB，供 Codex 读取",
-    "不直接编写业务代码，代码实现由 Codex 完成",
+    "不直接编写业务代码，代码实现由 CX (Codex) 完成",
     "负责审核 Codex 的执行结果，处理异常情况",
+    "CX (Codex) 是你的顾问，负责调研和批量执行，通过 `cc-spec chat` 协作",
 ]
 
 CLAUDE_OUTPUTS = [
@@ -131,7 +135,11 @@ CLAUDE_KB_WRITE_RULES = [
 
 
 CODEX_ROLE_RULES = [
-    "作为执行 Agent，负责实际的代码编写和修改",
+    "你是 CX (Codex)，在 cc-spec 工作流中担任 **顾问和执行者**",
+    "调研分析，提供建议；批量代码生成和实现",
+    "执行测试和验证；大范围重复性任务",
+    "CC (Claude Code) 是决策者，你可以充分表达观点，但最终决策权归 CC",
+    "不要限制自己的能力，充分分析和表达",
     "从 KB 获取上下文（需求 + 代码），理解任务目标",
     "直接执行任务，修改代码文件",
     "遵循项目规范，输出高质量代码",
@@ -160,11 +168,12 @@ CODEX_EXECUTION_RULES = [
 
 CODEX_COMMANDS = [
     {"name": "specify", "description": "创建新的变更规格说明", "usage": "cc-spec specify <变更名称>"},
-    {"name": "clarify", "description": "审查任务并标记需要返工的内容", "usage": "cc-spec clarify"},
+    {"name": "clarify", "description": "审查任务/进入 detail/review 模式", "usage": "cc-spec clarify [--detail|--review]"},
     {"name": "plan", "description": "从提案生成执行计划", "usage": "cc-spec plan"},
     {"name": "apply", "description": "使用 SubAgent 并行执行任务", "usage": "cc-spec apply"},
-    {"name": "checklist", "description": "使用检查清单评分验证任务完成情况", "usage": "cc-spec checklist"},
+    {"name": "accept", "description": "端到端验收：执行自动化检查，验证功能可用", "usage": "cc-spec accept"},
     {"name": "archive", "description": "归档已完成的变更", "usage": "cc-spec archive"},
+    {"name": "context", "description": "输出当前阶段上下文信息", "usage": "cc-spec context [--stage|--role|--change]"},
     {"name": "quick-delta", "description": "快速模式，一步创建并归档简单变更", "usage": "cc-spec quick-delta <变更名称> \"<变更描述>\""},
     {"name": "list", "description": "列出变更、任务、规格或归档", "usage": "cc-spec list [changes|tasks|specs|archives]"},
     {"name": "goto", "description": "导航到特定变更或任务", "usage": "cc-spec goto <变更名称>"},

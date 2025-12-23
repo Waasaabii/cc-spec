@@ -1,7 +1,7 @@
 """cc-spec 的 archive 命令实现。
 
 该命令会将一个已完成的变更归档，具体步骤：
-1. 校验 checklist 阶段已完成
+1. 校验 accept 阶段已完成
 2. 展示将要合并的规格预览
 3. 将 Delta specs 合并到主 specs/ 目录
 4. 将变更目录按时间戳移动到 archive
@@ -63,10 +63,8 @@ def archive_command(
 ) -> None:
     """归档一个已完成的变更。
 
-    
-
     该命令会执行以下步骤：
-    1. 校验 checklist 阶段已完成
+    1. 校验 accept 阶段已完成
     2. 展示将要合并的规格预览
     3. 请求用户确认（除非使用 --force）
     4. 将 Delta specs 合并到主 specs/ 目录
@@ -160,19 +158,19 @@ def archive_command(
         )
         raise typer.Exit(1)
 
-    # 校验 checklist 阶段已完成
-    checklist_stage = state.stages.get(Stage.CHECKLIST)
-    if not checklist_stage or checklist_stage.status != TaskStatus.COMPLETED:
+    # 校验 accept 阶段已完成
+    accept_stage = state.stages.get(Stage.ACCEPT)
+    if not accept_stage or accept_stage.status != TaskStatus.COMPLETED:
         console.print(
-            "[red]错误：[/red] 必须先完成 checklist 阶段才能归档。",
+            "[red]错误：[/red] 必须先完成 accept 阶段才能归档。",
             style="red",
         )
         console.print(
-            "\n[yellow]提示：[/yellow] 运行 [cyan]cc-spec checklist[/cyan] 完成验收。"
+            "\n[yellow]提示：[/yellow] 运行 [cyan]cc-spec accept[/cyan] 完成端到端验收。"
         )
         raise typer.Exit(1)
 
-    console.print("[green]√[/green] checklist 阶段已完成\n")
+    console.print("[green]√[/green] accept 阶段已完成\n")
 
     # 在 change/specs/ 目录中查找所有 Delta spec
     change_specs_dir = change_dir / "specs"

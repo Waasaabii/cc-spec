@@ -1,8 +1,12 @@
 """用于审查并标记任务返工的 clarify 命令。
 
+支持两种工作流模式：
+- --detail：CC↔CX 自动讨论改动点，输出 detail.md
+- --review：用户审查 detail.md，澄清歧义，输出 review.md
 
 """
 
+from datetime import datetime
 from pathlib import Path
 
 import typer
@@ -19,6 +23,8 @@ from cc_spec.core.ambiguity.detector import (
 from cc_spec.core.id_manager import IDManager
 from cc_spec.core.state import (
     ChangeState,
+    Stage,
+    StageInfo,
     TaskStatus,
     get_current_change,
     load_state,
@@ -33,6 +39,55 @@ from cc_spec.utils.files import find_project_root, get_cc_spec_dir
 
 app = typer.Typer()
 console = Console()
+
+# detail.md 模板
+DETAIL_TEMPLATE = """# Detail - CC↔CX 讨论记录
+
+**变更**: {change_name}
+**生成时间**: {timestamp}
+
+## 讨论摘要
+
+<CC↔CX 讨论的核心结论>
+
+## 改动点确认
+
+| 文件 | 改动类型 | 说明 |
+|------|----------|------|
+| ... | ADDED/MODIFIED | ... |
+
+## 技术决策
+
+1. <决策1>
+2. <决策2>
+
+## 待用户确认
+
+- [ ] <需要用户确认的点>
+"""
+
+# review.md 模板
+REVIEW_TEMPLATE = """# Review - 用户审查记录
+
+**变更**: {change_name}
+**审查时间**: {timestamp}
+
+## 用户反馈
+
+<用户的反馈和修改意见>
+
+## 歧义澄清
+
+| 原始描述 | 澄清后 |
+|----------|--------|
+| ... | ... |
+
+## 最终确认
+
+- [ ] 需求已明确
+- [ ] 改动点已确认
+- [ ] 无遗留歧义
+"""
 
 
 def find_cc_spec_root() -> Path | None:
@@ -300,10 +355,24 @@ def clarify(
         "-d",
         help="检测 proposal.md 中的歧义",
     ),
+    detail_mode: bool = typer.Option(
+        False,
+        "--detail",
+        help="进入 detail 模式：CC↔CX 自动讨论改动点，输出 detail.md",
+    ),
+    review_mode: bool = typer.Option(
+        False,
+        "--review",
+        help="进入 review 模式：用户审查 detail.md，澄清歧义，输出 review.md",
+    ),
 ) -> None:
-    """审查任务并将其标记为返工。
+    """审查任务并将其标记为返工，或进入 detail/review 工作流模式。
 
-    
+    工作流模式：
+    - --detail：CC↔CX 自动讨论改动点，输出 detail.md
+    - --review：用户审查 detail.md，与 CC 讨论歧义，输出 review.md
+
+    旧模式（标记返工）：
     - C-001：显示变更 C-001 的全部任务
     - C-001:02-MODEL：将指定任务标记为返工
     - 02-MODEL：在当前变更中将任务标记为返工（旧格式）
@@ -311,16 +380,15 @@ def clarify(
     不带参数时：展示当前变更中的全部任务。
     带参数时：将对应任务标记为返工（重置状态为 pending）。
 
-    
-
     示例：
+        cc-spec clarify --detail            # 进入 detail 模式
+        cc-spec clarify --review            # 进入 review 模式
         cc-spec clarify                     # 显示所有任务
         cc-spec clarify --detect            # 检测当前变更的歧义
         cc-spec clarify -d C-001            # 检测指定变更的歧义
         cc-spec clarify C-001               # 显示变更 C-001 的任务
         cc-spec clarify C-001:02-MODEL      # 将任务 02-MODEL 标记为返工
         cc-spec clarify 02-MODEL            # 在当前变更中标记任务
-        cc-spec clarify 02-MODEL -c C-001   # 旧用法：通过选项指定变更
     """
     # 显示启动 Banner
     show_banner(console)
@@ -420,6 +488,16 @@ def clarify(
         )
         return
 
+    # detail 模式：CC↔CX 自动讨论
+    if detail_mode:
+        _handle_detail_mode(project_root, change_dir, state, state_path)
+        return
+
+    # review 模式：用户审查
+    if review_mode:
+        _handle_review_mode(project_root, change_dir, state, state_path)
+        return
+
     # 执行对应操作
     if task_id is None:
         # 显示任务列表
@@ -427,3 +505,179 @@ def clarify(
     else:
         # 返工指定任务
         rework_task(state, task_id, state_path, change_dir)
+
+
+def _handle_detail_mode(
+    project_root: Path,
+    change_dir: Path,
+    state: ChangeState,
+    state_path: Path,
+) -> None:
+    """处理 detail 模式：CC↔CX 自动讨论改动点。
+
+    参数：
+        project_root：项目根目录
+        change_dir：变更目录
+        state：当前变更状态
+        state_path：status.yaml 路径
+    """
+    console.print(f"[cyan]进入 detail 模式：[/cyan] [bold]{state.change_name}[/bold]")
+    console.print("[dim]CC↔CX 自动讨论改动点[/dim]\n")
+
+    # 检查 proposal.md 是否存在
+    proposal_path = change_dir / "proposal.md"
+    if not proposal_path.exists():
+        console.print(
+            f"[red]错误：[/red] 变更 '{state.change_name}' 缺少 proposal.md 文件\n"
+            "请先运行 [cyan]cc-spec specify[/cyan] 创建提案。"
+        )
+        raise typer.Exit(1)
+
+    # 检查/创建 detail.md
+    detail_path = change_dir / "detail.md"
+    timestamp = datetime.now().isoformat()
+
+    if detail_path.exists():
+        console.print(f"[yellow]已存在 detail.md[/yellow]")
+        console.print(f"[dim]路径：{detail_path.relative_to(Path.cwd())}[/dim]\n")
+
+        confirmed = confirm_action(
+            console,
+            "是否覆盖现有的 detail.md？",
+            default=False,
+            warning=True,
+        )
+        if not confirmed:
+            console.print("[dim]已取消操作[/dim]")
+            return
+
+    # 生成 detail.md 模板
+    detail_content = DETAIL_TEMPLATE.format(
+        change_name=state.change_name,
+        timestamp=timestamp,
+    )
+    detail_path.write_text(detail_content, encoding="utf-8")
+    console.print(f"[green]√[/green] 已生成：{detail_path.relative_to(Path.cwd())}")
+
+    # 更新状态为 detail 阶段
+    try:
+        state.current_stage = Stage.DETAIL
+        state.stages[Stage.DETAIL] = StageInfo(
+            status=TaskStatus.IN_PROGRESS,
+            started_at=timestamp,
+        )
+        update_state(state_path, state)
+        console.print("[green]√[/green] 状态已更新为 detail 阶段")
+    except Exception as e:
+        console.print(f"[yellow]警告：[/yellow] 无法更新状态：{e}")
+
+    # 写入 workflow record
+    try_write_record(
+        project_root,
+        step=WorkflowStep.CLARIFY,
+        change_name=state.change_name,
+        inputs={"mode": "detail"},
+        outputs={"detail_path": str(detail_path.relative_to(project_root))},
+        notes="clarify.detail.start",
+    )
+
+    # 显示下一步指引
+    console.print("\n[bold]下一步：[/bold]")
+    console.print("1. 与 CX 讨论改动点（运行 [cyan]cc-spec chat[/cyan]）")
+    console.print("2. 更新 detail.md 记录讨论结论")
+    console.print("3. 完成后运行 [cyan]cc-spec clarify --review[/cyan] 进入用户审查")
+
+
+def _handle_review_mode(
+    project_root: Path,
+    change_dir: Path,
+    state: ChangeState,
+    state_path: Path,
+) -> None:
+    """处理 review 模式：用户审查 detail.md，澄清歧义。
+
+    参数：
+        project_root：项目根目录
+        change_dir：变更目录
+        state：当前变更状态
+        state_path：status.yaml 路径
+    """
+    console.print(f"[cyan]进入 review 模式：[/cyan] [bold]{state.change_name}[/bold]")
+    console.print("[dim]用户审查 detail.md，澄清歧义[/dim]\n")
+
+    # 检查 detail.md 是否存在
+    detail_path = change_dir / "detail.md"
+    if not detail_path.exists():
+        console.print(
+            f"[red]错误：[/red] 变更 '{state.change_name}' 缺少 detail.md 文件\n"
+            "请先运行 [cyan]cc-spec clarify --detail[/cyan] 生成。"
+        )
+        raise typer.Exit(1)
+
+    # 显示 detail.md 内容摘要
+    detail_content = detail_path.read_text(encoding="utf-8")
+    console.print(Panel(
+        detail_content[:1000] + ("..." if len(detail_content) > 1000 else ""),
+        title="[bold]detail.md 内容预览[/bold]",
+        border_style="cyan",
+    ))
+    console.print()
+
+    # 检查/创建 review.md
+    review_path = change_dir / "review.md"
+    timestamp = datetime.now().isoformat()
+
+    if review_path.exists():
+        console.print(f"[yellow]已存在 review.md[/yellow]")
+        console.print(f"[dim]路径：{review_path.relative_to(Path.cwd())}[/dim]\n")
+
+        confirmed = confirm_action(
+            console,
+            "是否覆盖现有的 review.md？",
+            default=False,
+            warning=True,
+        )
+        if not confirmed:
+            console.print("[dim]已取消操作[/dim]")
+            return
+
+    # 生成 review.md 模板
+    review_content = REVIEW_TEMPLATE.format(
+        change_name=state.change_name,
+        timestamp=timestamp,
+    )
+    review_path.write_text(review_content, encoding="utf-8")
+    console.print(f"[green]√[/green] 已生成：{review_path.relative_to(Path.cwd())}")
+
+    # 更新状态为 review 阶段
+    try:
+        # 完成 detail 阶段
+        if Stage.DETAIL in state.stages:
+            state.stages[Stage.DETAIL].status = TaskStatus.COMPLETED
+            state.stages[Stage.DETAIL].completed_at = timestamp
+
+        state.current_stage = Stage.REVIEW
+        state.stages[Stage.REVIEW] = StageInfo(
+            status=TaskStatus.IN_PROGRESS,
+            started_at=timestamp,
+        )
+        update_state(state_path, state)
+        console.print("[green]√[/green] 状态已更新为 review 阶段")
+    except Exception as e:
+        console.print(f"[yellow]警告：[/yellow] 无法更新状态：{e}")
+
+    # 写入 workflow record
+    try_write_record(
+        project_root,
+        step=WorkflowStep.CLARIFY,
+        change_name=state.change_name,
+        inputs={"mode": "review"},
+        outputs={"review_path": str(review_path.relative_to(project_root))},
+        notes="clarify.review.start",
+    )
+
+    # 显示下一步指引
+    console.print("\n[bold]下一步：[/bold]")
+    console.print("1. 审查 detail.md 中的改动点和技术决策")
+    console.print("2. 在 review.md 中记录反馈和澄清结果")
+    console.print("3. 确认无歧义后运行 [cyan]cc-spec plan[/cyan] 生成执行计划")

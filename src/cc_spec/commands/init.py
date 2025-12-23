@@ -285,11 +285,12 @@ def init_command(
             f"  1. （已完成）终端执行 [cyan]cc-spec init[/cyan]\n"
             f"  2. 在 Claude Code 中执行 [cyan]/cc-spec:init[/cyan] 构建/更新 KB（先 scan 再入库）\n"
             f"  3. 在 Claude Code 中执行 [cyan]/cc-spec:specify <变更名称>[/cyan] 创建变更规格\n"
-            f"  4. 继续执行 [cyan]/cc-spec:clarify[/cyan]\n"
-            f"  5. 继续执行 [cyan]/cc-spec:plan[/cyan]\n"
-            f"  6. 继续执行 [cyan]/cc-spec:apply[/cyan]\n"
-            f"  7. 继续执行 [cyan]/cc-spec:checklist[/cyan]\n"
-            f"  8. 继续执行 [cyan]/cc-spec:archive[/cyan]",
+            f"  4. 继续执行 [cyan]/cc-spec:clarify --detail[/cyan] CC↔CX 讨论\n"
+            f"  5. 继续执行 [cyan]/cc-spec:clarify --review[/cyan] 用户审查\n"
+            f"  6. 继续执行 [cyan]/cc-spec:plan[/cyan]\n"
+            f"  7. 继续执行 [cyan]/cc-spec:apply[/cyan]\n"
+            f"  8. 继续执行 [cyan]/cc-spec:accept[/cyan] 端到端验收\n"
+            f"  9. 继续执行 [cyan]/cc-spec:archive[/cyan]",
             title="[bold green]快速开始[/bold green]",
             border_style="green",
         )

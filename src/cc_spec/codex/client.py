@@ -54,8 +54,12 @@ def _env_timeout_ms(default_ms: int) -> int:
         return default_ms
 
 
-def _env_idle_timeout_s(default_s: int = 60) -> int:
-    """获取 idle 超时时间（秒），用于检测 Codex 是否卡住。"""
+def _env_idle_timeout_s(default_s: int = 300) -> int:
+    """获取 idle 超时时间（秒），用于检测 Codex 是否卡住。
+
+    默认 300 秒（5分钟），因为 Codex 执行任务通常需要较长时间。
+    可通过 CC_SPEC_CODEX_IDLE_TIMEOUT 环境变量覆盖。
+    """
     raw = (os.environ.get("CC_SPEC_CODEX_IDLE_TIMEOUT") or "").strip()
     if not raw:
         return default_s
@@ -310,15 +314,7 @@ class CodexClient:
                                 elapsed_s=elapsed,
                             )
 
-        if viewer is not None:
-            viewer.publish_event(
-                {
-                    "type": "codex.started",
-                    "ts": _now_iso(),
-                    "run_id": run_id,
-                    "session_id": session_id,  # resume 时会有已知的 session_id
-                }
-            )
+        # 注意：codex.started 事件移到进程启动后发送（包含 pid）
 
         try:
             process = subprocess.Popen(
@@ -394,6 +390,19 @@ class CodexClient:
 
         process_pid = process.pid
         _register_session_if_needed()
+
+        # 发送 codex.started 事件（包含 pid）
+        if viewer is not None:
+            viewer.publish_event(
+                {
+                    "type": "codex.started",
+                    "ts": _now_iso(),
+                    "run_id": run_id,
+                    "session_id": session_id,  # resume 时会有已知的 session_id
+                    "pid": process_pid,
+                    "project_root": str(workdir),
+                }
+            )
 
         if process.stdin is not None:
             try:

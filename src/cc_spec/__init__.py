@@ -5,11 +5,12 @@ import sys
 import typer
 from rich.console import Console
 
+from cc_spec.commands import accept as accept_cmd
 from cc_spec.commands import apply as apply_cmd
 from cc_spec.commands import archive as archive_cmd
 from cc_spec.commands import chat as chat_cmd
-from cc_spec.commands import checklist as checklist_cmd
 from cc_spec.commands import clarify as clarify_cmd
+from cc_spec.commands import context as context_cmd
 from cc_spec.commands import goto as goto_cmd
 from cc_spec.commands import init as init_cmd
 from cc_spec.commands import kb as kb_cmd
@@ -61,8 +62,8 @@ app.command(name="specify", help="创建新的变更规格说明")(specify_cmd.s
 app.command(name="clarify", help="审查任务并标记需要返工的内容")(clarify_cmd.clarify)
 app.command(name="plan", help="从提案生成执行计划")(plan_cmd.plan_command)
 app.command(name="apply", help="使用SubAgent并行执行任务")(apply_cmd.apply_command)
-app.command(name="checklist", help="使用检查清单评分验证任务完成情况")(
-    checklist_cmd.checklist_command
+app.command(name="accept", help="端到端验收：执行自动化检查，验证功能可用")(
+    accept_cmd.accept_command
 )
 app.command(name="archive", help="归档已完成的变更")(archive_cmd.archive_command)
 app.command(name="quick-delta", help="快速模式：一步创建并归档简单变更")(
@@ -72,6 +73,7 @@ app.command(name="list", help="列出变更、任务、规格或归档")(list_cm
 app.command(name="goto", help="导航到特定变更或任务")(goto_cmd.goto_command)
 app.command(name="update", help="更新配置、命令或模板")(update_cmd.update_command)
 app.command(name="chat", help="与Codex进行多轮交互式对话")(chat_cmd.chat_command)
+app.command(name="context", help="输出当前阶段上下文信息")(context_cmd.context_command)
 app.add_typer(kb_cmd.kb_app, name="kb")
 
 

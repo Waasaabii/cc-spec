@@ -3,7 +3,7 @@
 该模块负责加载、更新并校验变更工作流各阶段的状态迁移。
 """
 
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field
 from datetime import datetime
 from enum import Enum
 from pathlib import Path
@@ -16,10 +16,11 @@ class Stage(Enum):
     """变更的工作流阶段。"""
 
     SPECIFY = "specify"
-    CLARIFY = "clarify"
+    DETAIL = "detail"
+    REVIEW = "review"
     PLAN = "plan"
     APPLY = "apply"
-    CHECKLIST = "checklist"
+    ACCEPT = "accept"
     ARCHIVE = "archive"
 
 
@@ -63,6 +64,16 @@ class TaskInfo:
 
 
 @dataclass
+class ReworkEvent:
+    """返工事件记录。"""
+
+    timestamp: str
+    from_stage: str
+    to_stage: str
+    reason: str
+
+
+@dataclass
 class ChangeState:
     """工作流中某个变更的状态。"""
 
@@ -71,16 +82,18 @@ class ChangeState:
     current_stage: Stage
     stages: dict[Stage, StageInfo] = field(default_factory=dict)
     tasks: list[TaskInfo] = field(default_factory=list)
+    meta: dict[str, Any] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
         """若未提供则初始化 stages。"""
         if not self.stages:
             self.stages = {
                 Stage.SPECIFY: StageInfo(status=TaskStatus.PENDING),
-                Stage.CLARIFY: StageInfo(status=TaskStatus.PENDING),
+                Stage.DETAIL: StageInfo(status=TaskStatus.PENDING),
+                Stage.REVIEW: StageInfo(status=TaskStatus.PENDING),
                 Stage.PLAN: StageInfo(status=TaskStatus.PENDING),
                 Stage.APPLY: StageInfo(status=TaskStatus.PENDING),
-                Stage.CHECKLIST: StageInfo(status=TaskStatus.PENDING),
+                Stage.ACCEPT: StageInfo(status=TaskStatus.PENDING),
                 Stage.ARCHIVE: StageInfo(status=TaskStatus.PENDING),
             }
 
@@ -149,8 +162,17 @@ def load_state(state_path: Path) -> ChangeState:
             # 跳过无效任务
             continue
 
+    # 解析 meta
+    meta = data.get("meta", {})
+    if not isinstance(meta, dict):
+        meta = {}
+
     # 解析当前阶段
-    current_stage = Stage(data.get("current_stage", "specify"))
+    current_stage_raw = data.get("current_stage", "specify")
+    try:
+        current_stage = Stage(current_stage_raw)
+    except ValueError:
+        current_stage = Stage.SPECIFY
 
     return ChangeState(
         change_name=data.get("change_name", ""),
@@ -158,6 +180,7 @@ def load_state(state_path: Path) -> ChangeState:
         current_stage=current_stage,
         stages=stages,
         tasks=tasks,
+        meta=meta,
     )
 
 
@@ -215,11 +238,32 @@ def update_state(state_path: Path, state: ChangeState) -> None:
         "stages": stages_dict,
         "tasks": tasks_list,
     }
+    if state.meta:
+        data["meta"] = state.meta
 
     # 写入文件
     state_path.parent.mkdir(parents=True, exist_ok=True)
     with open(state_path, "w", encoding="utf-8") as f:
         yaml.dump(data, f, default_flow_style=False, allow_unicode=True, sort_keys=False)
+
+
+def append_rework_event(state: ChangeState, from_stage: str, to_stage: str, reason: str) -> None:
+    """记录返工事件到 meta.rework。"""
+    if state.meta is None:
+        state.meta = {}
+
+    rework_events = state.meta.get("rework")
+    if not isinstance(rework_events, list):
+        rework_events = []
+        state.meta["rework"] = rework_events
+
+    event = ReworkEvent(
+        timestamp=datetime.now().isoformat(),
+        from_stage=from_stage,
+        to_stage=to_stage,
+        reason=reason,
+    )
+    rework_events.append(asdict(event))
 
 
 def get_current_change(cc_spec_root: Path) -> ChangeState | None:
@@ -270,7 +314,7 @@ def validate_stage_transition(current: Stage, target: Stage) -> bool:
     """校验阶段迁移是否允许。
 
     阶段迁移遵循线性流程：
-    specify -> clarify -> plan -> apply -> checklist -> archive
+    specify -> detail -> review -> plan -> apply -> accept -> archive
 
     允许回退（用于返工）；不允许向前跳过阶段。
 
@@ -283,10 +327,11 @@ def validate_stage_transition(current: Stage, target: Stage) -> bool:
     """
     stage_order = [
         Stage.SPECIFY,
-        Stage.CLARIFY,
+        Stage.DETAIL,
+        Stage.REVIEW,
         Stage.PLAN,
         Stage.APPLY,
-        Stage.CHECKLIST,
+        Stage.ACCEPT,
         Stage.ARCHIVE,
     ]
 

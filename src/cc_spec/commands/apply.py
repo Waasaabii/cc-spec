@@ -322,8 +322,8 @@ def apply_command(
                 style="green",
             )
             console.print(
-                "\n[bold]下一步：[/bold] 运行 [cyan]cc-spec checklist[/cyan] "
-                "验证任务完成情况。"
+                "\n[bold]下一步：[/bold] 运行 [cyan]cc-spec accept[/cyan] "
+                "进行端到端验收。"
             )
         raise typer.Exit(0)
 
@@ -1016,7 +1016,7 @@ def _handle_execution_success(
     # 展示下一步
     console.print("\n[bold]下一步：[/bold]")
     console.print("1. 查看执行结果")
-    console.print("2. 运行 [cyan]cc-spec checklist[/cyan] 进行验收")
+    console.print("2. 运行 [cyan]cc-spec accept[/cyan] 进行端到端验收")
 
     console.print(f"\n[dim]变更：{change_name}[/dim]")
 

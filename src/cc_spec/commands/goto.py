@@ -240,7 +240,7 @@ def _show_stage_options(
 
         if status == "completed":
             options = [
-                ("1", "运行验收", f"cc-spec checklist {change_id}"),
+                ("1", "运行验收", f"cc-spec accept {change_id}"),
                 ("2", "列出任务", f"cc-spec list tasks -c {change_id}"),
             ]
         else:
@@ -250,18 +250,18 @@ def _show_stage_options(
                 ("3", "标记任务返工", f"cc-spec clarify {change_id}"),
             ]
 
-    elif stage == Stage.CHECKLIST:
+    elif stage == Stage.ACCEPT:
         stage_info = state.stages.get(stage)
         status = stage_info.status.value if stage_info else "pending"
 
         if status == "completed":
             options = [
                 ("1", "归档变更", f"cc-spec archive {change_id}"),
-                ("2", "重新验收", f"cc-spec checklist {change_id}"),
+                ("2", "重新验收", f"cc-spec accept {change_id}"),
             ]
         else:
             options = [
-                ("1", "运行验收", f"cc-spec checklist {change_id}"),
+                ("1", "运行验收", f"cc-spec accept {change_id}"),
                 ("2", "返工失败任务", f"cc-spec clarify {change_id}"),
             ]
 
@@ -438,7 +438,7 @@ def _show_task_options(
         ]
     elif status == "completed":
         options = [
-            ("1", "运行验收", f"cc-spec checklist {change_id}"),
+            ("1", "运行验收", f"cc-spec accept {change_id}"),
             ("2", "标记返工", f"cc-spec clarify {full_id}"),
         ]
     elif status == "failed":
