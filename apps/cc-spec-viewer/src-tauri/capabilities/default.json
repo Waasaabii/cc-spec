@@ -3,6 +3,8 @@
   "identifier": "default",
   "description": "Default capabilities for cc-spec viewer",
   "permissions": [
-    "core:default"
+    "core:default",
+    "core:event:default",
+    "core:path:default"
   ]
 }
