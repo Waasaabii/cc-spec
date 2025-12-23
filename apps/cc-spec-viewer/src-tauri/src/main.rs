@@ -10,15 +10,337 @@ use std::io::{Read, Write};
 use std::net::{TcpListener, TcpStream};
 use std::path::PathBuf;
 use std::process::Command;
+use std::sync::atomic::{AtomicU8, Ordering};
 use std::sync::{mpsc, Arc, Mutex};
 use std::thread;
 use std::time::Duration;
 
+mod claude;
+mod concurrency;
+mod database;
+mod events;
+mod export;
+mod index;
+mod sidecar;
+mod skills;
+mod translation;
+
 const DEFAULT_PORT: u16 = 38888;
+const SETTINGS_VERSION: u32 = 1;
+
+// ============================================================================
+// 设置结构体定义
+// ============================================================================
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 struct ViewerSettings {
+    #[serde(default = "default_version")]
+    version: u32,
+    #[serde(default = "default_port")]
     port: u16,
+    #[serde(default)]
+    claude: ClaudeSettings,
+    #[serde(default)]
+    codex: CodexSettings,
+    #[serde(default)]
+    index: IndexSettings,
+    #[serde(default)]
+    translation: TranslationSettings,
+    #[serde(default)]
+    database: DatabaseSettings,
+    #[serde(default)]
+    ui: UiSettings,
+}
+
+fn default_version() -> u32 {
+    SETTINGS_VERSION
+}
+
+fn default_port() -> u16 {
+    DEFAULT_PORT
+}
+
+impl Default for ViewerSettings {
+    fn default() -> Self {
+        Self {
+            version: SETTINGS_VERSION,
+            port: DEFAULT_PORT,
+            claude: ClaudeSettings::default(),
+            codex: CodexSettings::default(),
+            index: IndexSettings::default(),
+            translation: TranslationSettings::default(),
+            database: DatabaseSettings::default(),
+            ui: UiSettings::default(),
+        }
+    }
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+struct ClaudeSettings {
+    /// "auto" 表示自动检测，否则为自定义路径
+    #[serde(default = "default_claude_path")]
+    path: String,
+    /// 自定义路径（当 path 不是 "auto" 时使用）
+    #[serde(default)]
+    custom_path: Option<String>,
+    /// CC 最大并发数
+    #[serde(default = "default_cc_max_concurrent")]
+    max_concurrent: u8,
+}
+
+fn default_claude_path() -> String {
+    "auto".to_string()
+}
+
+fn default_cc_max_concurrent() -> u8 {
+    1
+}
+
+impl Default for ClaudeSettings {
+    fn default() -> Self {
+        Self {
+            path: "auto".to_string(),
+            custom_path: None,
+            max_concurrent: 1,
+        }
+    }
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+struct CodexSettings {
+    /// CX 最大并发数
+    #[serde(default = "default_cx_max_concurrent")]
+    max_concurrent: u8,
+}
+
+fn default_cx_max_concurrent() -> u8 {
+    5
+}
+
+impl Default for CodexSettings {
+    fn default() -> Self {
+        Self { max_concurrent: 5 }
+    }
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+struct IndexSettings {
+    /// 是否启用多级索引
+    #[serde(default = "default_true")]
+    enabled: bool,
+    /// 是否自动更新索引
+    #[serde(default = "default_true")]
+    auto_update: bool,
+}
+
+fn default_true() -> bool {
+    true
+}
+
+impl Default for IndexSettings {
+    fn default() -> Self {
+        Self {
+            enabled: true,
+            auto_update: true,
+        }
+    }
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+struct TranslationSettings {
+    /// 翻译模型是否已下载
+    #[serde(default)]
+    model_downloaded: bool,
+    /// 模型存储路径
+    #[serde(default)]
+    model_path: Option<String>,
+    /// 是否启用翻译缓存
+    #[serde(default = "default_true")]
+    cache_enabled: bool,
+}
+
+impl Default for TranslationSettings {
+    fn default() -> Self {
+        Self {
+            model_downloaded: false,
+            model_path: None,
+            cache_enabled: true,
+        }
+    }
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+struct DatabaseSettings {
+    /// 数据库类型: "docker" | "remote" | "none"
+    #[serde(default = "default_db_type")]
+    db_type: String,
+    /// 远程数据库连接字符串
+    #[serde(default)]
+    connection_string: Option<String>,
+}
+
+fn default_db_type() -> String {
+    "none".to_string()
+}
+
+impl Default for DatabaseSettings {
+    fn default() -> Self {
+        Self {
+            db_type: "none".to_string(),
+            connection_string: None,
+        }
+    }
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+struct UiSettings {
+    /// 主题: "system" | "dark" | "light"
+    #[serde(default = "default_theme")]
+    theme: String,
+    /// 语言: "zh-CN" | "en-US"
+    #[serde(default = "default_language")]
+    language: String,
+}
+
+fn default_theme() -> String {
+    "system".to_string()
+}
+
+fn default_language() -> String {
+    "zh-CN".to_string()
+}
+
+impl Default for UiSettings {
+    fn default() -> Self {
+        Self {
+            theme: "system".to_string(),
+            language: "zh-CN".to_string(),
+        }
+    }
+}
+
+/// 总并发限制（CC + CX 共享）
+const TOTAL_CONCURRENCY_LIMIT: u8 = 6;
+
+struct ConcurrencyController {
+    cc_running: AtomicU8,
+    cx_running: AtomicU8,
+    cc_queued: AtomicU8,
+    cx_queued: AtomicU8,
+}
+
+impl ConcurrencyController {
+    fn new() -> Self {
+        Self {
+            cc_running: AtomicU8::new(0),
+            cx_running: AtomicU8::new(0),
+            cc_queued: AtomicU8::new(0),
+            cx_queued: AtomicU8::new(0),
+        }
+    }
+
+    /// 获取当前总运行数
+    fn total_running(&self) -> u8 {
+        self.cc_running.load(Ordering::SeqCst) + self.cx_running.load(Ordering::SeqCst)
+    }
+
+    fn can_start_cc(&self, max: u8) -> bool {
+        self.cc_running.load(Ordering::SeqCst) < max 
+            && self.total_running() < TOTAL_CONCURRENCY_LIMIT
+    }
+
+    fn can_start_cx(&self, max: u8) -> bool {
+        self.cx_running.load(Ordering::SeqCst) < max 
+            && self.total_running() < TOTAL_CONCURRENCY_LIMIT
+    }
+
+    fn acquire_cc(&self, max: u8) -> Result<(), String> {
+        let current = self.cc_running.load(Ordering::SeqCst);
+        if current >= max {
+            return Err(format!("CC 并发已达上限 {}", max));
+        }
+        if self.total_running() >= TOTAL_CONCURRENCY_LIMIT {
+            return Err(format!("总并发已达上限 {}", TOTAL_CONCURRENCY_LIMIT));
+        }
+        self.cc_running.fetch_add(1, Ordering::SeqCst);
+        Ok(())
+    }
+
+    fn acquire_cx(&self, max: u8) -> Result<(), String> {
+        let current = self.cx_running.load(Ordering::SeqCst);
+        if current >= max {
+            return Err(format!("CX 并发已达上限 {}", max));
+        }
+        if self.total_running() >= TOTAL_CONCURRENCY_LIMIT {
+            return Err(format!("总并发已达上限 {}", TOTAL_CONCURRENCY_LIMIT));
+        }
+        self.cx_running.fetch_add(1, Ordering::SeqCst);
+        Ok(())
+    }
+
+    fn release_cc(&self) {
+        let prev = self.cc_running.fetch_sub(1, Ordering::SeqCst);
+        if prev == 0 {
+            // 防止下溢，恢复为 0
+            self.cc_running.store(0, Ordering::SeqCst);
+        }
+    }
+
+    fn release_cx(&self) {
+        let prev = self.cx_running.fetch_sub(1, Ordering::SeqCst);
+        if prev == 0 {
+            // 防止下溢，恢复为 0
+            self.cx_running.store(0, Ordering::SeqCst);
+        }
+    }
+
+    /// 增加 CC 队列计数
+    fn enqueue_cc(&self) {
+        self.cc_queued.fetch_add(1, Ordering::SeqCst);
+    }
+
+    /// 减少 CC 队列计数
+    fn dequeue_cc(&self) {
+        let prev = self.cc_queued.fetch_sub(1, Ordering::SeqCst);
+        if prev == 0 {
+            self.cc_queued.store(0, Ordering::SeqCst);
+        }
+    }
+
+    /// 增加 CX 队列计数
+    fn enqueue_cx(&self) {
+        self.cx_queued.fetch_add(1, Ordering::SeqCst);
+    }
+
+    /// 减少 CX 队列计数
+    fn dequeue_cx(&self) {
+        let prev = self.cx_queued.fetch_sub(1, Ordering::SeqCst);
+        if prev == 0 {
+            self.cx_queued.store(0, Ordering::SeqCst);
+        }
+    }
+}
+
+#[derive(Clone, Debug, Serialize)]
+struct ConcurrencyStatus {
+    cc_running: u8,
+    cx_running: u8,
+    cc_max: u8,
+    cx_max: u8,
+    /// CC 队列中等待的任务数
+    cc_queued: u8,
+    /// CX 队列中等待的任务数
+    cx_queued: u8,
+    /// 总运行数
+    total_running: u8,
+    /// 总并发限制
+    total_max: u8,
+}
+
+struct AppState {
+    concurrency: Arc<concurrency::ConcurrencyController>,
+    legacy_concurrency: Arc<ConcurrencyController>,
+    settings: Arc<Mutex<ViewerSettings>>,
 }
 
 struct Broadcaster {
@@ -198,9 +520,7 @@ fn load_settings() -> ViewerSettings {
             return settings;
         }
     }
-    ViewerSettings {
-        port: DEFAULT_PORT,
-    }
+    ViewerSettings::default()
 }
 
 fn save_settings(settings: &ViewerSettings) -> Result<(), String> {
@@ -266,27 +586,95 @@ fn is_process_running(pid: i64) -> Result<bool, String> {
     }
 }
 
-fn terminate_process(pid: i64) -> Result<(), String> {
+/// 发送软终止信号（不强制杀死）
+fn soft_terminate_process(pid: i64) -> Result<(), String> {
+    let pid_str = pid.to_string();
+    if cfg!(windows) {
+        // Windows: taskkill 不带 /F，发送 WM_CLOSE 消息
+        // 注意：这可能不会对所有进程生效
+        let output = Command::new("taskkill")
+            .args(["/PID", &pid_str])
+            .output()
+            .map_err(|err| format!("发送终止信号失败: {}", err))?;
+        // 不检查返回值，因为进程可能不响应 WM_CLOSE
+        let _ = output;
+        Ok(())
+    } else {
+        // Unix: 发送 SIGINT (Ctrl-C)
+        let status = Command::new("kill")
+            .args(["-INT", &pid_str])
+            .status()
+            .map_err(|err| format!("发送终止信号失败: {}", err))?;
+        if !status.success() {
+            // SIGINT 可能失败，继续尝试
+        }
+        Ok(())
+    }
+}
+
+/// 强制终止进程
+fn force_terminate_process(pid: i64) -> Result<(), String> {
     let pid_str = pid.to_string();
     if cfg!(windows) {
         let output = Command::new("taskkill")
             .args(["/PID", &pid_str, "/F"])
             .output()
-            .map_err(|err| format!("终止进程失败: {}", err))?;
+            .map_err(|err| format!("强制终止进程失败: {}", err))?;
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr);
-            return Err(format!("终止进程失败: {}", stderr.trim()));
+            return Err(format!("强制终止进程失败: {}", stderr.trim()));
         }
     } else {
         let status = Command::new("kill")
             .args(["-9", &pid_str])
             .status()
-            .map_err(|err| format!("终止进程失败: {}", err))?;
+            .map_err(|err| format!("强制终止进程失败: {}", err))?;
         if !status.success() {
-            return Err("终止进程失败".to_string());
+            return Err("强制终止进程失败".to_string());
         }
     }
     Ok(())
+}
+
+/// 优雅停止进程：软终止 → 等待 → 检查 → 强制终止
+/// 返回 (是否成功, 是否使用了强制终止)
+fn graceful_stop_process(pid: i64, wait_secs: u64) -> Result<(bool, bool), String> {
+    // 1. 发送软终止信号
+    let _ = soft_terminate_process(pid);
+    
+    // 2. 等待进程退出
+    let wait_time = Duration::from_secs(wait_secs);
+    let check_interval = Duration::from_millis(500);
+    let start = std::time::Instant::now();
+    
+    while start.elapsed() < wait_time {
+        thread::sleep(check_interval);
+        if !is_process_running(pid)? {
+            // 进程已优雅退出
+            return Ok((true, false));
+        }
+    }
+    
+    // 3. 检查进程是否仍在运行
+    if !is_process_running(pid)? {
+        return Ok((true, false));
+    }
+    
+    // 4. 强制终止
+    force_terminate_process(pid)?;
+    
+    // 5. 再次检查确认已退出
+    thread::sleep(Duration::from_millis(500));
+    if is_process_running(pid)? {
+        return Err("进程仍在运行，无法终止".to_string());
+    }
+    
+    Ok((true, true))
+}
+
+/// 旧版强制终止（保持兼容）
+fn terminate_process(pid: i64) -> Result<(), String> {
+    force_terminate_process(pid)
 }
 
 #[tauri::command]
@@ -295,15 +683,31 @@ fn get_settings() -> ViewerSettings {
 }
 
 #[tauri::command]
-fn set_settings(port: u16) -> Result<ViewerSettings, String> {
-    if port == 0 {
+fn set_settings(settings: ViewerSettings) -> Result<ViewerSettings, String> {
+    if settings.port == 0 {
         return Err("端口无效".to_string());
     }
-    let settings = ViewerSettings { port };
     save_settings(&settings)?;
     Ok(settings)
 }
 
+#[tauri::command]
+fn get_concurrency_status(state: tauri::State<AppState>) -> concurrency::ConcurrencyStatus {
+    state.concurrency.status()
+}
+
+/// 取消排队中的任务
+#[tauri::command]
+fn cancel_queued_task(state: tauri::State<AppState>, task_id: u64) -> Result<bool, String> {
+    Ok(state.concurrency.cancel_queued(task_id))
+}
+
+/// 更新并发限制
+#[tauri::command]
+fn update_concurrency_limits(state: tauri::State<AppState>, cc_max: u8, cx_max: u8) -> Result<(), String> {
+    state.concurrency.set_limits(cc_max, cx_max);
+    Ok(())
+}
 #[tauri::command]
 fn save_history(project_path: String, history_json: String) -> Result<(), String> {
     let path = history_path(&project_path);
@@ -332,6 +736,73 @@ fn load_sessions(project_path: String) -> Result<String, String> {
     fs::read_to_string(&path).map_err(|err| format!("加载会话状态失败: {}", err))
 }
 
+/// 停止会话响应
+#[derive(Clone, Debug, Serialize)]
+struct StopSessionResponse {
+    success: bool,
+    message: String,
+    forced: bool,
+}
+
+/// 优雅停止 CX 会话（软终止 → 等待 → 强制终止）
+#[tauri::command]
+fn graceful_stop_session(
+    project_path: String,
+    session_id: String,
+    wait_secs: Option<u64>,
+) -> Result<StopSessionResponse, String> {
+    if session_id.trim().is_empty() {
+        return Err("session_id 为空".to_string());
+    }
+    let path = sessions_path(&project_path);
+    if !path.exists() {
+        return Err("会话状态文件不存在".to_string());
+    }
+    let raw = fs::read_to_string(&path).map_err(|err| format!("读取会话状态失败: {}", err))?;
+    let sessions_json =
+        serde_json::from_str::<Value>(&raw).map_err(|err| format!("解析会话状态失败: {}", err))?;
+    let pid = match find_session_pid(&sessions_json, &session_id) {
+        Some(pid) if pid > 0 => pid,
+        Some(_) => {
+            return Ok(StopSessionResponse {
+                success: false,
+                message: "pid 无效".to_string(),
+                forced: false,
+            })
+        }
+        None => {
+            return Ok(StopSessionResponse {
+                success: false,
+                message: "pid 未记录".to_string(),
+                forced: false,
+            })
+        }
+    };
+
+    if !is_process_running(pid)? {
+        return Ok(StopSessionResponse {
+            success: true,
+            message: "进程已停止".to_string(),
+            forced: false,
+        });
+    }
+
+    // 使用优雅停止，默认等待 3 秒
+    let wait = wait_secs.unwrap_or(3);
+    let (success, forced) = graceful_stop_process(pid, wait)?;
+    
+    Ok(StopSessionResponse {
+        success,
+        message: if forced {
+            "已强制终止进程".to_string()
+        } else {
+            "进程已优雅停止".to_string()
+        },
+        forced,
+    })
+}
+
+/// 强制停止会话（保持向后兼容）
 #[tauri::command]
 fn stop_session(project_path: String, session_id: String) -> Result<String, String> {
     if session_id.trim().is_empty() {
@@ -354,8 +825,17 @@ fn stop_session(project_path: String, session_id: String) -> Result<String, Stri
         return Ok("进程未运行".to_string());
     }
 
-    terminate_process(pid)?;
-    Ok("已终止进程".to_string())
+    // 使用优雅停止，等待 3 秒
+    match graceful_stop_process(pid, 3) {
+        Ok((_, forced)) => {
+            if forced {
+                Ok("已强制终止进程".to_string())
+            } else {
+                Ok("进程已优雅停止".to_string())
+            }
+        }
+        Err(e) => Err(e),
+    }
 }
 
 fn start_server(port: u16) {
@@ -394,16 +874,75 @@ fn start_server(port: u16) {
 fn main() {
     let settings = load_settings();
     let port = settings.port;
+    let cc_max = settings.claude.max_concurrent;
+    let cx_max = settings.codex.max_concurrent;
     thread::spawn(move || start_server(port));
+    let app_state = AppState {
+        concurrency: Arc::new(concurrency::ConcurrencyController::new(cc_max, cx_max)),
+        legacy_concurrency: Arc::new(ConcurrencyController::new()),
+        settings: Arc::new(Mutex::new(settings)),
+    };
 
     tauri::Builder::default()
+        .manage(app_state)
         .invoke_handler(tauri::generate_handler![
             get_settings,
             set_settings,
+            get_concurrency_status,
+            cancel_queued_task,
+            update_concurrency_limits,
             save_history,
             load_history,
             load_sessions,
-            stop_session
+            stop_session,
+            graceful_stop_session,
+            // Claude commands
+            claude::cmd_detect_claude_path,
+            claude::cmd_validate_claude_path,
+            claude::start_claude,
+            claude::send_claude_message,
+            claude::stop_claude,
+            claude::graceful_stop_claude,
+            claude::get_claude_session,
+            claude::list_claude_sessions,
+            claude::is_claude_session_active,
+            claude::get_claude_session_count,
+            // Database commands
+            database::check_database_connection,
+            database::start_docker_postgres,
+            database::stop_docker_postgres,
+            database::get_docker_postgres_logs,
+            database::connect_remote_database,
+            // Index commands
+            index::get_index_status,
+            index::check_index_exists,
+            index::init_index,
+            index::update_index,
+            index::get_index_settings_prompt_dismissed,
+            index::set_index_settings_prompt_dismissed,
+            // Translation commands
+            translation::check_translation_model,
+            translation::download_translation_model,
+            translation::translate_text,
+            translation::clear_translation_cache,
+            translation::delete_translation_model,
+            translation::get_translation_cache_stats,
+            translation::preload_translation_model,
+            // Export commands
+            export::export_history,
+            export::import_history,
+            export::get_export_size_estimate,
+            // Sidecar commands
+            sidecar::run_ccspec_command,
+            sidecar::run_ccspec_stream,
+            sidecar::check_sidecar_available,
+            sidecar::get_ccspec_version,
+            // Skills commands
+            skills::check_skills_status,
+            skills::install_skills,
+            skills::uninstall_skills,
+            skills::get_skills_version,
+            skills::check_skills_update_needed
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
