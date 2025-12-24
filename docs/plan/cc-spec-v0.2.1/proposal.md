@@ -27,7 +27,7 @@
 | 约束 | 说明 |
 |------|------|
 | cc 不打包 | 调用用户已安装的 Claude Code，支持自动探测或手动配置路径 |
-| 项目不污染 | cc-spec 数据存储在 Viewer 本地（%LOCALAPPDATA%/cc-spec-viewer/） |
+| 项目不污染 | cc-spec 数据存储在 Viewer 本地（%LOCALAPPDATA%/cc-spec-tool/） |
 | CLI 保留 | 原有 `uv run cc-spec` 命令行方式照常可用 |
 | sidecar 大小 | cc-spec PyInstaller 打包后 < 50MB |
 
@@ -132,7 +132,7 @@ v0.2.1 架构：
 ### 3.2 模块划分
 
 ```
-apps/cc-spec-viewer/
+apps/cc-spec-tool/
 ├── src/                    # React 前端
 │   ├── components/
 │   │   ├── chat/           # CC 对话组件
@@ -301,7 +301,7 @@ PostgreSQL（Docker 本地 / 远程连接）
 
 **本地文件（Viewer 目录）**：
 ```
-%LOCALAPPDATA%/cc-spec-viewer/
+%LOCALAPPDATA%/cc-spec-tool/
 ├── config.json           # 数据库连接配置
 ├── models/               # 翻译模型
 ├── exports/              # 导出文件临时存放
@@ -980,7 +980,7 @@ cc-spec checklist                  # 废弃，功能已合并到 clarify
 - 数据库连接配置
 - 主题/外观偏好
 
-**存储位置**：`%LOCALAPPDATA%/cc-spec-viewer/config.json`
+**存储位置**：`%LOCALAPPDATA%/cc-spec-tool/config.json`
 
 **格式示例**：
 ```json

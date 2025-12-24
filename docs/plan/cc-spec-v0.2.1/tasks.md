@@ -35,7 +35,7 @@
 
 ### W1-T1: 扩展 Rust 设置结构 [CX]
 
-**文件**: `apps/cc-spec-viewer/src-tauri/src/main.rs`
+**文件**: `apps/cc-spec-tool/src-tauri/src/main.rs`
 
 **当前状态**:
 ```rust
@@ -106,7 +106,7 @@ struct UiSettings {
 
 ### W1-T2: 并发控制器实现 [CX]
 
-**文件**: `apps/cc-spec-viewer/src-tauri/src/main.rs`（新增模块）
+**文件**: `apps/cc-spec-tool/src-tauri/src/main.rs`（新增模块）
 
 **功能**:
 1. 维护运行中的 CC/CX 进程计数
@@ -157,7 +157,7 @@ impl ConcurrencyController {
 
 ### W1-T3: 前端设置页面 [CX]
 
-**文件**: `apps/cc-spec-viewer/src/` 新增组件
+**文件**: `apps/cc-spec-tool/src/` 新增组件
 
 **任务**:
 1. 创建 `components/settings/SettingsPage.tsx`
@@ -184,7 +184,7 @@ impl ConcurrencyController {
 
 ### W2-T1: CC 路径检测 [CX]
 
-**文件**: `apps/cc-spec-viewer/src-tauri/src/claude.rs`（新建）
+**文件**: `apps/cc-spec-tool/src-tauri/src/claude.rs`（新建）
 
 **检测优先级**:
 1. 设置中的 custom_path
@@ -224,7 +224,7 @@ async fn validate_claude_path(path: String) -> Result<bool, String>;
 
 ### W2-T2: CC 进程管理 [CX]
 
-**文件**: `apps/cc-spec-viewer/src-tauri/src/claude.rs`
+**文件**: `apps/cc-spec-tool/src-tauri/src/claude.rs`
 
 **功能**:
 1. 启动 CC 进程（`claude --print --output-format stream-json`）
@@ -280,7 +280,7 @@ async fn stop_claude(session_id: String) -> Result<(), String>;
 
 ### W2-T3: CC 输出解析与事件映射 [CX]
 
-**文件**: `apps/cc-spec-viewer/src-tauri/src/claude.rs`
+**文件**: `apps/cc-spec-tool/src-tauri/src/claude.rs`
 
 **映射规则**（参考 proposal.md 10.1）:
 
@@ -306,7 +306,7 @@ async fn stop_claude(session_id: String) -> Result<(), String>;
 
 ### W3-T1: CX 优雅中断实现 [CX]
 
-**文件**: `apps/cc-spec-viewer/src-tauri/src/main.rs:524-537`
+**文件**: `apps/cc-spec-tool/src-tauri/src/main.rs:524-537`
 
 **场景说明**:
 类似 Claude Code 用户按 ESC，优雅停止而非强杀。CX 可保留上下文后续 resume。
@@ -394,8 +394,8 @@ async fn stop_codex(session_id: String) -> Result<(), String>;
 ### W4-T1: 统一事件类型定义 [CX]
 
 **文件**:
-- `apps/cc-spec-viewer/src-tauri/src/events.rs`（已存在，需补充）
-- `apps/cc-spec-viewer/src/types/events.ts`（**新建**）
+- `apps/cc-spec-tool/src-tauri/src/events.rs`（已存在，需补充）
+- `apps/cc-spec-tool/src/types/events.ts`（**新建**）
 
 **内容**: 定义 proposal.md 10.1 中的所有事件类型
 
@@ -404,7 +404,7 @@ async fn stop_codex(session_id: String) -> Result<(), String>;
 > - 现有 SSE 仍以 `codex.*` 事件流工作
 > - 前端只监听 `codex.*`，没有 `agent.*` 统一事件
 > - **需要补充**:
->   1. 新建 `apps/cc-spec-viewer/src/types/events.ts`，与 Rust 类型对应
+>   1. 新建 `apps/cc-spec-tool/src/types/events.ts`，与 Rust 类型对应
 >   2. 定义 `AgentEvent` 统一类型（Rust/TS 同构）
 
 **验收标准**:
@@ -416,7 +416,7 @@ async fn stop_codex(session_id: String) -> Result<(), String>;
 
 ### W4-T2: 事件分发器实现 [CX]
 
-**文件**: `apps/cc-spec-viewer/src-tauri/src/events.rs`
+**文件**: `apps/cc-spec-tool/src-tauri/src/events.rs`
 
 **功能**:
 1. 接收 CC/CX 的原始输出
@@ -488,7 +488,7 @@ src/
 
 ### W5-T2: 统一时间线组件 [CX]
 
-**文件**: `apps/cc-spec-viewer/src/components/chat/Timeline.tsx`
+**文件**: `apps/cc-spec-tool/src/components/chat/Timeline.tsx`
 
 **功能**:
 1. 按时间顺序显示 CC/CX 事件
@@ -509,8 +509,8 @@ src/
 ### W6-T1: Skill 文件打包 [CX]
 
 **文件**:
-- `apps/cc-spec-viewer/src-tauri/resources/skills/`（当前只有 README 占位符）
-- `apps/cc-spec-viewer/src-tauri/tauri.conf.json:12`
+- `apps/cc-spec-tool/src-tauri/resources/skills/`（当前只有 README 占位符）
+- `apps/cc-spec-tool/src-tauri/tauri.conf.json:12`
 - 构建脚本修改
 
 **任务**:
@@ -540,7 +540,7 @@ src/
 ### W6-T2: 索引状态管理 [CX]
 
 **文件**:
-- `apps/cc-spec-viewer/src-tauri/src/index.rs`（新建）
+- `apps/cc-spec-tool/src-tauri/src/index.rs`（新建）
 - `src/cc_spec/commands/index_status.py`（新建）
 
 **功能**:
@@ -557,7 +557,7 @@ src/
 
 ### W6-T3: 索引初始化提示 [CX]
 
-**文件**: `apps/cc-spec-viewer/src/components/`
+**文件**: `apps/cc-spec-tool/src/components/`
 
 **功能**:
 1. 首次执行 CC 时检测索引
@@ -575,13 +575,13 @@ src/
 
 ### W7-T1: 翻译模型下载 [CX]
 
-**文件**: `apps/cc-spec-viewer/src-tauri/src/translation.rs`（新建）
+**文件**: `apps/cc-spec-tool/src-tauri/src/translation.rs`（新建）
 
 **功能**:
 1. 从 hf-mirror 下载 t5-small 模型（回退官方）
 2. 显示下载进度
 3. 支持暂停/继续/取消
-4. 存储到 `%LOCALAPPDATA%/cc-spec-viewer/models/`
+4. 存储到 `%LOCALAPPDATA%/cc-spec-tool/models/`
 
 **验收标准**:
 - [ ] 下载成功
@@ -594,7 +594,7 @@ src/
 
 > 调研已完成，参考 `docs/viewer-local-translation-research.md`
 
-**文件**: `apps/cc-spec-viewer/src-tauri/src/translation.rs:121-161`
+**文件**: `apps/cc-spec-tool/src-tauri/src/translation.rs:121-161`
 
 **功能**:
 1. 加载 t5-small 模型（Candle）
@@ -642,7 +642,7 @@ pub async fn translate_text(text: String) -> Result<String, String> {
 
 ### W7-T3: 翻译 UI 集成 [CX]
 
-**文件**: `apps/cc-spec-viewer/src/components/chat/`
+**文件**: `apps/cc-spec-tool/src/components/chat/`
 
 **功能**:
 1. 每条消息旁显示翻译按钮
@@ -677,7 +677,7 @@ pub async fn translate_text(text: String) -> Result<String, String> {
 ### W8-T2: Tauri Sidecar 集成 [CX]
 
 **文件**:
-- `apps/cc-spec-viewer/src-tauri/tauri.conf.json`
+- `apps/cc-spec-tool/src-tauri/tauri.conf.json`
 - 构建脚本
 
 **任务**:
@@ -697,7 +697,7 @@ pub async fn translate_text(text: String) -> Result<String, String> {
 ### W9-T1: PostgreSQL Docker 集成 [CX]
 
 **文件**:
-- `apps/cc-spec-viewer/src-tauri/src/database.rs:10,18`（已存在，需补充）
+- `apps/cc-spec-tool/src-tauri/src/database.rs:10,18`（已存在，需补充）
 - Docker 配置文件
 
 **功能**:
@@ -742,7 +742,7 @@ pub fn start_docker_postgres() -> Result<(), String> {
 
 ### W9-T2: 对话历史导出 [CX]
 
-**文件**: `apps/cc-spec-viewer/src-tauri/src/export.rs`（新建）
+**文件**: `apps/cc-spec-tool/src-tauri/src/export.rs`（新建）
 
 **功能**:
 1. 导出为 ZIP（metadata.json + *.ndjson）

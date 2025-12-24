@@ -276,7 +276,7 @@ cc-spec chat -m "继续" -r <session_id>
 
 ### Viewer 集成
 
-cc-spec-viewer 每 5 秒自动读取 sessions.json 并合并显示：
+cc-spec-tool 每 5 秒自动读取 sessions.json 并合并显示：
 
 - **状态标签**: Running / Done / Failed / Idle
 - **任务摘要**: 显示 task_summary 前 50 字符

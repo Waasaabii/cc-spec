@@ -11,12 +11,12 @@
 ## 影响文件
 - src/cc_spec/codex/streaming.py
 - src/cc_spec/codex/client.py
-- apps/cc-spec-viewer/package.json
-- apps/cc-spec-viewer/src/App.tsx
-- apps/cc-spec-viewer/src-tauri/Cargo.toml
-- apps/cc-spec-viewer/src-tauri/capabilities/default.json
-- apps/cc-spec-viewer/src-tauri/src/main.rs
-- apps/cc-spec-viewer/src-tauri/tauri.conf.json
+- apps/cc-spec-tool/package.json
+- apps/cc-spec-tool/src/App.tsx
+- apps/cc-spec-tool/src-tauri/Cargo.toml
+- apps/cc-spec-tool/src-tauri/capabilities/default.json
+- apps/cc-spec-tool/src-tauri/src/main.rs
+- apps/cc-spec-tool/src-tauri/tauri.conf.json
 
 ## 测试
 - 未运行（建议 tauri dev 验证 SSE 与 ingest）。

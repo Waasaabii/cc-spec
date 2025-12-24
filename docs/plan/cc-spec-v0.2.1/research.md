@@ -72,9 +72,9 @@ packages/
 
 ---
 
-## 2. 现有 cc-spec-viewer 分析
+## 2. 现有 cc-spec-tool 分析
 
-**项目地址**: apps/cc-spec-viewer
+**项目地址**: apps/cc-spec-tool
 
 **技术栈**:
 - 前端：React + TypeScript + Vite + Tailwind CSS
@@ -173,7 +173,7 @@ cc-spec chat -s                  # 显示 session_id
 ### 5.1 数据存储位置
 
 ```
-%LOCALAPPDATA%/cc-spec-viewer/
+%LOCALAPPDATA%/cc-spec-tool/
 ├── registry.db              # SQLite 项目注册表
 ├── projects/
 │   └── <project_id>/

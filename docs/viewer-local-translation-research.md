@@ -1,11 +1,11 @@
-# cc-spec-viewer 本地翻译功能调研报告
+# cc-spec-tool 本地翻译功能调研报告
 
 > 调研日期: 2024-12-22
-> 调研目标: 评估在 cc-spec-viewer 中嵌入本地小模型进行翻译的可行性
+> 调研目标: 评估在 cc-spec-tool 中嵌入本地小模型进行翻译的可行性
 
 ## 1. 需求概述
 
-在 cc-spec-viewer (Tauri 桌面应用) 中集成本地翻译功能，要求：
+在 cc-spec-tool (Tauri 桌面应用) 中集成本地翻译功能，要求：
 
 - 使用 Candle (HuggingFace Rust ML 框架) 作为推理引擎
 - 从 HuggingFace 动态查询和筛选翻译模型
@@ -119,7 +119,7 @@ GET https://huggingface.co/api/models/{model_id}?expand[]=siblings
 
 ```
 ┌─────────────────────────────────────────────────────────┐
-│  cc-spec-viewer (Tauri)                                 │
+│  cc-spec-tool (Tauri)                                 │
 ├─────────────────────────────────────────────────────────┤
 │  前端 (React/TypeScript)                                │
 │  ├─ 设置页面                                            │

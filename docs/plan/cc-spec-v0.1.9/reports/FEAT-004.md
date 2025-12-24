@@ -9,8 +9,8 @@
 
 ## 影响文件
 - src/cc_spec/codex/streaming.py
-- apps/cc-spec-viewer/src/App.tsx
-- apps/cc-spec-viewer/src-tauri/src/main.rs
+- apps/cc-spec-tool/src/App.tsx
+- apps/cc-spec-tool/src-tauri/src/main.rs
 
 ## 测试
 - 未运行（建议 tauri dev 验证端口切换与推送）。
