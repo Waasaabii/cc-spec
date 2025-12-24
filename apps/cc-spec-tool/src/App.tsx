@@ -48,7 +48,6 @@ export default function App() {
         return "light";
     });
     const [port, setPort] = useState(DEFAULT_PORT);
-    const [showPortInput, setShowPortInput] = useState(false);
     const [connectionState, setConnectionState] = useState<ConnectionState>("connecting");
     const [runs, setRuns] = useState<RunState[]>([]);
     const [sessions, setSessions] = useState<Record<string, any>>({});
@@ -57,9 +56,8 @@ export default function App() {
     const [projectLoading, setProjectLoading] = useState(false);
     const [projectError, setProjectError] = useState<string | null>(null);
     const [layoutMode, setLayoutMode] = useState<LayoutMode>("list");
-    const [showSettings, setShowSettings] = useState(false);
+    const [activeView, setActiveView] = useState<"projects" | "runs" | "settings">("projects");
     const [showIndexPrompt, setShowIndexPrompt] = useState(false);
-    const [activeView, setActiveView] = useState<"projects" | "runs">("projects");
     const eventSourceRef = useRef<EventSource | null>(null);
     const reconnectTimerRef = useRef<number | null>(null);
     const runsRef = useRef<RunState[]>([]);
@@ -128,12 +126,20 @@ export default function App() {
                 return [record, ...next];
             });
             setCurrentProject(record);
+
+            // 导入后自动安装 Skills（静默，不阻断流程）
+            installSkills(record.path).catch((err) => {
+                console.error("Skills 自动安装失败:", err);
+            });
+
+            // 导入后刷新 Skills 状态
+            checkStatus(record.path);
         } catch (error) {
             setProjectError(error instanceof Error ? error.message : String(error));
         } finally {
             setProjectLoading(false);
         }
-    }, [t.projectPathRequired]);
+    }, [t.projectPathRequired, installSkills, checkStatus]);
 
     const handleSelectProject = useCallback(async (projectId: string) => {
         setProjectLoading(true);
@@ -564,13 +570,7 @@ export default function App() {
         };
     }, [port]);
 
-    const handlePortChange = (newPort: number) => {
-        if (newPort >= 1 && newPort <= 65535) {
-            setPort(newPort);
-            invoke("set_settings", { port: newPort }).catch(() => { });
-            setShowPortInput(false);
-        }
-    };
+
 
     const visibleRuns = currentProject?.path
         ? runs.filter((run) => run.projectRoot && isSamePath(run.projectRoot, currentProject.path))
@@ -599,8 +599,8 @@ export default function App() {
                 <aside className={`flex-none w-64 border-r ${theme === "dark" ? "bg-slate-900/80 border-slate-800" : "bg-white/70 border-slate-200"}`}>
                     <div className="flex h-full flex-col p-5 gap-6">
                         <div className="flex items-center gap-3">
-                            <div className={`relative w-10 h-10 rounded-xl flex items-center justify-center shadow-lg ${theme === "dark" ? "bg-slate-700 text-white" : "bg-slate-900 text-white"}`}>
-                                <span className="font-bold text-sm tracking-tighter">CS</span>
+                            <div className={`relative w-10 h-10 rounded-xl flex items-center justify-center shadow-lg overflow-hidden ${theme === "dark" ? "bg-slate-700" : "bg-white"}`}>
+                                <img src="/logo.gif" alt="CS" className="w-full h-full object-cover" />
                             </div>
                             <div>
                                 <div className={`text-sm font-semibold ${theme === "dark" ? "text-slate-100" : "text-slate-900"}`}>{t.title}</div>
@@ -654,32 +654,10 @@ export default function App() {
                 </aside>
 
                 <div className="flex-1 flex flex-col min-w-0">
-                    {/* Navbar */}
-                    <header className="flex-none px-6 py-4 flex items-center justify-between z-50">
-                        <div className="flex items-center gap-4 group">
-                            <div className={`relative w-10 h-10 rounded-xl flex items-center justify-center shadow-lg transition-transform group-hover:scale-105 group-hover:rotate-3 ${theme === "dark" ? "bg-slate-700 text-white" : "bg-slate-900 text-white"}`}>
-                                <span className="font-bold text-sm tracking-tighter">CS</span>
-                                <div className="absolute inset-0 rounded-xl bg-white/10 opacity-0 group-hover:opacity-100 transition-opacity"></div>
-                            </div>
-                            <div>
-                                <h1 className={`text-lg font-bold tracking-tight transition-colors ${theme === "dark" ? "text-slate-100 group-hover:text-purple-400" : "text-slate-900 group-hover:text-orange-600"}`}>{t.title}</h1>
-                                <div className="flex items-center gap-2">
-                                    <div className={`flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] uppercase font-bold tracking-wider border ${connectionState === "connected" ? "bg-emerald-50 text-emerald-600 border-emerald-100" : connectionState === "connecting" ? "bg-amber-50 text-amber-600 border-amber-100" : "bg-rose-50 text-rose-600 border-rose-100"}`}>
-                                        <span className={`w-1.5 h-1.5 rounded-full ${connectionState === "connected" ? "bg-emerald-500 animate-pulse" : connectionState === "connecting" ? "bg-amber-500 animate-pulse" : "bg-rose-500"}`}></span>
-                                        {connectionState === "connected" ? t.connected : connectionState === "connecting" ? t.connecting : t.connectionError}
-                                    </div>
-                                    {showPortInput ? (
-                                        <input type="number" value={port} onChange={(e) => handlePortChange(parseInt(e.target.value))} onBlur={() => setShowPortInput(false)} className="w-20 text-[10px] bg-slate-100 border border-slate-200 rounded px-1.5 py-0.5 outline-none focus:ring-1 focus:ring-orange-200 font-mono text-slate-600" autoFocus />
-                                    ) : (
-                                        <button onClick={() => setShowPortInput(true)} className="text-[10px] text-slate-400 font-mono hover:text-orange-500 transition-colors border-b border-transparent hover:border-orange-200" title="Click to change port">localhost:{port}</button>
-                                    )}
-                                </div>
-                            </div>
-                        </div>
-
-                        {/* Controls */}
-                        <div className={`flex items-center gap-3 backdrop-blur-md p-1.5 rounded-2xl border shadow-sm ${theme === "dark" ? "bg-slate-800/60 border-slate-700/50" : "bg-white/60 border-white/50"}`}>
-                            {activeView === "runs" && (
+                    {/* Toolbar */}
+                    <header className="flex-none px-6 py-3 flex items-center justify-end z-50">
+                        <div className={`flex items-center gap-2 backdrop-blur-md p-1.5 rounded-2xl border shadow-sm ${theme === "dark" ? "bg-slate-800/60 border-slate-700/50" : "bg-white/60 border-white/50"}`}>
+                            {activeView === "runs" && currentProject && (
                                 <>
                                     <div className={`flex rounded-xl p-1 gap-1 ${theme === "dark" ? "bg-slate-700/50" : "bg-slate-100/50"}`}>
                                         <button onClick={() => setLayoutMode("list")} className={`p-2 rounded-lg transition-all ${layoutMode === "list" ? (theme === "dark" ? "bg-slate-600 text-slate-100 shadow-sm" : "bg-white text-slate-800 shadow-sm") : (theme === "dark" ? "text-slate-400 hover:text-slate-200" : "text-slate-400 hover:text-slate-600")}`} title="List View"><Icons.List /></button>
@@ -690,7 +668,7 @@ export default function App() {
                             )}
                             <button onClick={() => setTheme(theme === "dark" ? "light" : "dark")} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl transition-colors text-[11px] font-semibold ${theme === "dark" ? "hover:bg-slate-700/80 text-slate-300" : "hover:bg-white/80 text-slate-600"}`} title={theme === "dark" ? t.lightMode : t.darkMode}>{theme === "dark" ? <Icons.Sun /> : <Icons.Moon />}{theme === "dark" ? t.lightMode : t.darkMode}</button>
                             <button onClick={() => setLang(lang === "zh" ? "en" : "zh")} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl transition-colors text-[11px] font-semibold ${theme === "dark" ? "hover:bg-slate-700/80 text-slate-300" : "hover:bg-white/80 text-slate-600"}`}><Icons.Globe />{lang === "zh" ? "EN" : "中文"}</button>
-                            <button onClick={() => setShowSettings(true)} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl transition-colors text-[11px] font-semibold ${theme === "dark" ? "hover:bg-slate-700/80 text-slate-300" : "hover:bg-white/80 text-slate-600"}`} title="Settings"><Icons.Cog /></button>
+                            <button onClick={() => setActiveView("settings")} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl transition-colors text-[11px] font-semibold ${activeView === "settings" ? (theme === "dark" ? "bg-slate-700 text-slate-100" : "bg-white text-slate-800 shadow-sm") : (theme === "dark" ? "hover:bg-slate-700/80 text-slate-300" : "hover:bg-white/80 text-slate-600")}`} title="Settings"><Icons.Cog /></button>
                             {activeView === "runs" && runs.length > 0 && (
                                 <button onClick={() => setRuns([])} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl transition-colors text-[11px] font-semibold ${theme === "dark" ? "bg-orange-900/40 text-orange-300 hover:bg-orange-900/60 hover:text-orange-200" : "bg-orange-50 text-orange-700 hover:bg-orange-100 hover:text-orange-800"}`}><Icons.Trash />{t.clearRuns}</button>
                             )}
@@ -714,10 +692,18 @@ export default function App() {
                                     onRefresh={loadProjects}
                                     onLaunchClaudeTerminal={handleLaunchClaudeTerminal}
                                 />
+                            </div>
+                        ) : activeView === "settings" ? (
+                            <div className="mx-auto w-full max-w-6xl flex flex-col gap-6">
+                                <SettingsPage onClose={() => setActiveView("projects")} isDarkMode={theme === "dark"} />
+                            </div>
+                        ) : currentProject ? (
+                            <div className="mx-auto w-full max-w-6xl flex flex-col gap-6">
+                                {/* 当前项目的 Commands 管理 */}
                                 <SkillsPanel
                                     theme={theme}
                                     t={t}
-                                    projectPath={currentProject?.path ?? null}
+                                    projectPath={currentProject.path}
                                     skills={skills}
                                     loading={skillsLoading}
                                     error={skillsError}
@@ -727,9 +713,7 @@ export default function App() {
                                     onInstall={handleInstallSkills}
                                     onUninstall={handleUninstallSkills}
                                 />
-                            </div>
-                        ) : (
-                            <div className="mx-auto w-full max-w-6xl flex flex-col gap-6">
+                                {/* 运行记录 */}
                                 {visibleRuns.length === 0 ? (
                                     <div className="h-full flex flex-col items-center justify-center py-10">
                                         <div className="relative group">
@@ -738,9 +722,9 @@ export default function App() {
                                                 <svg className={`w-10 h-10 ${theme === "dark" ? "text-slate-500" : "text-slate-300"}`} fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>
                                             </div>
                                         </div>
-                                        <h3 className={`text-lg font-semibold mb-2 ${theme === "dark" ? "text-slate-200" : "text-slate-800"}`}>{currentProject ? t.projectEmpty : t.waitingEvents}</h3>
+                                        <h3 className={`text-lg font-semibold mb-2 ${theme === "dark" ? "text-slate-200" : "text-slate-800"}`}>{t.projectEmpty}</h3>
                                         <p className={`text-sm max-w-sm text-center leading-relaxed ${theme === "dark" ? "text-slate-400" : "text-slate-500"}`}>
-                                            {currentProject ? t.projectEmptyHint : t.selectProjectHint}
+                                            {t.projectEmptyHint}
                                         </p>
                                         <code className={`px-2 py-0.5 rounded font-mono text-xs mt-3 inline-block ${theme === "dark" ? "bg-slate-800 text-slate-300" : "bg-slate-100 text-slate-600"}`}>{sseUrl}</code>
                                     </div>
@@ -749,6 +733,21 @@ export default function App() {
                                         {visibleRuns.map((run) => (<RunCard key={run.id} run={run} lang={lang} t={t} theme={theme} sessions={sessions} isCompact={layoutMode === "grid"} />))}
                                     </div>
                                 )}
+                            </div>
+                        ) : (
+                            <div className="mx-auto w-full max-w-6xl flex flex-col gap-6">
+                                <div className="h-full flex flex-col items-center justify-center py-10">
+                                    <div className="relative group">
+                                        <div className={`absolute inset-0 rounded-full blur-2xl opacity-20 group-hover:opacity-40 transition-opacity duration-1000 ${theme === "dark" ? "bg-gradient-to-tr from-purple-600 to-blue-600" : "bg-gradient-to-tr from-orange-200 to-rose-200"}`}></div>
+                                        <div className={`relative w-24 h-24 rounded-3xl border shadow-[0_20px_40px_-10px_rgba(0,0,0,0.05)] flex items-center justify-center mb-6 ${theme === "dark" ? "bg-slate-800 border-slate-700" : "bg-white border-slate-100"}`}>
+                                            <svg className={`w-10 h-10 ${theme === "dark" ? "text-slate-500" : "text-slate-300"}`} fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" /></svg>
+                                        </div>
+                                    </div>
+                                    <h3 className={`text-lg font-semibold mb-2 ${theme === "dark" ? "text-slate-200" : "text-slate-800"}`}>{t.noProjectSelected}</h3>
+                                    <p className={`text-sm max-w-sm text-center leading-relaxed ${theme === "dark" ? "text-slate-400" : "text-slate-500"}`}>
+                                        {t.selectProjectHint}
+                                    </p>
+                                </div>
                             </div>
                         )}
                     </main>
@@ -763,7 +762,6 @@ export default function App() {
                 .thinking-shimmer { background: linear-gradient(90deg, rgba(168, 85, 247, 0.4) 0%, rgba(192, 132, 252, 0.7) 25%, rgba(168, 85, 247, 0.4) 50%, rgba(192, 132, 252, 0.7) 75%, rgba(168, 85, 247, 0.4) 100%); background-size: 200% 100%; -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent; animation: shimmer 2s linear infinite; }
             `}</style>
 
-            {showSettings && <SettingsPage onClose={() => setShowSettings(false)} isDarkMode={theme === "dark"} />}
             {showIndexPrompt && currentProject?.path && (
                 <IndexPrompt projectPath={currentProject.path} theme={theme} onClose={() => setShowIndexPrompt(false)} />
             )}

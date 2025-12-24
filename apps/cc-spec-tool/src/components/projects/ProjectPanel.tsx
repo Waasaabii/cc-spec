@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { open } from "@tauri-apps/plugin-dialog";
 import { Icons } from "../icons/Icons";
 import type { ProjectRecord } from "../../types/projects";
 import type { Theme } from "../../types/viewer";
@@ -56,6 +57,21 @@ export function ProjectPanel({
         Promise.resolve(onImport(trimmed)).finally(() => setPathInput(""));
     };
 
+    const handleBrowse = async () => {
+        try {
+            const selected = await open({
+                directory: true,
+                multiple: false,
+                title: "选择项目文件夹",
+            });
+            if (selected && typeof selected === "string") {
+                setPathInput(selected);
+            }
+        } catch (err) {
+            console.error("打开文件夹选择对话框失败:", err);
+        }
+    };
+
     return (
         <section className={`rounded-3xl border shadow-sm p-5 ${theme === "dark" ? "bg-slate-900/70 border-slate-700/60" : "bg-white/80 border-white/70"}`}>
             <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
@@ -101,15 +117,25 @@ export function ProjectPanel({
                     )}
 
                     <div className="mt-4 flex flex-col gap-2">
-                        <input
-                            value={pathInput}
-                            onChange={(event) => setPathInput(event.target.value)}
-                            onKeyDown={(event) => {
-                                if (event.key === "Enter") handleImport();
-                            }}
-                            placeholder={t.projectPathPlaceholder}
-                            className={`w-full rounded-xl px-3 py-2 text-xs font-mono outline-none transition-colors ${theme === "dark" ? "bg-slate-800 text-slate-200 placeholder:text-slate-500 focus:ring-1 focus:ring-slate-500/60" : "bg-slate-100 text-slate-700 placeholder:text-slate-400 focus:ring-1 focus:ring-orange-200"}`}
-                        />
+                        <div className="flex gap-2">
+                            <input
+                                value={pathInput}
+                                onChange={(event) => setPathInput(event.target.value)}
+                                onKeyDown={(event) => {
+                                    if (event.key === "Enter") handleImport();
+                                }}
+                                placeholder={t.projectPathPlaceholder}
+                                className={`flex-1 rounded-xl px-3 py-2 text-xs font-mono outline-none transition-colors ${theme === "dark" ? "bg-slate-800 text-slate-200 placeholder:text-slate-500 focus:ring-1 focus:ring-slate-500/60" : "bg-slate-100 text-slate-700 placeholder:text-slate-400 focus:ring-1 focus:ring-orange-200"}`}
+                            />
+                            <button
+                                onClick={handleBrowse}
+                                disabled={loading}
+                                className={`px-3 py-2 rounded-xl text-xs font-semibold transition-colors ${theme === "dark" ? "bg-slate-800 text-slate-200 hover:bg-slate-700 disabled:opacity-60" : "bg-slate-200 text-slate-700 hover:bg-slate-300 disabled:opacity-60"}`}
+                                title="浏览..."
+                            >
+                                <Icons.Folder />
+                            </button>
+                        </div>
                         <button
                             onClick={handleImport}
                             disabled={!canImport}
