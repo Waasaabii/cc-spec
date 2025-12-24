@@ -14,7 +14,8 @@ from cc_spec.utils.files import find_project_root
 INGEST_PATH = "/ingest"
 DEFAULT_HOST = "127.0.0.1"
 DEFAULT_PORT = 38888
-CONFIG_RELATIVE_PATH = Path(".cc-spec") / "viewer.json"
+CONFIG_RELATIVE_PATH = Path(".cc-spec") / "tools.json"
+LEGACY_CONFIG_RELATIVE_PATH = Path(".cc-spec") / "viewer.json"
 
 
 def _env_enabled() -> bool:
@@ -26,14 +27,15 @@ def _env_enabled() -> bool:
 
 
 def _load_config() -> dict[str, Any] | None:
-    config_path = Path.home() / CONFIG_RELATIVE_PATH
-    try:
-        raw = config_path.read_text(encoding="utf-8")
-        data = json.loads(raw)
-    except Exception:
-        return None
-    if isinstance(data, dict):
-        return data
+    for relative_path in (CONFIG_RELATIVE_PATH, LEGACY_CONFIG_RELATIVE_PATH):
+        config_path = Path.home() / relative_path
+        try:
+            raw = config_path.read_text(encoding="utf-8")
+            data = json.loads(raw)
+        except Exception:
+            continue
+        if isinstance(data, dict):
+            return data
     return None
 
 
