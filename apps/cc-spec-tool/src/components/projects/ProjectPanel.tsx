@@ -1,0 +1,184 @@
+import { useState } from "react";
+import { Icons } from "../icons/Icons";
+import type { ProjectRecord } from "../../types/projects";
+import type { Theme } from "../../types/viewer";
+
+type ProjectPanelTranslations = {
+    projects: string;
+    projectHint: string;
+    currentProject: string;
+    noProjectSelected: string;
+    projectPathPlaceholder: string;
+    importProject: string;
+    refresh: string;
+    projectList: string;
+    setCurrent: string;
+    removeProject: string;
+    noProjects: string;
+    openClaudeTerminal: string;
+    loading: string;
+};
+
+type ProjectPanelProps = {
+    theme: Theme;
+    t: ProjectPanelTranslations;
+    projects: ProjectRecord[];
+    currentProject: ProjectRecord | null;
+    loading: boolean;
+    error: string | null;
+    onImport: (path: string) => Promise<void> | void;
+    onSelect: (projectId: string) => Promise<void> | void;
+    onRemove: (projectId: string) => Promise<void> | void;
+    onRefresh: () => Promise<void> | void;
+    onLaunchClaudeTerminal: () => Promise<void> | void;
+};
+
+export function ProjectPanel({
+    theme,
+    t,
+    projects,
+    currentProject,
+    loading,
+    error,
+    onImport,
+    onSelect,
+    onRemove,
+    onRefresh,
+    onLaunchClaudeTerminal,
+}: ProjectPanelProps) {
+    const [pathInput, setPathInput] = useState("");
+    const hasProjects = projects.length > 0;
+    const canImport = !loading && pathInput.trim().length > 0;
+
+    const handleImport = () => {
+        const trimmed = pathInput.trim();
+        if (!trimmed) return;
+        Promise.resolve(onImport(trimmed)).finally(() => setPathInput(""));
+    };
+
+    return (
+        <section className={`rounded-3xl border shadow-sm p-5 ${theme === "dark" ? "bg-slate-900/70 border-slate-700/60" : "bg-white/80 border-white/70"}`}>
+            <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+                <div className="flex items-start gap-3">
+                    <div className={`w-10 h-10 rounded-2xl flex items-center justify-center ${theme === "dark" ? "bg-slate-800 text-slate-200" : "bg-slate-900 text-white"}`}>
+                        <Icons.Folder />
+                    </div>
+                    <div>
+                        <h2 className={`text-base font-semibold tracking-tight ${theme === "dark" ? "text-slate-100" : "text-slate-900"}`}>{t.projects}</h2>
+                        <p className={`text-xs mt-1 ${theme === "dark" ? "text-slate-400" : "text-slate-500"}`}>{t.projectHint}</p>
+                    </div>
+                </div>
+                <button
+                    onClick={() => onRefresh()}
+                    disabled={loading}
+                    className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold transition-colors ${theme === "dark" ? "bg-slate-800 text-slate-300 hover:bg-slate-700 disabled:opacity-60" : "bg-slate-100 text-slate-600 hover:bg-slate-200 disabled:opacity-60"}`}
+                >
+                    <Icons.Refresh />
+                    {loading ? t.loading : t.refresh}
+                </button>
+            </div>
+
+            <div className="mt-4 grid gap-4 lg:grid-cols-[1.1fr,1.4fr]">
+                <div className={`rounded-2xl border p-4 ${theme === "dark" ? "bg-slate-900/80 border-slate-700/60" : "bg-white border-slate-100"}`}>
+                    <div className={`text-xs uppercase tracking-[0.2em] font-semibold ${theme === "dark" ? "text-slate-500" : "text-slate-400"}`}>{t.currentProject}</div>
+                    {currentProject ? (
+                        <div className="mt-3">
+                            <div className={`text-sm font-semibold ${theme === "dark" ? "text-slate-100" : "text-slate-900"}`}>{currentProject.name}</div>
+                            <div className={`mt-1 text-xs font-mono break-all ${theme === "dark" ? "text-slate-400" : "text-slate-500"}`}>{currentProject.path}</div>
+                            <div className="mt-3">
+                                <button
+                                    onClick={() => onLaunchClaudeTerminal()}
+                                    disabled={loading}
+                                    className={`inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold transition-colors ${theme === "dark" ? "bg-slate-700 text-slate-100 hover:bg-slate-600 disabled:opacity-60" : "bg-slate-900 text-white hover:bg-slate-800 disabled:opacity-60"}`}
+                                >
+                                    <Icons.Terminal />
+                                    {t.openClaudeTerminal}
+                                </button>
+                            </div>
+                        </div>
+                    ) : (
+                        <div className={`mt-3 text-sm ${theme === "dark" ? "text-slate-500" : "text-slate-400"}`}>{t.noProjectSelected}</div>
+                    )}
+
+                    <div className="mt-4 flex flex-col gap-2">
+                        <input
+                            value={pathInput}
+                            onChange={(event) => setPathInput(event.target.value)}
+                            onKeyDown={(event) => {
+                                if (event.key === "Enter") handleImport();
+                            }}
+                            placeholder={t.projectPathPlaceholder}
+                            className={`w-full rounded-xl px-3 py-2 text-xs font-mono outline-none transition-colors ${theme === "dark" ? "bg-slate-800 text-slate-200 placeholder:text-slate-500 focus:ring-1 focus:ring-slate-500/60" : "bg-slate-100 text-slate-700 placeholder:text-slate-400 focus:ring-1 focus:ring-orange-200"}`}
+                        />
+                        <button
+                            onClick={handleImport}
+                            disabled={!canImport}
+                            className={`inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold transition-colors ${theme === "dark" ? "bg-slate-700 text-slate-100 hover:bg-slate-600 disabled:opacity-60" : "bg-slate-900 text-white hover:bg-slate-800 disabled:opacity-60"}`}
+                        >
+                            <Icons.Plus />
+                            {t.importProject}
+                        </button>
+                    </div>
+                </div>
+
+                <div className={`rounded-2xl border p-4 ${theme === "dark" ? "bg-slate-900/80 border-slate-700/60" : "bg-white border-slate-100"}`}>
+                    <div className={`text-xs uppercase tracking-[0.2em] font-semibold ${theme === "dark" ? "text-slate-500" : "text-slate-400"}`}>{t.projectList}</div>
+                    <div className="mt-3 max-h-[260px] overflow-y-auto custom-scrollbar pr-1">
+                        {!hasProjects ? (
+                            <div className={`text-sm ${theme === "dark" ? "text-slate-500" : "text-slate-400"}`}>{t.noProjects}</div>
+                        ) : (
+                            <ul className="flex flex-col gap-2">
+                                {projects.map((project) => {
+                                    const isCurrent = currentProject?.id === project.id;
+                                    return (
+                                        <li
+                                            key={project.id}
+                                            className={`flex items-center justify-between gap-3 rounded-xl border px-3 py-2 transition-colors ${isCurrent ? (theme === "dark" ? "border-purple-500/40 bg-purple-500/10" : "border-orange-200 bg-orange-50") : (theme === "dark" ? "border-slate-800 bg-slate-900/60" : "border-slate-100 bg-white")}`}
+                                        >
+                                            <div className="min-w-0">
+                                                <div className="flex items-center gap-2">
+                                                    <span className={`text-sm font-semibold truncate ${theme === "dark" ? "text-slate-100" : "text-slate-800"}`}>{project.name}</span>
+                                                    {isCurrent && (
+                                                        <span className={`text-[10px] px-2 py-0.5 rounded-full font-semibold ${theme === "dark" ? "bg-purple-500/20 text-purple-200" : "bg-orange-100 text-orange-700"}`}>
+                                                            {t.currentProject}
+                                                        </span>
+                                                    )}
+                                                </div>
+                                                <div className={`text-[10px] font-mono truncate ${theme === "dark" ? "text-slate-500" : "text-slate-400"}`}>{project.path}</div>
+                                            </div>
+                                            <div className="flex items-center gap-2">
+                                                {!isCurrent && (
+                                                    <button
+                                                        onClick={() => onSelect(project.id)}
+                                                        disabled={loading}
+                                                        className={`text-[10px] px-2 py-1 rounded-lg font-semibold transition-colors ${theme === "dark" ? "bg-slate-800 text-slate-300 hover:bg-slate-700 disabled:opacity-60" : "bg-slate-100 text-slate-600 hover:bg-slate-200 disabled:opacity-60"}`}
+                                                    >
+                                                        {t.setCurrent}
+                                                    </button>
+                                                )}
+                                                <button
+                                                    onClick={() => onRemove(project.id)}
+                                                    disabled={loading}
+                                                    className={`p-2 rounded-lg transition-colors ${theme === "dark" ? "bg-slate-800 text-slate-300 hover:bg-slate-700 disabled:opacity-60" : "bg-slate-100 text-slate-600 hover:bg-slate-200 disabled:opacity-60"}`}
+                                                    title={t.removeProject}
+                                                >
+                                                    <Icons.Trash />
+                                                </button>
+                                            </div>
+                                        </li>
+                                    );
+                                })}
+                            </ul>
+                        )}
+                    </div>
+                </div>
+            </div>
+
+            {error && (
+                <div className={`mt-4 text-xs px-3 py-2 rounded-xl border ${theme === "dark" ? "bg-rose-900/30 border-rose-800 text-rose-200" : "bg-rose-50 border-rose-100 text-rose-600"}`}>
+                    {error}
+                </div>
+            )}
+        </section>
+    );
+}

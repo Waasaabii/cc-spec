@@ -1,0 +1,10 @@
+{
+  "$schema": "https://schema.tauri.app/capabilities/2",
+  "identifier": "default",
+  "description": "Default capabilities for cc-spec tools",
+  "permissions": [
+    "core:default",
+    "core:event:default",
+    "core:path:default"
+  ]
+}
