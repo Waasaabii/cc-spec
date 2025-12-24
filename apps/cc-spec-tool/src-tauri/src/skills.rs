@@ -1,9 +1,9 @@
-// skills.rs - Skills 管理模块
+// skills.rs - Commands 管理模块
 //
 // 功能:
-// - 安装 skills 到项目 .claude/skills/ 目录
+// - 安装 cc-spec commands 到项目 .claude/commands/ 目录
 // - 版本检查和更新
-// - Skills 状态查询
+// - Commands 状态查询
 
 use serde::{Deserialize, Serialize};
 use std::fs;
@@ -49,11 +49,11 @@ fn get_resource_skills_dir(app_handle: &tauri::AppHandle) -> Option<PathBuf> {
         .map(|p| p.join("resources").join("skills"))
 }
 
-/// 获取项目 skills 目标目录
+/// 获取项目 commands 目标目录
 fn get_project_skills_dir(project_path: &str) -> PathBuf {
     PathBuf::from(project_path)
         .join(".claude")
-        .join("skills")
+        .join("commands")
 }
 
 /// 读取 skill 版本文件
