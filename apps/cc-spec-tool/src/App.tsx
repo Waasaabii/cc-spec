@@ -6,10 +6,10 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 import { SettingsPage } from "./components/settings/SettingsPage";
 import { ModelManagerPage } from "./components/settings/ModelManagerPage";
 import { SkillsPage } from "./components/settings/SkillsPage";
-import { RunCard } from "./components/chat/RunCard";
 import { Icons } from "./components/icons/Icons";
 import { ProjectPanel } from "./components/projects/ProjectPanel";
-import { CommandsPanel } from "./components/commands-panel/CommandsPanel";
+import { ProjectPage } from "./components/projects/ProjectPage";
+import { RemoveProjectPrompt } from "./components/projects/RemoveProjectPrompt";
 import { CommandsGuidePage } from "./components/commands-panel/CommandsGuidePage";
 import { IndexPrompt } from "./components/index/IndexPrompt";
 import { TitleBar } from "./components/layout/TitleBar";
@@ -60,8 +60,11 @@ export default function App() {
     const [projectLoading, setProjectLoading] = useState(false);
     const [projectError, setProjectError] = useState<string | null>(null);
     const [layoutMode, setLayoutMode] = useState<LayoutMode>("list");
-    const [activeView, setActiveView] = useState<"projects" | "runs" | "settings" | "model-manager" | "commands-guide" | "skills">("projects");
+    const [activeView, setActiveView] = useState<"projects" | "project" | "settings" | "model-manager" | "commands-guide" | "skills">("projects");
+    const [activeProjectTab, setActiveProjectTab] = useState<"overview" | "skills" | "artifacts" | "runs">("overview");
     const [showIndexPrompt, setShowIndexPrompt] = useState(false);
+    const [removeProjectTarget, setRemoveProjectTarget] = useState<ProjectRecord | null>(null);
+    const [removeProjectModalError, setRemoveProjectModalError] = useState<string | null>(null);
     const [userSelectedProject, setUserSelectedProject] = useState(false); // 区分用户主动选择 vs 启动恢复
     const eventSourceRef = useRef<EventSource | null>(null);
     const reconnectTimerRef = useRef<number | null>(null);
@@ -147,50 +150,50 @@ export default function App() {
         }
     }, [t.projectPathRequired, installCommands, checkStatus]);
 
-    const handleSelectProject = useCallback(async (projectId: string) => {
+    const handleSelectProject = useCallback(async (projectId: string): Promise<ProjectRecord | null> => {
         setProjectLoading(true);
         setProjectError(null);
         try {
             const selected = await invoke<ProjectRecord | null>("set_current_project", { projectId });
             if (!selected) {
                 setProjectError(t.projectNotFound);
-                return;
+                return null;
             }
             setProjects((prev) => prev.map((project) => (project.id === selected.id ? selected : project)));
             setCurrentProject(selected);
             setUserSelectedProject(true); // 用户主动选择项目
+            return selected;
         } catch (error) {
             setProjectError(error instanceof Error ? error.message : String(error));
+            return null;
         } finally {
             setProjectLoading(false);
         }
     }, [t.projectNotFound]);
 
-    const handleRemoveProject = useCallback(async (projectId: string) => {
-        // 使用 Tauri 原生对话框确认
-        const { ask } = await import("@tauri-apps/plugin-dialog");
-        const confirmed = await ask(t.confirmRemoveProject, {
-            title: "确认删除",
-            kind: "warning",
-        });
-        if (!confirmed) return;
-
-        setProjectLoading(true);
-        setProjectError(null);
-        try {
-            const removed = await invoke<boolean>("remove_project", { projectId });
-            if (!removed) {
-                setProjectError(t.projectNotFound);
-                return;
-            }
-            setProjects((prev) => prev.filter((project) => project.id !== projectId));
-            setCurrentProject((prev) => (prev?.id === projectId ? null : prev));
-        } catch (error) {
-            setProjectError(error instanceof Error ? error.message : String(error));
-        } finally {
-            setProjectLoading(false);
+    const handleEnterProject = useCallback(async (projectId: string) => {
+        if (currentProject?.id === projectId) {
+            setUserSelectedProject(true);
+            setActiveProjectTab("overview");
+            setActiveView("project");
+            return;
         }
-    }, [t.confirmRemoveProject, t.projectNotFound]);
+        const selected = await handleSelectProject(projectId);
+        if (selected) {
+            setActiveProjectTab("overview");
+            setActiveView("project");
+        }
+    }, [currentProject?.id, handleSelectProject]);
+
+    const handleRemoveProject = useCallback(async (projectId: string) => {
+        const target = projects.find((p) => p.id === projectId) || null;
+        if (!target) {
+            setProjectError(t.projectNotFound);
+            return;
+        }
+        setRemoveProjectModalError(null);
+        setRemoveProjectTarget(target);
+    }, [projects, t.projectNotFound]);
 
     const handleLaunchClaudeTerminal = useCallback(async () => {
         if (!currentProject?.path) {
@@ -593,7 +596,7 @@ export default function App() {
 
     const toolbarButtons = (
         <div className="flex items-center gap-1.5 px-2">
-            {activeView === "runs" && currentProject && (
+            {activeView === "project" && activeProjectTab === "runs" && currentProject && (
                 <>
                     <div className={`flex rounded-lg p-0.5 gap-0.5 ${theme === "dark" ? "bg-slate-800" : "bg-slate-100"}`}>
                         <button onClick={() => setLayoutMode("list")} className={`p-1.5 rounded-md transition-all ${layoutMode === "list" ? (theme === "dark" ? "bg-slate-600 text-slate-100 shadow-sm" : "bg-white text-slate-800 shadow-sm") : (theme === "dark" ? "text-slate-400 hover:text-slate-200" : "text-slate-400 hover:text-slate-600")}`} title="List View"><Icons.List /></button>
@@ -605,7 +608,7 @@ export default function App() {
             <button onClick={() => setTheme(theme === "dark" ? "light" : "dark")} className={`flex items-center gap-1.5 px-2 py-1.5 rounded-lg transition-colors text-[11px] font-semibold ${theme === "dark" ? "hover:bg-slate-800 text-slate-300" : "hover:bg-slate-100 text-slate-600"}`} title={theme === "dark" ? t.lightMode : t.darkMode}>{theme === "dark" ? <Icons.Sun /> : <Icons.Moon />}</button>
             <button onClick={() => setLang(lang === "zh" ? "en" : "zh")} className={`flex items-center gap-1.5 px-2 py-1.5 rounded-lg transition-colors text-[11px] font-semibold ${theme === "dark" ? "hover:bg-slate-800 text-slate-300" : "hover:bg-slate-100 text-slate-600"}`}><Icons.Globe />{lang === "zh" ? "EN" : "中文"}</button>
             <button onClick={() => setActiveView("settings")} className={`flex items-center gap-1.5 px-2 py-1.5 rounded-lg transition-colors text-[11px] font-semibold ${activeView === "settings" ? (theme === "dark" ? "bg-slate-800 text-slate-100" : "bg-slate-100 text-slate-800") : (theme === "dark" ? "hover:bg-slate-800 text-slate-300" : "hover:bg-slate-100 text-slate-600")}`} title="Settings"><Icons.Cog /></button>
-            {activeView === "runs" && runs.length > 0 && (
+            {activeView === "project" && activeProjectTab === "runs" && runs.length > 0 && (
                 <>
                     <div className={`w-px h-4 mx-1 ${theme === "dark" ? "bg-slate-700" : "bg-slate-300"}`}></div>
                     <button onClick={() => setRuns([])} className={`flex items-center gap-1.5 px-2 py-1.5 rounded-lg transition-colors text-[11px] font-semibold ${theme === "dark" ? "hover:bg-orange-900/40 text-orange-300" : "hover:bg-orange-50 text-orange-700"}`}><Icons.Trash />{t.clearRuns}</button>
@@ -647,12 +650,6 @@ export default function App() {
                                 {t.navProjects}
                             </button>
                             <button
-                                onClick={() => setActiveView("runs")}
-                                className={`px-3 py-2 rounded-xl text-left text-sm font-semibold transition-colors ${activeView === "runs" ? (theme === "dark" ? "bg-slate-800 text-slate-100" : "bg-slate-900 text-white") : (theme === "dark" ? "text-slate-400 hover:text-slate-200 hover:bg-slate-800/60" : "text-slate-500 hover:text-slate-800 hover:bg-slate-100")}`}
-                            >
-                                {t.navRuns}
-                            </button>
-                            <button
                                 onClick={() => setActiveView("commands-guide")}
                                 className={`flex items-center gap-2 px-3 py-2 rounded-xl text-left text-sm font-semibold transition-colors ${activeView === "commands-guide" ? (theme === "dark" ? "bg-slate-800 text-slate-100" : "bg-slate-900 text-white") : (theme === "dark" ? "text-slate-400 hover:text-slate-200 hover:bg-slate-800/60" : "text-slate-500 hover:text-slate-800 hover:bg-slate-100")}`}
                             >
@@ -679,7 +676,7 @@ export default function App() {
                                         return (
                                             <button
                                                 key={project.id}
-                                                onClick={() => handleSelectProject(project.id)}
+                                                onClick={() => handleEnterProject(project.id)}
                                                 disabled={projectLoading}
                                                 className={`w-full text-left px-3 py-2 rounded-xl text-xs font-semibold transition-colors ${isCurrent ? (theme === "dark" ? "bg-purple-500/20 text-purple-100 border border-purple-500/40" : "bg-orange-100 text-orange-700 border border-orange-200") : (theme === "dark" ? "bg-slate-900/60 text-slate-300 border border-slate-800 hover:bg-slate-800" : "bg-white text-slate-600 border border-slate-100 hover:bg-slate-50")}`}
                                             >
@@ -712,11 +709,42 @@ export default function App() {
                                     loading={projectLoading}
                                     error={projectError}
                                     onImport={handleImportProject}
-                                    onSelect={handleSelectProject}
+                                    onEnter={handleEnterProject}
                                     onRemove={handleRemoveProject}
                                     onRefresh={loadProjects}
                                     onLaunchClaudeTerminal={handleLaunchClaudeTerminal}
                                 />
+                            </div>
+                        ) : activeView === "project" ? (
+                            <div className="mx-auto w-full max-w-6xl flex flex-col gap-6">
+                                {currentProject ? (
+                                    <ProjectPage
+                                        theme={theme}
+                                        t={t}
+                                        lang={lang}
+                                        project={currentProject}
+                                        activeTab={activeProjectTab}
+                                        onTabChange={setActiveProjectTab}
+                                        runs={visibleRuns}
+                                        sessions={sessions}
+                                        layoutMode={layoutMode}
+                                        onLaunchClaudeTerminal={handleLaunchClaudeTerminal}
+                                        onBack={() => setActiveView("projects")}
+                                    />
+                                ) : (
+                                    <div className="h-full flex flex-col items-center justify-center py-10">
+                                        <div className="relative group">
+                                            <div className={`absolute inset-0 rounded-full blur-2xl opacity-20 group-hover:opacity-40 transition-opacity duration-1000 ${theme === "dark" ? "bg-gradient-to-tr from-purple-600 to-blue-600" : "bg-gradient-to-tr from-orange-200 to-rose-200"}`}></div>
+                                            <div className={`relative w-24 h-24 rounded-3xl border shadow-[0_20px_40px_-10px_rgba(0,0,0,0.05)] flex items-center justify-center mb-6 ${theme === "dark" ? "bg-slate-800 border-slate-700" : "bg-white border-slate-100"}`}>
+                                                <svg className={`w-10 h-10 ${theme === "dark" ? "text-slate-500" : "text-slate-300"}`} fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" /></svg>
+                                            </div>
+                                        </div>
+                                        <h3 className={`text-lg font-semibold mb-2 ${theme === "dark" ? "text-slate-200" : "text-slate-800"}`}>{t.noProjectSelected}</h3>
+                                        <p className={`text-sm max-w-sm text-center leading-relaxed ${theme === "dark" ? "text-slate-400" : "text-slate-500"}`}>
+                                            {t.selectProjectHint}
+                                        </p>
+                                    </div>
+                                )}
                             </div>
                         ) : activeView === "settings" ? (
                             <div className="mx-auto w-full max-w-6xl flex flex-col gap-6">
@@ -748,59 +776,7 @@ export default function App() {
                                     currentProjectPath={currentProject?.path}
                                 />
                             </div>
-                        ) : currentProject ? (
-                            <div className="mx-auto w-full max-w-6xl flex flex-col gap-6">
-                                {/* 当前项目的 Commands 管理 */}
-                                <CommandsPanel
-                                    theme={theme}
-                                    t={t}
-                                    projectPath={currentProject.path}
-                                    commands={commands}
-                                    loading={commandsLoading}
-                                    error={commandsError}
-                                    version={commandsVersion}
-                                    updateNeeded={updateNeeded}
-                                    onRefresh={handleRefreshCommands}
-                                    onInstall={handleInstallCommands}
-                                    onUninstall={handleUninstallCommands}
-                                />
-                                {/* 运行记录 */}
-                                {visibleRuns.length === 0 ? (
-                                    <div className="h-full flex flex-col items-center justify-center py-10">
-                                        <div className="relative group">
-                                            <div className={`absolute inset-0 rounded-full blur-2xl opacity-20 group-hover:opacity-40 transition-opacity duration-1000 ${theme === "dark" ? "bg-gradient-to-tr from-purple-600 to-blue-600" : "bg-gradient-to-tr from-orange-200 to-rose-200"}`}></div>
-                                            <div className={`relative w-24 h-24 rounded-3xl border shadow-[0_20px_40px_-10px_rgba(0,0,0,0.05)] flex items-center justify-center mb-6 ${theme === "dark" ? "bg-slate-800 border-slate-700" : "bg-white border-slate-100"}`}>
-                                                <svg className={`w-10 h-10 ${theme === "dark" ? "text-slate-500" : "text-slate-300"}`} fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>
-                                            </div>
-                                        </div>
-                                        <h3 className={`text-lg font-semibold mb-2 ${theme === "dark" ? "text-slate-200" : "text-slate-800"}`}>{t.projectEmpty}</h3>
-                                        <p className={`text-sm max-w-sm text-center leading-relaxed ${theme === "dark" ? "text-slate-400" : "text-slate-500"}`}>
-                                            {t.projectEmptyHint}
-                                        </p>
-
-                                    </div>
-                                ) : (
-                                    <div className={`${layoutMode === "grid" ? "grid grid-cols-1 md:grid-cols-2 2xl:grid-cols-3 gap-4" : "flex flex-col gap-6 w-full"} mx-auto`}>
-                                        {visibleRuns.map((run) => (<RunCard key={run.id} run={run} lang={lang} t={t} theme={theme} sessions={sessions} isCompact={layoutMode === "grid"} />))}
-                                    </div>
-                                )}
-                            </div>
-                        ) : (
-                            <div className="mx-auto w-full max-w-6xl flex flex-col gap-6">
-                                <div className="h-full flex flex-col items-center justify-center py-10">
-                                    <div className="relative group">
-                                        <div className={`absolute inset-0 rounded-full blur-2xl opacity-20 group-hover:opacity-40 transition-opacity duration-1000 ${theme === "dark" ? "bg-gradient-to-tr from-purple-600 to-blue-600" : "bg-gradient-to-tr from-orange-200 to-rose-200"}`}></div>
-                                        <div className={`relative w-24 h-24 rounded-3xl border shadow-[0_20px_40px_-10px_rgba(0,0,0,0.05)] flex items-center justify-center mb-6 ${theme === "dark" ? "bg-slate-800 border-slate-700" : "bg-white border-slate-100"}`}>
-                                            <svg className={`w-10 h-10 ${theme === "dark" ? "text-slate-500" : "text-slate-300"}`} fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" /></svg>
-                                        </div>
-                                    </div>
-                                    <h3 className={`text-lg font-semibold mb-2 ${theme === "dark" ? "text-slate-200" : "text-slate-800"}`}>{t.noProjectSelected}</h3>
-                                    <p className={`text-sm max-w-sm text-center leading-relaxed ${theme === "dark" ? "text-slate-400" : "text-slate-500"}`}>
-                                        {t.selectProjectHint}
-                                    </p>
-                                </div>
-                            </div>
-                        )}
+                        ) : null}
                     </main>
                 </div>
             </div>
@@ -815,6 +791,102 @@ export default function App() {
 
             {showIndexPrompt && currentProject?.path && (
                 <IndexPrompt projectPath={currentProject.path} theme={theme} t={t} onClose={() => setShowIndexPrompt(false)} />
+            )}
+
+            {removeProjectTarget && (
+                <RemoveProjectPrompt
+                    project={removeProjectTarget}
+                    theme={theme}
+                    t={t}
+                    loading={projectLoading}
+                    error={removeProjectModalError}
+                    onCancel={() => {
+                        if (projectLoading) return;
+                        setRemoveProjectModalError(null);
+                        setRemoveProjectTarget(null);
+                    }}
+                    onRemoveOnly={async () => {
+                        if (!removeProjectTarget?.id) return;
+                        setProjectLoading(true);
+                        setProjectError(null);
+                        setRemoveProjectModalError(null);
+                        try {
+                            const removed = await invoke<boolean>("remove_project", { projectId: removeProjectTarget.id });
+                            if (!removed) {
+                                setRemoveProjectModalError(t.projectNotFound);
+                                return;
+                            }
+                            setProjects((prev) => prev.filter((project) => project.id !== removeProjectTarget.id));
+                            setCurrentProject((prev) => (prev?.id === removeProjectTarget.id ? null : prev));
+                            setActiveView((prev) => (prev === "project" && currentProject?.id === removeProjectTarget.id ? "projects" : prev));
+                            setRemoveProjectTarget(null);
+                        } catch (error) {
+                            setRemoveProjectModalError(error instanceof Error ? error.message : String(error));
+                        } finally {
+                            setProjectLoading(false);
+                        }
+                    }}
+                    onCleanupAndRemove={async ({ backupRequirements }) => {
+                        if (!removeProjectTarget?.path || !removeProjectTarget?.id) return;
+                        setProjectLoading(true);
+                        setProjectError(null);
+                        setRemoveProjectModalError(null);
+                        try {
+                            const normalizePath = (p: string) => p.replace(/\//g, "\\").replace(/\\+$/, "");
+                            const isPathInsideProject = (outputPath: string, projectPath: string) => {
+                                const outNorm = normalizePath(outputPath);
+                                const projNorm = normalizePath(projectPath);
+                                const prefix = projNorm.endsWith("\\") ? projNorm : projNorm + "\\";
+                                return outNorm.toLowerCase().startsWith(prefix.toLowerCase());
+                            };
+
+                            if (backupRequirements) {
+                                const { save } = await import("@tauri-apps/plugin-dialog");
+                                const today = new Date();
+                                const yyyyMMdd = today.toISOString().slice(0, 10).replace(/-/g, "");
+                                const sanitizeFileName = (name: string) =>
+                                    name
+                                        .replace(/[<>:"/\\|?*\x00-\x1F]/g, "-")
+                                        .replace(/\s+/g, " ")
+                                        .trim() || "requirements";
+                                const defaultPath = `${sanitizeFileName(removeProjectTarget.name)}-requirements-${yyyyMMdd}.zip`;
+                                const outputPath = await save({
+                                    title: t.backupSaveDialogTitle,
+                                    defaultPath,
+                                    filters: [{ name: "zip", extensions: ["zip"] }],
+                                });
+                                if (!outputPath) return;
+                                if (isPathInsideProject(outputPath, removeProjectTarget.path)) {
+                                    setRemoveProjectModalError(t.backupPathInProjectError);
+                                    return;
+                                }
+                                await invoke<string>("export_requirements", {
+                                    projectPath: removeProjectTarget.path,
+                                    outputPath,
+                                });
+                            }
+
+                            const cleanupWarnings = await invoke<string[]>("cleanup_project_ccspec", { projectPath: removeProjectTarget.path });
+
+                            const removed = await invoke<boolean>("remove_project", { projectId: removeProjectTarget.id });
+                            if (!removed) {
+                                setRemoveProjectModalError(t.projectNotFound);
+                                return;
+                            }
+                            setProjects((prev) => prev.filter((project) => project.id !== removeProjectTarget.id));
+                            setCurrentProject((prev) => (prev?.id === removeProjectTarget.id ? null : prev));
+                            setActiveView((prev) => (prev === "project" && currentProject?.id === removeProjectTarget.id ? "projects" : prev));
+                            if (cleanupWarnings.length > 0) {
+                                setProjectError(cleanupWarnings.join("\n"));
+                            }
+                            setRemoveProjectTarget(null);
+                        } catch (error) {
+                            setRemoveProjectModalError(error instanceof Error ? error.message : String(error));
+                        } finally {
+                            setProjectLoading(false);
+                        }
+                    }}
+                />
             )}
         </div>
     );

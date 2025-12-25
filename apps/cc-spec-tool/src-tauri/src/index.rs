@@ -47,10 +47,9 @@ pub async fn get_index_status(project_path: String) -> Result<IndexStatus, Strin
 
 #[tauri::command]
 pub async fn check_index_exists(project_path: String) -> Result<bool, String> {
-    let index_dir = PathBuf::from(&project_path)
-        .join(".cc-spec")
-        .join("index");
-    Ok(index_dir.exists())
+    // 检查 .cc-spec 目录是否存在（项目是否已初始化）
+    let cc_spec_dir = PathBuf::from(&project_path).join(".cc-spec");
+    Ok(cc_spec_dir.exists())
 }
 
 #[tauri::command]

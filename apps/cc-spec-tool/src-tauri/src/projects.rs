@@ -236,14 +236,20 @@ pub async fn import_project(path: String) -> Result<ProjectRecord, String> {
         return Ok(existing);
     }
 
-    // 读取 README 描述
-    let description = read_readme_description(&normalized);
+    // 读取 README 描述 (作为 Description 的来源之一)
+    let readme_description = read_readme_description(&normalized);
+
+    // 智能识别项目元数据
+    let (detected_name, detected_desc) = detect_project_metadata(&normalized);
+    
+    // 优先使用 README 的描述，如果没有则使用配置文件中的描述
+    let final_description = readme_description.or(detected_desc);
     
     let record = ProjectRecord {
         id: Uuid::new_v4().to_string(),
-        name: derive_name(&normalized),
+        name: detected_name, // 使用智能识别的名称
         path: normalized_str,
-        description,
+        description: final_description,
         created_at: now.clone(),
         updated_at: now.clone(),
         last_opened_at: Some(now),
@@ -253,6 +259,104 @@ pub async fn import_project(path: String) -> Result<ProjectRecord, String> {
     state.projects.push(record.clone());
     save_state(state)?;
     Ok(record)
+}
+
+/// 智能检测项目元数据 (Name, Description)
+fn detect_project_metadata(path: &PathBuf) -> (String, Option<String>) {
+    let folder_name = derive_name(path);
+    let mut found_name = None;
+    let mut found_desc = None;
+
+    // Helper to check if name is meaningful
+    let is_valid = |s: &str| !s.trim().is_empty();
+
+    // Priority 1: package.json
+    if let Ok(content) = fs::read_to_string(path.join("package.json")) {
+        if let Ok(json) = serde_json::from_str::<serde_json::Value>(&content) {
+            if let Some(n) = json["name"].as_str() {
+                if is_valid(n) { found_name = Some(n.to_string()); }
+            }
+            if let Some(d) = json["description"].as_str() {
+                if is_valid(d) { found_desc = Some(d.to_string()); }
+            }
+        }
+    }
+
+    // Priority 2: Cargo.toml (if package.json didn't yield a name)
+    if found_name.is_none() {
+        if let Ok(content) = fs::read_to_string(path.join("Cargo.toml")) {
+            // 简单的 TOML 解析
+            let mut in_package = false;
+            for line in content.lines() {
+                let trimmed = line.trim();
+                if trimmed == "[package]" {
+                    in_package = true;
+                    continue;
+                }
+                if in_package {
+                    if trimmed.starts_with("[") { break; } 
+                    if trimmed.starts_with("name") {
+                        if let Some(val) = parse_toml_string(trimmed) {
+                            found_name = Some(val);
+                        }
+                    }
+                    if trimmed.starts_with("description") && found_desc.is_none() {
+                         if let Some(val) = parse_toml_string(trimmed) {
+                            found_desc = Some(val);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // Priority 3: pyproject.toml
+    if found_name.is_none() {
+         if let Ok(content) = fs::read_to_string(path.join("pyproject.toml")) {
+             let mut in_project = false;
+             let mut in_poetry = false;
+             
+            for line in content.lines() {
+                let trimmed = line.trim();
+                 if trimmed == "[project]" { in_project = true; in_poetry = false; continue; }
+                 if trimmed == "[tool.poetry]" { in_project = false; in_poetry = true; continue; }
+                 
+                 if in_project || in_poetry {
+                     if trimmed.starts_with("[") && trimmed != "[project]" && trimmed != "[tool.poetry]" { 
+                         if trimmed.ends_with("]") {
+                             in_project = false; 
+                             in_poetry = false;
+                         }
+                     }
+                     if trimmed.starts_with("name") {
+                         if let Some(val) = parse_toml_string(trimmed) {
+                             found_name = Some(val);
+                         }
+                     }
+                      if trimmed.starts_with("description") && found_desc.is_none() {
+                         if let Some(val) = parse_toml_string(trimmed) {
+                            found_desc = Some(val);
+                        }
+                    }
+                 }
+            }
+         }
+    }
+
+    (found_name.unwrap_or(folder_name), found_desc)
+}
+
+fn parse_toml_string(line: &str) -> Option<String> {
+    if let Some(idx) = line.find('=') {
+        let val_part = line[idx+1..].trim();
+        if val_part.starts_with('"') && val_part.ends_with('"') {
+            return Some(val_part[1..val_part.len()-1].to_string());
+        }
+        if val_part.starts_with('\'') && val_part.ends_with('\'') {
+             return Some(val_part[1..val_part.len()-1].to_string());
+        }
+    }
+    None
 }
 
 #[tauri::command]

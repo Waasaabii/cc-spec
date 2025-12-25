@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { open } from "@tauri-apps/plugin-dialog";
 import { Icons } from "../icons/Icons";
 import type { ProjectRecord } from "../../types/projects";
@@ -13,7 +13,7 @@ type ProjectPanelTranslations = {
     importProject: string;
     refresh: string;
     projectList: string;
-    setCurrent: string;
+    enterProject: string;
     removeProject: string;
     noProjects: string;
     openClaudeTerminal: string;
@@ -28,7 +28,7 @@ type ProjectPanelProps = {
     loading: boolean;
     error: string | null;
     onImport: (path: string) => Promise<void> | void;
-    onSelect: (projectId: string) => Promise<void> | void;
+    onEnter: (projectId: string) => Promise<void> | void;
     onRemove: (projectId: string) => Promise<void> | void;
     onRefresh: () => Promise<void> | void;
     onLaunchClaudeTerminal: () => Promise<void> | void;
@@ -42,26 +42,14 @@ export function ProjectPanel({
     loading,
     error,
     onImport,
-    onSelect,
+    onEnter,
     onRemove,
     onRefresh,
     onLaunchClaudeTerminal,
 }: ProjectPanelProps) {
-    const [pathInput, setPathInput] = useState("");
-    const [showImport, setShowImport] = useState(false);
-    const hasProjects = projects.length > 0;
-    const canImport = !loading && pathInput.trim().length > 0;
+    const [isDragging, setIsDragging] = useState(false);
 
-    const handleImport = () => {
-        const trimmed = pathInput.trim();
-        if (!trimmed) return;
-        Promise.resolve(onImport(trimmed)).finally(() => {
-            setPathInput("");
-            setShowImport(false);
-        });
-    };
-
-    const handleBrowse = async () => {
+    const handleDirectImport = async () => {
         try {
             const selected = await open({
                 directory: true,
@@ -69,15 +57,73 @@ export function ProjectPanel({
                 title: "选择项目文件夹",
             });
             if (selected && typeof selected === "string") {
-                setPathInput(selected);
+                await onImport(selected);
             }
         } catch (err) {
-            console.error("打开文件夹选择对话框失败:", err);
+            console.error("选择文件夹失败:", err);
+        }
+    };
+
+    // 监听 Tauri 文件拖拽事件
+    useEffect(() => {
+        let unlisten: () => void;
+        import("@tauri-apps/api/event").then(({ listen }) => {
+            // Tauri v2 可能是 tauri://drag-drop
+            listen<{ paths: string[] }>("tauri://drag-drop", (event) => {
+                if (event.payload.paths && event.payload.paths.length > 0) {
+                    // 自动导入第一个文件夹
+                    // 注意：这里需要判断是否是文件夹，交由后端处理或在这里简单判断
+                    onImport(event.payload.paths[0]);
+                }
+            }).then(u => { unlisten = u; });
+
+            // 兼容 Tauri v1 或者是 file-drop 事件
+            listen<string[]>("tauri://file-drop", (event) => {
+                if (event.payload && event.payload.length > 0) {
+                    onImport(event.payload[0]);
+                }
+            }).then(u => { if (!unlisten) unlisten = u; /* handle cleanup ?? */ });
+        });
+        return () => {
+            if (unlisten) unlisten();
+        };
+    }, [onImport]);
+
+    // HTML5 Drag & Drop 视觉反馈 (即使实际数据通过 Tauri 事件传递)
+    const handleDragOver = (e: React.DragEvent) => {
+        e.preventDefault();
+        setIsDragging(true);
+    };
+
+    const handleDragLeave = (e: React.DragEvent) => {
+        e.preventDefault();
+        setIsDragging(false);
+    };
+
+    const handleDrop = (e: React.DragEvent) => {
+        e.preventDefault();
+        setIsDragging(false);
+        // dataTransfer 处理可能受限，主要依赖 Tauri 事件，但这里保留以防 Webview 允许
+        if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+            // 尝试读取 path，现代浏览器通常屏蔽
+            // @ts-ignore
+            const path = e.dataTransfer.files[0].path;
+            if (path) {
+                onImport(path);
+            }
         }
     };
 
     return (
-        <section className={`rounded-3xl border shadow-sm p-5 ${theme === "dark" ? "bg-slate-900/70 border-slate-700/60" : "bg-white/80 border-white/70"}`}>
+        <section
+            onDragOver={handleDragOver}
+            onDragLeave={handleDragLeave}
+            onDrop={handleDrop}
+            className={`rounded-3xl border shadow-sm p-5 transition-all duration-200 ${isDragging
+                ? (theme === "dark" ? "bg-purple-900/40 border-purple-500 scale-[1.02]" : "bg-orange-50 border-orange-400 scale-[1.02]")
+                : (theme === "dark" ? "bg-slate-900/70 border-slate-700/60" : "bg-white/80 border-white/70")
+                }`}
+        >
             <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
                 <div className="flex items-start gap-3">
                     <div className={`w-10 h-10 rounded-2xl flex items-center justify-center ${theme === "dark" ? "bg-slate-800 text-slate-200" : "bg-slate-900 text-white"}`}>
@@ -85,13 +131,16 @@ export function ProjectPanel({
                     </div>
                     <div>
                         <h2 className={`text-base font-semibold tracking-tight ${theme === "dark" ? "text-slate-100" : "text-slate-900"}`}>{t.projects}</h2>
-                        <p className={`text-xs mt-1 ${theme === "dark" ? "text-slate-400" : "text-slate-500"}`}>{t.projectHint}</p>
+                        <p className={`text-xs mt-1 ${theme === "dark" ? "text-slate-400" : "text-slate-500"}`}>
+                            {isDragging ? "松开鼠标以导入项目..." : t.projectHint}
+                        </p>
                     </div>
                 </div>
                 <div className="flex items-center gap-2">
                     <button
-                        onClick={() => setShowImport(!showImport)}
-                        className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold transition-colors ${showImport ? (theme === "dark" ? "bg-purple-500/20 text-purple-200" : "bg-orange-100 text-orange-700") : (theme === "dark" ? "bg-slate-800 text-slate-400 hover:text-slate-300 hover:bg-slate-700" : "bg-slate-100 text-slate-500 hover:text-slate-600 hover:bg-slate-200")}`}
+                        onClick={handleDirectImport}
+                        disabled={loading}
+                        className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold transition-colors ${theme === "dark" ? "bg-purple-600 text-white hover:bg-purple-500 disabled:opacity-60" : "bg-orange-500 text-white hover:bg-orange-600 disabled:opacity-60"}`}
                     >
                         <Icons.Plus />
                         {t.importProject}
@@ -107,54 +156,23 @@ export function ProjectPanel({
                 </div>
             </div>
 
-            {/* 折叠式导入区域 */}
-            {showImport && (
-                <div className={`mt-4 rounded-2xl border p-4 ${theme === "dark" ? "bg-slate-800/50 border-slate-700/60" : "bg-slate-50 border-slate-200"}`}>
-                    <div className="flex flex-col gap-2">
-                        <div className="flex gap-2">
-                            <input
-                                value={pathInput}
-                                onChange={(event) => setPathInput(event.target.value)}
-                                onKeyDown={(event) => {
-                                    if (event.key === "Enter") handleImport();
-                                }}
-                                placeholder={t.projectPathPlaceholder}
-                                className={`flex-1 rounded-xl px-3 py-2 text-xs font-mono outline-none transition-colors ${theme === "dark" ? "bg-slate-900 text-slate-200 placeholder:text-slate-500 focus:ring-1 focus:ring-slate-500/60" : "bg-white text-slate-700 placeholder:text-slate-400 focus:ring-1 focus:ring-orange-200"}`}
-                            />
-                            <button
-                                onClick={handleBrowse}
-                                disabled={loading}
-                                className={`px-3 py-2 rounded-xl text-xs font-semibold transition-colors ${theme === "dark" ? "bg-slate-700 text-slate-200 hover:bg-slate-600 disabled:opacity-60" : "bg-slate-200 text-slate-700 hover:bg-slate-300 disabled:opacity-60"}`}
-                                title="浏览..."
-                            >
-                                <Icons.Folder />
-                            </button>
-                            <button
-                                onClick={handleImport}
-                                disabled={!canImport}
-                                className={`inline-flex items-center justify-center gap-1.5 px-4 py-2 rounded-xl text-xs font-semibold transition-colors ${theme === "dark" ? "bg-purple-600 text-white hover:bg-purple-500 disabled:opacity-60" : "bg-orange-500 text-white hover:bg-orange-600 disabled:opacity-60"}`}
-                            >
-                                {t.importProject}
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            )}
-
             {/* 主内容区：项目列表优先，当前项目其次 */}
             <div className="mt-4 grid gap-4 lg:grid-cols-[1.5fr,1fr]">
                 {/* 项目列表（主要） */}
                 <div className={`rounded-2xl border p-4 ${theme === "dark" ? "bg-slate-900/80 border-slate-700/60" : "bg-white border-slate-100"}`}>
                     <div className={`text-xs uppercase tracking-[0.2em] font-semibold ${theme === "dark" ? "text-slate-500" : "text-slate-400"}`}>{t.projectList}</div>
                     <div className="mt-3 max-h-[320px] overflow-y-auto custom-scrollbar pr-1">
-                        {!hasProjects ? (
+                        {!projects.length ? (
                             <div className="flex flex-col items-center justify-center py-8">
                                 <div className={`w-12 h-12 rounded-2xl flex items-center justify-center mb-3 ${theme === "dark" ? "bg-slate-800" : "bg-slate-100"}`}>
                                     <Icons.Folder />
                                 </div>
                                 <div className={`text-sm ${theme === "dark" ? "text-slate-500" : "text-slate-400"}`}>{t.noProjects}</div>
+                                <div className={`text-xs mt-1 opacity-60 ${theme === "dark" ? "text-slate-500" : "text-slate-400"}`}>
+                                    支持拖拽文件夹到此处
+                                </div>
                                 <button
-                                    onClick={() => setShowImport(true)}
+                                    onClick={handleDirectImport}
                                     className={`mt-3 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold transition-colors ${theme === "dark" ? "bg-slate-800 text-slate-300 hover:bg-slate-700" : "bg-slate-100 text-slate-600 hover:bg-slate-200"}`}
                                 >
                                     <Icons.Plus />
@@ -168,7 +186,16 @@ export function ProjectPanel({
                                     return (
                                         <li
                                             key={project.id}
-                                            className={`flex items-center justify-between gap-3 rounded-xl border px-3 py-2 transition-colors ${isCurrent ? (theme === "dark" ? "border-purple-500/40 bg-purple-500/10" : "border-orange-200 bg-orange-50") : (theme === "dark" ? "border-slate-800 bg-slate-900/60 hover:border-slate-700" : "border-slate-100 bg-white hover:border-slate-200")}`}
+                                            onClick={() => onEnter(project.id)}
+                                            role="button"
+                                            tabIndex={0}
+                                            onKeyDown={(e) => {
+                                                if (e.key === "Enter" || e.key === " ") {
+                                                    e.preventDefault();
+                                                    onEnter(project.id);
+                                                }
+                                            }}
+                                            className={`flex items-center justify-between gap-3 rounded-xl border px-3 py-2 transition-colors cursor-pointer ${isCurrent ? (theme === "dark" ? "border-purple-500/40 bg-purple-500/10" : "border-orange-200 bg-orange-50") : (theme === "dark" ? "border-slate-800 bg-slate-900/60 hover:border-slate-700" : "border-slate-100 bg-white hover:border-slate-200")}`}
                                         >
                                             <div className="min-w-0 flex-1">
                                                 <div className="flex items-center gap-2">
@@ -185,17 +212,21 @@ export function ProjectPanel({
                                                 <div className={`text-[10px] font-mono truncate mt-1 ${theme === "dark" ? "text-slate-500" : "text-slate-400"}`}>{project.path}</div>
                                             </div>
                                             <div className="flex items-center gap-2">
-                                                {!isCurrent && (
-                                                    <button
-                                                        onClick={() => onSelect(project.id)}
-                                                        disabled={loading}
-                                                        className={`text-[10px] px-2 py-1 rounded-lg font-semibold transition-colors ${theme === "dark" ? "bg-slate-800 text-slate-300 hover:bg-slate-700 disabled:opacity-60" : "bg-slate-100 text-slate-600 hover:bg-slate-200 disabled:opacity-60"}`}
-                                                    >
-                                                        {t.setCurrent}
-                                                    </button>
-                                                )}
                                                 <button
-                                                    onClick={() => onRemove(project.id)}
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        onEnter(project.id);
+                                                    }}
+                                                    disabled={loading}
+                                                    className={`text-[10px] px-2 py-1 rounded-lg font-semibold transition-colors ${theme === "dark" ? "bg-slate-800 text-slate-300 hover:bg-slate-700 disabled:opacity-60" : "bg-slate-100 text-slate-600 hover:bg-slate-200 disabled:opacity-60"}`}
+                                                >
+                                                    {t.enterProject}
+                                                </button>
+                                                <button
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        onRemove(project.id);
+                                                    }}
                                                     disabled={loading}
                                                     className={`p-2 rounded-lg transition-colors ${theme === "dark" ? "bg-slate-800 text-slate-300 hover:bg-slate-700 disabled:opacity-60" : "bg-slate-100 text-slate-600 hover:bg-slate-200 disabled:opacity-60"}`}
                                                     title={t.removeProject}

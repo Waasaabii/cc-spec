@@ -18,12 +18,14 @@ use events::{AgentEvent, AgentEventType, AgentSource, EventDispatcher};
 
 mod claude;
 mod codex_runner;
+mod cleanup;
 mod concurrency;
 mod database;
 mod events;
 mod export;
 mod index;
 mod commands;
+mod project_artifacts;
 mod projects;
 mod sidecar;
 mod skills;
@@ -1123,11 +1125,21 @@ fn main() {
             export::export_history,
             export::import_history,
             export::get_export_size_estimate,
+            export::export_requirements,
             // Sidecar commands
             sidecar::run_ccspec_command,
             sidecar::run_ccspec_stream,
             sidecar::check_sidecar_available,
             sidecar::get_ccspec_version,
+            // Project cleanup
+            cleanup::cleanup_project_ccspec,
+            // Project artifacts / overview
+            project_artifacts::list_project_artifact_roots,
+            project_artifacts::list_project_artifact_dir,
+            project_artifacts::read_project_artifact_text,
+            project_artifacts::open_project_artifact_in_vscode,
+            project_artifacts::reveal_project_artifact_in_file_manager,
+            project_artifacts::list_project_changes,
             // Commands management
             commands::check_commands_status,
             commands::install_commands,
@@ -1152,6 +1164,8 @@ fn main() {
             skills::toggle_skill_enabled,
             skills::update_skill_triggers,
             skills::update_skill_body,
+            skills::open_tools_config_in_vscode,
+            skills::open_skill_in_vscode,
             skills::get_project_skills_status,
             skills::update_project_skills_status
         ])
