@@ -48,13 +48,17 @@ export function ProjectPanel({
     onLaunchClaudeTerminal,
 }: ProjectPanelProps) {
     const [pathInput, setPathInput] = useState("");
+    const [showImport, setShowImport] = useState(false);
     const hasProjects = projects.length > 0;
     const canImport = !loading && pathInput.trim().length > 0;
 
     const handleImport = () => {
         const trimmed = pathInput.trim();
         if (!trimmed) return;
-        Promise.resolve(onImport(trimmed)).finally(() => setPathInput(""));
+        Promise.resolve(onImport(trimmed)).finally(() => {
+            setPathInput("");
+            setShowImport(false);
+        });
     };
 
     const handleBrowse = async () => {
@@ -84,39 +88,29 @@ export function ProjectPanel({
                         <p className={`text-xs mt-1 ${theme === "dark" ? "text-slate-400" : "text-slate-500"}`}>{t.projectHint}</p>
                     </div>
                 </div>
-                <button
-                    onClick={() => onRefresh()}
-                    disabled={loading}
-                    className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold transition-colors ${theme === "dark" ? "bg-slate-800 text-slate-300 hover:bg-slate-700 disabled:opacity-60" : "bg-slate-100 text-slate-600 hover:bg-slate-200 disabled:opacity-60"}`}
-                >
-                    <Icons.Refresh />
-                    {loading ? t.loading : t.refresh}
-                </button>
+                <div className="flex items-center gap-2">
+                    <button
+                        onClick={() => setShowImport(!showImport)}
+                        className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold transition-colors ${showImport ? (theme === "dark" ? "bg-purple-500/20 text-purple-200" : "bg-orange-100 text-orange-700") : (theme === "dark" ? "bg-slate-800 text-slate-400 hover:text-slate-300 hover:bg-slate-700" : "bg-slate-100 text-slate-500 hover:text-slate-600 hover:bg-slate-200")}`}
+                    >
+                        <Icons.Plus />
+                        {t.importProject}
+                    </button>
+                    <button
+                        onClick={() => onRefresh()}
+                        disabled={loading}
+                        className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold transition-colors ${theme === "dark" ? "bg-slate-800 text-slate-300 hover:bg-slate-700 disabled:opacity-60" : "bg-slate-100 text-slate-600 hover:bg-slate-200 disabled:opacity-60"}`}
+                    >
+                        <Icons.Refresh />
+                        {loading ? t.loading : t.refresh}
+                    </button>
+                </div>
             </div>
 
-            <div className="mt-4 grid gap-4 lg:grid-cols-[1.1fr,1.4fr]">
-                <div className={`rounded-2xl border p-4 ${theme === "dark" ? "bg-slate-900/80 border-slate-700/60" : "bg-white border-slate-100"}`}>
-                    <div className={`text-xs uppercase tracking-[0.2em] font-semibold ${theme === "dark" ? "text-slate-500" : "text-slate-400"}`}>{t.currentProject}</div>
-                    {currentProject ? (
-                        <div className="mt-3">
-                            <div className={`text-sm font-semibold ${theme === "dark" ? "text-slate-100" : "text-slate-900"}`}>{currentProject.name}</div>
-                            <div className={`mt-1 text-xs font-mono break-all ${theme === "dark" ? "text-slate-400" : "text-slate-500"}`}>{currentProject.path}</div>
-                            <div className="mt-3">
-                                <button
-                                    onClick={() => onLaunchClaudeTerminal()}
-                                    disabled={loading}
-                                    className={`inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold transition-colors ${theme === "dark" ? "bg-slate-700 text-slate-100 hover:bg-slate-600 disabled:opacity-60" : "bg-slate-900 text-white hover:bg-slate-800 disabled:opacity-60"}`}
-                                >
-                                    <Icons.Terminal />
-                                    {t.openClaudeTerminal}
-                                </button>
-                            </div>
-                        </div>
-                    ) : (
-                        <div className={`mt-3 text-sm ${theme === "dark" ? "text-slate-500" : "text-slate-400"}`}>{t.noProjectSelected}</div>
-                    )}
-
-                    <div className="mt-4 flex flex-col gap-2">
+            {/* 折叠式导入区域 */}
+            {showImport && (
+                <div className={`mt-4 rounded-2xl border p-4 ${theme === "dark" ? "bg-slate-800/50 border-slate-700/60" : "bg-slate-50 border-slate-200"}`}>
+                    <div className="flex flex-col gap-2">
                         <div className="flex gap-2">
                             <input
                                 value={pathInput}
@@ -125,33 +119,48 @@ export function ProjectPanel({
                                     if (event.key === "Enter") handleImport();
                                 }}
                                 placeholder={t.projectPathPlaceholder}
-                                className={`flex-1 rounded-xl px-3 py-2 text-xs font-mono outline-none transition-colors ${theme === "dark" ? "bg-slate-800 text-slate-200 placeholder:text-slate-500 focus:ring-1 focus:ring-slate-500/60" : "bg-slate-100 text-slate-700 placeholder:text-slate-400 focus:ring-1 focus:ring-orange-200"}`}
+                                className={`flex-1 rounded-xl px-3 py-2 text-xs font-mono outline-none transition-colors ${theme === "dark" ? "bg-slate-900 text-slate-200 placeholder:text-slate-500 focus:ring-1 focus:ring-slate-500/60" : "bg-white text-slate-700 placeholder:text-slate-400 focus:ring-1 focus:ring-orange-200"}`}
                             />
                             <button
                                 onClick={handleBrowse}
                                 disabled={loading}
-                                className={`px-3 py-2 rounded-xl text-xs font-semibold transition-colors ${theme === "dark" ? "bg-slate-800 text-slate-200 hover:bg-slate-700 disabled:opacity-60" : "bg-slate-200 text-slate-700 hover:bg-slate-300 disabled:opacity-60"}`}
+                                className={`px-3 py-2 rounded-xl text-xs font-semibold transition-colors ${theme === "dark" ? "bg-slate-700 text-slate-200 hover:bg-slate-600 disabled:opacity-60" : "bg-slate-200 text-slate-700 hover:bg-slate-300 disabled:opacity-60"}`}
                                 title="浏览..."
                             >
                                 <Icons.Folder />
                             </button>
+                            <button
+                                onClick={handleImport}
+                                disabled={!canImport}
+                                className={`inline-flex items-center justify-center gap-1.5 px-4 py-2 rounded-xl text-xs font-semibold transition-colors ${theme === "dark" ? "bg-purple-600 text-white hover:bg-purple-500 disabled:opacity-60" : "bg-orange-500 text-white hover:bg-orange-600 disabled:opacity-60"}`}
+                            >
+                                {t.importProject}
+                            </button>
                         </div>
-                        <button
-                            onClick={handleImport}
-                            disabled={!canImport}
-                            className={`inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold transition-colors ${theme === "dark" ? "bg-slate-700 text-slate-100 hover:bg-slate-600 disabled:opacity-60" : "bg-slate-900 text-white hover:bg-slate-800 disabled:opacity-60"}`}
-                        >
-                            <Icons.Plus />
-                            {t.importProject}
-                        </button>
                     </div>
                 </div>
+            )}
 
+            {/* 主内容区：项目列表优先，当前项目其次 */}
+            <div className="mt-4 grid gap-4 lg:grid-cols-[1.5fr,1fr]">
+                {/* 项目列表（主要） */}
                 <div className={`rounded-2xl border p-4 ${theme === "dark" ? "bg-slate-900/80 border-slate-700/60" : "bg-white border-slate-100"}`}>
                     <div className={`text-xs uppercase tracking-[0.2em] font-semibold ${theme === "dark" ? "text-slate-500" : "text-slate-400"}`}>{t.projectList}</div>
-                    <div className="mt-3 max-h-[260px] overflow-y-auto custom-scrollbar pr-1">
+                    <div className="mt-3 max-h-[320px] overflow-y-auto custom-scrollbar pr-1">
                         {!hasProjects ? (
-                            <div className={`text-sm ${theme === "dark" ? "text-slate-500" : "text-slate-400"}`}>{t.noProjects}</div>
+                            <div className="flex flex-col items-center justify-center py-8">
+                                <div className={`w-12 h-12 rounded-2xl flex items-center justify-center mb-3 ${theme === "dark" ? "bg-slate-800" : "bg-slate-100"}`}>
+                                    <Icons.Folder />
+                                </div>
+                                <div className={`text-sm ${theme === "dark" ? "text-slate-500" : "text-slate-400"}`}>{t.noProjects}</div>
+                                <button
+                                    onClick={() => setShowImport(true)}
+                                    className={`mt-3 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold transition-colors ${theme === "dark" ? "bg-slate-800 text-slate-300 hover:bg-slate-700" : "bg-slate-100 text-slate-600 hover:bg-slate-200"}`}
+                                >
+                                    <Icons.Plus />
+                                    {t.importProject}
+                                </button>
+                            </div>
                         ) : (
                             <ul className="flex flex-col gap-2">
                                 {projects.map((project) => {
@@ -159,18 +168,21 @@ export function ProjectPanel({
                                     return (
                                         <li
                                             key={project.id}
-                                            className={`flex items-center justify-between gap-3 rounded-xl border px-3 py-2 transition-colors ${isCurrent ? (theme === "dark" ? "border-purple-500/40 bg-purple-500/10" : "border-orange-200 bg-orange-50") : (theme === "dark" ? "border-slate-800 bg-slate-900/60" : "border-slate-100 bg-white")}`}
+                                            className={`flex items-center justify-between gap-3 rounded-xl border px-3 py-2 transition-colors ${isCurrent ? (theme === "dark" ? "border-purple-500/40 bg-purple-500/10" : "border-orange-200 bg-orange-50") : (theme === "dark" ? "border-slate-800 bg-slate-900/60 hover:border-slate-700" : "border-slate-100 bg-white hover:border-slate-200")}`}
                                         >
-                                            <div className="min-w-0">
+                                            <div className="min-w-0 flex-1">
                                                 <div className="flex items-center gap-2">
                                                     <span className={`text-sm font-semibold truncate ${theme === "dark" ? "text-slate-100" : "text-slate-800"}`}>{project.name}</span>
                                                     {isCurrent && (
-                                                        <span className={`text-[10px] px-2 py-0.5 rounded-full font-semibold ${theme === "dark" ? "bg-purple-500/20 text-purple-200" : "bg-orange-100 text-orange-700"}`}>
+                                                        <span className={`text-[10px] px-2 py-0.5 rounded-full font-semibold flex-shrink-0 ${theme === "dark" ? "bg-purple-500/20 text-purple-200" : "bg-orange-100 text-orange-700"}`}>
                                                             {t.currentProject}
                                                         </span>
                                                     )}
                                                 </div>
-                                                <div className={`text-[10px] font-mono truncate ${theme === "dark" ? "text-slate-500" : "text-slate-400"}`}>{project.path}</div>
+                                                {project.description && (
+                                                    <div className={`text-xs mt-1 line-clamp-2 ${theme === "dark" ? "text-slate-400" : "text-slate-500"}`}>{project.description}</div>
+                                                )}
+                                                <div className={`text-[10px] font-mono truncate mt-1 ${theme === "dark" ? "text-slate-500" : "text-slate-400"}`}>{project.path}</div>
                                             </div>
                                             <div className="flex items-center gap-2">
                                                 {!isCurrent && (
@@ -197,6 +209,37 @@ export function ProjectPanel({
                             </ul>
                         )}
                     </div>
+                </div>
+
+                {/* 当前项目信息（次要） */}
+                <div className={`rounded-2xl border p-4 ${theme === "dark" ? "bg-slate-900/80 border-slate-700/60" : "bg-white border-slate-100"}`}>
+                    <div className={`text-xs uppercase tracking-[0.2em] font-semibold ${theme === "dark" ? "text-slate-500" : "text-slate-400"}`}>{t.currentProject}</div>
+                    {currentProject ? (
+                        <div className="mt-3">
+                            <div className={`text-sm font-semibold ${theme === "dark" ? "text-slate-100" : "text-slate-900"}`}>{currentProject.name}</div>
+                            {currentProject.description && (
+                                <div className={`mt-2 text-xs leading-relaxed ${theme === "dark" ? "text-slate-400" : "text-slate-500"}`}>{currentProject.description}</div>
+                            )}
+                            <div className={`mt-2 text-[10px] font-mono break-all ${theme === "dark" ? "text-slate-500" : "text-slate-400"}`}>{currentProject.path}</div>
+                            <div className="mt-4">
+                                <button
+                                    onClick={() => onLaunchClaudeTerminal()}
+                                    disabled={loading}
+                                    className={`inline-flex items-center gap-1.5 px-4 py-2.5 rounded-xl text-xs font-semibold transition-colors w-full justify-center ${theme === "dark" ? "bg-purple-600 text-white hover:bg-purple-500 disabled:opacity-60" : "bg-orange-500 text-white hover:bg-orange-600 disabled:opacity-60"}`}
+                                >
+                                    <Icons.Terminal />
+                                    {t.openClaudeTerminal}
+                                </button>
+                            </div>
+                        </div>
+                    ) : (
+                        <div className="mt-3 flex flex-col items-center justify-center py-6">
+                            <div className={`w-10 h-10 rounded-2xl flex items-center justify-center mb-2 ${theme === "dark" ? "bg-slate-800" : "bg-slate-100"}`}>
+                                <Icons.Folder />
+                            </div>
+                            <div className={`text-sm text-center ${theme === "dark" ? "text-slate-500" : "text-slate-400"}`}>{t.noProjectSelected}</div>
+                        </div>
+                    )}
                 </div>
             </div>
 

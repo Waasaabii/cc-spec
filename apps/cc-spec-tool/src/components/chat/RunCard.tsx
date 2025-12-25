@@ -74,8 +74,8 @@ export function RunCard({ run, lang, t, theme, sessions, isCompact = false }: Ru
         setIsStopping(true);
         try {
             await invoke("stop_session", {
-                project_path: run.projectRoot,
-                session_id: run.sessionId,
+                projectPath: run.projectRoot,
+                sessionId: run.sessionId,
             });
         } catch (err) {
             console.error("stop_session failed", err);
@@ -89,8 +89,8 @@ export function RunCard({ run, lang, t, theme, sessions, isCompact = false }: Ru
         setIsLaunching(true);
         try {
             await invoke("launch_claude_terminal", {
-                project_path: run.projectRoot,
-                session_id: run.sessionId ?? null,
+                projectPath: run.projectRoot,
+                sessionId: run.sessionId ?? null,
             });
         } catch (err) {
             console.error("launch_claude_terminal failed", err);
