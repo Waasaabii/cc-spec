@@ -67,6 +67,11 @@ pub async fn run_ccspec_command(
 
     let mut command = Command::new(&program);
     command.args(&cmd_args);
+    
+    // 设置 UTF-8 编码环境变量，修复 Windows 上中文乱码问题
+    command.env("PYTHONIOENCODING", "utf-8");
+    command.env("PYTHONUTF8", "1");
+    
     command.stdout(Stdio::piped());
     command.stderr(Stdio::piped());
 
@@ -107,6 +112,11 @@ pub async fn run_ccspec_stream(
 
     let mut command = Command::new(&program);
     command.args(&cmd_args);
+    
+    // 设置 UTF-8 编码环境变量，修复 Windows 上中文乱码问题
+    command.env("PYTHONIOENCODING", "utf-8");
+    command.env("PYTHONUTF8", "1");
+    
     command.stdout(Stdio::piped());
     command.stderr(Stdio::piped());
 

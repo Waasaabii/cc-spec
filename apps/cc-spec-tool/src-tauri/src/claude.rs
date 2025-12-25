@@ -3,7 +3,7 @@
 // 功能:
 // - 路径检测 (settings custom_path > CLAUDE_PATH > which > npm global > common paths)
 // - 进程管理 (start, stop, send message)
-// - 输出解析 (stream-json 格式映射到 agent.* 事件)
+// - 输出解析 (stream-json 格式映射到 agent:* 事件)
 // - 使用 tokio 异步进程和 mpsc channel 通信
 
 use once_cell::sync::Lazy;
@@ -172,12 +172,12 @@ pub fn map_claude_event(raw: &str, session_id: &str, run_id: &str) -> Option<Age
     let cc_type = json.get("type")?.as_str()?;
 
     let event_type = match cc_type {
-        "system" => "agent.started",
+        "system" => "agent:started",
         "assistant" => {
             if json.get("tool_use").is_some() {
-                "agent.tool.request"
+                "agent:tool_request"
             } else {
-                "agent.stream"
+                "agent:stream"
             }
         }
         "result" => {
@@ -186,13 +186,13 @@ pub fn map_claude_event(raw: &str, session_id: &str, run_id: &str) -> Option<Age
                 .and_then(|v| v.as_bool())
                 .unwrap_or(false)
             {
-                "agent.completed"
+                "agent:completed"
             } else {
-                "agent.error"
+                "agent:error"
             }
         }
-        "user" => "agent.user_input",
-        "error" => "agent.error",
+        "user" => "agent:user_input",
+        "error" => "agent:error",
         _ => return None,
     };
 
@@ -285,7 +285,7 @@ pub async fn start_claude(
                 if let Some(event) = map_claude_event(&line, &sid, &rid) {
                     let event_type = event.event_type.clone();
                     let _ = handle.emit(&event_type, &event);
-                    let _ = handle.emit("agent.event", &event);
+                    let _ = handle.emit("agent:event", &event);
                 }
             }
             
@@ -296,7 +296,7 @@ pub async fn start_claude(
             }
             
             let _ = handle.emit(
-                "agent.session_ended",
+                "agent:session_ended",
                 serde_json::json!({
                     "session_id": sid,
                     "run_id": rid,
@@ -317,7 +317,7 @@ pub async fn start_claude(
             while let Ok(Some(line)) = lines.next_line().await {
                 if !line.trim().is_empty() {
                     let _ = handle.emit(
-                        "agent.stderr",
+                        "agent:stderr",
                         serde_json::json!({
                             "session_id": sid,
                             "source": "claude",

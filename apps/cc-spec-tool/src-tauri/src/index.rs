@@ -1,7 +1,8 @@
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
-use std::process::Command;
 use tauri::Emitter;
+
+use crate::sidecar::run_ccspec_command;
 
 #[derive(Clone, Debug, Serialize, Deserialize, Default)]
 pub struct IndexStatus {
@@ -58,46 +59,41 @@ pub async fn init_index(
     levels: Vec<String>,
     app_handle: tauri::AppHandle,
 ) -> Result<(), String> {
-    let levels_arg = if levels.is_empty() {
-        "l1,l2".to_string()
-    } else {
-        levels.join(",")
-    };
-
     // 通知前端索引初始化开始
     let _ = app_handle.emit("index.init.started", serde_json::json!({
         "project_path": &project_path,
-        "levels": &levels_arg,
+        "levels": &levels,
     }));
 
-    // 调用 cc-spec init 命令（使用 blocking spawn）
-    let project_path_clone = project_path.clone();
-    let levels_arg_clone = levels_arg.clone();
-    let output = tokio::task::spawn_blocking(move || {
-        Command::new("cc-spec")
-            .args(["init", "--project", &project_path_clone, "--levels", &levels_arg_clone])
-            .output()
-    })
-    .await
-    .map_err(|e| format!("Task join error: {}", e))?
-    .map_err(|e| format!("Failed to run cc-spec init: {}", e))?;
-
-    let success = output.status.success();
-    let stdout = String::from_utf8_lossy(&output.stdout).to_string();
-    let stderr = String::from_utf8_lossy(&output.stderr).to_string();
+    // 通过 sidecar 模块调用 cc-spec init --force
+    // 使用 --force 实现增量更新，确保获取最新的模板和配置
+    let result = run_ccspec_command(
+        vec!["init".into(), "--force".into()],
+        Some(project_path.clone()),
+        app_handle.clone(),
+    )
+    .await?;
 
     // 通知前端索引初始化完成
     let _ = app_handle.emit("index.init.completed", serde_json::json!({
         "project_path": &project_path,
-        "success": success,
-        "stdout": stdout,
-        "stderr": stderr,
+        "success": result.success,
+        "stdout": &result.stdout,
+        "stderr": &result.stderr,
     }));
 
-    if success {
+    if result.success {
         Ok(())
     } else {
-        Err(format!("Index init failed: {}", stderr))
+        // 包含 stdout 和 stderr 以便调试
+        let error_msg = if !result.stderr.is_empty() {
+            result.stderr
+        } else if !result.stdout.is_empty() {
+            result.stdout
+        } else {
+            format!("exit code: {:?}", result.exit_code)
+        };
+        Err(format!("Index init failed: {}", error_msg))
     }
 }
 
@@ -110,27 +106,30 @@ pub async fn update_index(
         "project_path": &project_path,
     }));
 
-    let project_path_clone = project_path.clone();
-    let output = tokio::task::spawn_blocking(move || {
-        Command::new("cc-spec")
-            .args(["init", "--project", &project_path_clone, "--update"])
-            .output()
-    })
-    .await
-    .map_err(|e| format!("Task join error: {}", e))?
-    .map_err(|e| format!("Failed to run cc-spec init --update: {}", e))?;
-
-    let success = output.status.success();
+    // 通过 sidecar 模块调用 cc-spec init --force（强制重新初始化）
+    let result = run_ccspec_command(
+        vec!["init".into(), "--force".into()],
+        Some(project_path.clone()),
+        app_handle.clone(),
+    )
+    .await?;
 
     let _ = app_handle.emit("index.update.completed", serde_json::json!({
         "project_path": &project_path,
-        "success": success,
+        "success": result.success,
     }));
 
-    if success {
+    if result.success {
         Ok(())
     } else {
-        Err("Index update failed".to_string())
+        let error_msg = if !result.stderr.is_empty() {
+            result.stderr
+        } else if !result.stdout.is_empty() {
+            result.stdout
+        } else {
+            format!("exit code: {:?}", result.exit_code)
+        };
+        Err(format!("Index update failed: {}", error_msg))
     }
 }
 

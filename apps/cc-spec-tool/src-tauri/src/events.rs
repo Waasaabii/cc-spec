@@ -45,7 +45,7 @@ pub struct AgentEvent {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(tag = "type")]
 pub enum AgentEventType {
-    #[serde(rename = "agent.started")]
+    #[serde(rename = "agent:started")]
     Started {
         #[serde(skip_serializing_if = "Option::is_none")]
         pid: Option<u32>,
@@ -53,7 +53,7 @@ pub enum AgentEventType {
         project_root: Option<String>,
     },
 
-    #[serde(rename = "agent.stream")]
+    #[serde(rename = "agent:stream")]
     Stream {
         text: String,
         #[serde(skip_serializing_if = "Option::is_none")]
@@ -62,7 +62,7 @@ pub enum AgentEventType {
         partial: Option<bool>,
     },
 
-    #[serde(rename = "agent.tool.request")]
+    #[serde(rename = "agent:tool_request")]
     ToolRequest {
         tool_name: String,
         #[serde(skip_serializing_if = "Option::is_none")]
@@ -71,7 +71,7 @@ pub enum AgentEventType {
         requires_approval: Option<bool>,
     },
 
-    #[serde(rename = "agent.tool.result")]
+    #[serde(rename = "agent:tool_result")]
     ToolResult {
         tool_name: String,
         success: bool,
@@ -81,7 +81,7 @@ pub enum AgentEventType {
         duration_ms: Option<u64>,
     },
 
-    #[serde(rename = "agent.completed")]
+    #[serde(rename = "agent:completed")]
     Completed {
         success: bool,
         #[serde(skip_serializing_if = "Option::is_none")]
@@ -90,7 +90,7 @@ pub enum AgentEventType {
         duration: Option<f64>,
     },
 
-    #[serde(rename = "agent.error")]
+    #[serde(rename = "agent:error")]
     Error {
         message: String,
         #[serde(skip_serializing_if = "Option::is_none")]
@@ -99,7 +99,7 @@ pub enum AgentEventType {
         recoverable: Option<bool>,
     },
 
-    #[serde(rename = "agent.heartbeat")]
+    #[serde(rename = "agent:heartbeat")]
     Heartbeat {
         #[serde(skip_serializing_if = "Option::is_none")]
         last_activity: Option<String>,
@@ -222,13 +222,13 @@ impl EventDispatcher {
                 // 过滤事件类型
                 if let Some(ref types) = query.types {
                     let event_type_str = match &e.event_type {
-                        AgentEventType::Started { .. } => "agent.started",
-                        AgentEventType::Stream { .. } => "agent.stream",
-                        AgentEventType::ToolRequest { .. } => "agent.tool.request",
-                        AgentEventType::ToolResult { .. } => "agent.tool.result",
-                        AgentEventType::Completed { .. } => "agent.completed",
-                        AgentEventType::Error { .. } => "agent.error",
-                        AgentEventType::Heartbeat { .. } => "agent.heartbeat",
+                        AgentEventType::Started { .. } => "agent:started",
+                        AgentEventType::Stream { .. } => "agent:stream",
+                        AgentEventType::ToolRequest { .. } => "agent:tool_request",
+                        AgentEventType::ToolResult { .. } => "agent:tool_result",
+                        AgentEventType::Completed { .. } => "agent:completed",
+                        AgentEventType::Error { .. } => "agent:error",
+                        AgentEventType::Heartbeat { .. } => "agent:heartbeat",
                     };
                     if !types.iter().any(|t| t == event_type_str) {
                         return false;
@@ -267,38 +267,38 @@ impl Default for EventDispatcher {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(tag = "type")]
 pub enum SimpleAgentEvent {
-    #[serde(rename = "agent.started")]
+    #[serde(rename = "agent:started")]
     Started { session_id: String, source: String },
 
-    #[serde(rename = "agent.stream")]
+    #[serde(rename = "agent:stream")]
     Stream {
         session_id: String,
         source: String,
         text: String,
     },
 
-    #[serde(rename = "agent.tool.request")]
+    #[serde(rename = "agent:tool_request")]
     ToolRequest {
         session_id: String,
         source: String,
         tool_name: String,
     },
 
-    #[serde(rename = "agent.tool.result")]
+    #[serde(rename = "agent:tool_result")]
     ToolResult {
         session_id: String,
         source: String,
         success: bool,
     },
 
-    #[serde(rename = "agent.completed")]
+    #[serde(rename = "agent:completed")]
     Completed {
         session_id: String,
         source: String,
         success: bool,
     },
 
-    #[serde(rename = "agent.error")]
+    #[serde(rename = "agent:error")]
     Error {
         session_id: String,
         source: String,
