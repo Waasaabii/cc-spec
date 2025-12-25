@@ -1,5 +1,5 @@
 // hooks/useTauriEvents.ts - 监听 Tauri 事件的 Hook
-// 用于接收后端 claude.rs 发出的 agent.* 事件
+// 用于接收后端 claude.rs 发出的 agent:* 事件（Tauri v2 事件名不允许 . 字符）
 
 import { useEffect, useRef, useCallback } from "react";
 import { listen, UnlistenFn } from "@tauri-apps/api/event";
@@ -35,7 +35,7 @@ export interface UseTauriEventsOptions {
 }
 
 /**
- * 监听 Tauri 后端发出的 agent.* 事件
+ * 监听 Tauri 后端发出的 agent:* 事件
  * 这些事件来自 claude.rs 中的 app_handle.emit()
  */
 export function useTauriEvents(options: UseTauriEventsOptions) {
@@ -62,58 +62,58 @@ export function useTauriEvents(options: UseTauriEventsOptions) {
         if (!enabled) return;
 
         try {
-            // agent.started - CC 启动
+            // agent:started - CC 启动
             if (onStarted) {
-                const unlisten = await listen<TauriAgentEvent>("agent.started", (event) => {
+                const unlisten = await listen<TauriAgentEvent>("agent:started", (event) => {
                     onStarted(event.payload);
                 });
                 unlistenersRef.current.push(unlisten);
             }
 
-            // agent.stream - CC 输出流
+            // agent:stream - CC 输出流
             if (onStream) {
-                const unlisten = await listen<TauriAgentEvent>("agent.stream", (event) => {
+                const unlisten = await listen<TauriAgentEvent>("agent:stream", (event) => {
                     onStream(event.payload);
                 });
                 unlistenersRef.current.push(unlisten);
             }
 
-            // agent.completed - CC 完成
+            // agent:completed - CC 完成
             if (onCompleted) {
-                const unlisten = await listen<TauriAgentEvent>("agent.completed", (event) => {
+                const unlisten = await listen<TauriAgentEvent>("agent:completed", (event) => {
                     onCompleted(event.payload);
                 });
                 unlistenersRef.current.push(unlisten);
             }
 
-            // agent.error - CC 错误
+            // agent:error - CC 错误
             if (onError) {
-                const unlisten = await listen<TauriAgentEvent>("agent.error", (event) => {
+                const unlisten = await listen<TauriAgentEvent>("agent:error", (event) => {
                     onError(event.payload);
                 });
                 unlistenersRef.current.push(unlisten);
             }
 
-            // agent.tool.request - 工具请求
+            // agent:tool_request - 工具请求
             if (onToolRequest) {
-                const unlisten = await listen<TauriAgentEvent>("agent.tool.request", (event) => {
+                const unlisten = await listen<TauriAgentEvent>("agent:tool_request", (event) => {
                     onToolRequest(event.payload);
                 });
                 unlistenersRef.current.push(unlisten);
             }
 
-            // agent.session_ended - 会话结束
+            // agent:session_ended - 会话结束
             if (onSessionEnded) {
-                const unlisten = await listen<TauriAgentEvent>("agent.session_ended", (event) => {
+                const unlisten = await listen<TauriAgentEvent>("agent:session_ended", (event) => {
                     onSessionEnded(event.payload);
                 });
                 unlistenersRef.current.push(unlisten);
             }
 
-            // agent.stderr - 标准错误输出
+            // agent:stderr - 标准错误输出
             if (onStderr) {
                 const unlisten = await listen<{ session_id: string; source: string; text: string }>(
-                    "agent.stderr",
+                    "agent:stderr",
                     (event) => {
                         onStderr(event.payload);
                     }
