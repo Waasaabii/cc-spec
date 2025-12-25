@@ -23,6 +23,7 @@ mod database;
 mod events;
 mod export;
 mod index;
+mod commands;
 mod projects;
 mod sidecar;
 mod skills;
@@ -502,13 +503,13 @@ fn normalize_agent_ids(payload: &Value) -> (String, String) {
 
 fn agent_event_name(event: &AgentEvent) -> &'static str {
     match event.event_type {
-        AgentEventType::Started { .. } => "agent.started",
-        AgentEventType::Stream { .. } => "agent.stream",
-        AgentEventType::ToolRequest { .. } => "agent.tool.request",
-        AgentEventType::ToolResult { .. } => "agent.tool.result",
-        AgentEventType::Completed { .. } => "agent.completed",
-        AgentEventType::Error { .. } => "agent.error",
-        AgentEventType::Heartbeat { .. } => "agent.heartbeat",
+        AgentEventType::Started { .. } => "agent:started",
+        AgentEventType::Stream { .. } => "agent:stream",
+        AgentEventType::ToolRequest { .. } => "agent:tool_request",
+        AgentEventType::ToolResult { .. } => "agent:tool_result",
+        AgentEventType::Completed { .. } => "agent:completed",
+        AgentEventType::Error { .. } => "agent:error",
+        AgentEventType::Heartbeat { .. } => "agent:heartbeat",
     }
 }
 
@@ -1100,7 +1101,7 @@ fn main() {
             index::update_index,
             index::get_index_settings_prompt_dismissed,
             index::set_index_settings_prompt_dismissed,
-            // Translation commands
+            // Translation commands (legacy compatibility)
             translation::check_translation_model,
             translation::download_translation_model,
             translation::translate_text,
@@ -1108,6 +1109,16 @@ fn main() {
             translation::delete_translation_model,
             translation::get_translation_cache_stats,
             translation::preload_translation_model,
+            // Translation commands (new multi-model API)
+            translation::list_translation_models,
+            translation::download_model,
+            translation::load_model,
+            translation::unload_model,
+            translation::switch_model,
+            translation::delete_model,
+            translation::get_local_models,
+            translation::get_model_manager_status,
+            translation::get_resource_usage,
             // Export commands
             export::export_history,
             export::import_history,
@@ -1117,12 +1128,32 @@ fn main() {
             sidecar::run_ccspec_stream,
             sidecar::check_sidecar_available,
             sidecar::get_ccspec_version,
-            // Skills commands
-            skills::check_skills_status,
-            skills::install_skills,
-            skills::uninstall_skills,
-            skills::get_skills_version,
-            skills::check_skills_update_needed
+            // Commands management
+            commands::check_commands_status,
+            commands::install_commands,
+            commands::uninstall_commands,
+            commands::get_commands_version,
+            commands::check_commands_update_needed,
+            // Skills management
+            skills::check_config_migration,
+            skills::scan_user_skills,
+            skills::scan_project_skills,
+            skills::match_skills_cmd,
+            skills::get_skill_metadata_list,
+            skills::load_skill_body_cmd,
+            skills::get_skill_resources_cmd,
+            skills::load_skill_resource_cmd,
+            skills::get_tools_config,
+            skills::set_tools_config,
+            skills::list_skills,
+            skills::list_all_commands,
+            skills::add_user_skill,
+            skills::remove_user_skill,
+            skills::toggle_skill_enabled,
+            skills::update_skill_triggers,
+            skills::update_skill_body,
+            skills::get_project_skills_status,
+            skills::update_project_skills_status
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
