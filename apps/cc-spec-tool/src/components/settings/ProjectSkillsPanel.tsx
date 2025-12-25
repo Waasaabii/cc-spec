@@ -179,17 +179,11 @@ export function ProjectSkillsPanel({ projectPath, isDarkMode }: ProjectSkillsPan
           <div className={`py-4 text-center ${textSecondary}`}>加载中...</div>
         ) : projectState ? (
           <div className="space-y-3">
-            <div className="grid grid-cols-3 gap-4">
+            <div className="grid grid-cols-2 gap-4">
               <div className={`p-3 rounded-lg ${isDarkMode ? "bg-slate-900/50" : "bg-slate-50"}`}>
                 <div className={`text-xs ${textSecondary}`}>初始化时间</div>
                 <div className={`text-sm font-medium ${textPrimary}`}>
                   {new Date(projectState.initialized_at).toLocaleDateString()}
-                </div>
-              </div>
-              <div className={`p-3 rounded-lg ${isDarkMode ? "bg-slate-900/50" : "bg-slate-50"}`}>
-                <div className={`text-xs ${textSecondary}`}>Commands 版本</div>
-                <div className={`text-sm font-medium ${textPrimary}`}>
-                  {projectState.commands_version}
                 </div>
               </div>
               <div className={`p-3 rounded-lg ${isDarkMode ? "bg-slate-900/50" : "bg-slate-50"}`}>

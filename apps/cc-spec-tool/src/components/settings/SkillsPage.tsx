@@ -10,8 +10,6 @@ import type {
   SkillBody,
 } from "../../types/skills";
 import { Icons } from "../icons/Icons";
-import { TriggerEditor } from "./TriggerEditor";
-import { BodyEditor } from "./BodyEditor";
 import { ProjectSkillsPanel } from "./ProjectSkillsPanel";
 import { renderMarkdown } from "../../utils/markdown";
 
@@ -48,8 +46,6 @@ export function SkillsPage({ onClose, isDarkMode, currentProjectPath }: SkillsPa
   const [skillBody, setSkillBody] = useState<Record<string, SkillBody>>({});
   const [loadingBody, setLoadingBody] = useState<string | null>(null);
   const [actionMessage, setActionMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
-  const [editingSkill, setEditingSkill] = useState<Skill | null>(null);
-  const [editingBodySkill, setEditingBodySkill] = useState<Skill | null>(null);
 
   // 样式定义
   const cardClass = isDarkMode
@@ -151,37 +147,28 @@ export function SkillsPage({ onClose, isDarkMode, currentProjectPath }: SkillsPa
     }
   };
 
-  // 保存 Skill 触发规则
-  const handleSaveSkillTriggers = async (updatedSkill: Skill) => {
+  const handleOpenToolsConfigInVSCode = async () => {
     try {
-      await invoke("update_skill_triggers", {
-        skillName: updatedSkill.name,
-        triggers: updatedSkill.triggers,
-      });
-      await loadConfig();
-      showMessage("success", `已更新 ${updatedSkill.name} 的触发规则`);
+      await invoke("open_tools_config_in_vscode");
     } catch (err) {
-      throw err; // 让 TriggerEditor 处理错误
+      showMessage("error", `打开失败: ${err}`);
     }
   };
 
-  // 保存 Skill Body 内容
-  const handleSaveSkillBody = async (updatedSkill: Skill) => {
-    // Body 已经在 BodyEditor 中保存，这里只需要刷新配置和缓存
-    await loadConfig();
-    // 更新本地缓存的 body
-    const bodyContent = updatedSkill.body;
-    if (bodyContent) {
-      setSkillBody((prev) => ({
-        ...prev,
-        [updatedSkill.name]: {
-          name: updatedSkill.name,
-          content: bodyContent,
-          word_count: bodyContent.split(/\s+/).filter(Boolean).length,
-        },
-      }));
+  const handleOpenSkillToolsYamlInVSCode = async (skillName: string) => {
+    try {
+      await invoke("open_skill_in_vscode", { skillName, target: "tools_yaml" });
+    } catch (err) {
+      showMessage("error", `打开失败: ${err}`);
     }
-    showMessage("success", `已更新 ${updatedSkill.name} 的内容`);
+  };
+
+  const handleOpenSkillMdInVSCode = async (skillName: string) => {
+    try {
+      await invoke("open_skill_in_vscode", { skillName, target: "skill_md" });
+    } catch (err) {
+      showMessage("error", `打开失败: ${err}`);
+    }
   };
 
   // 渲染单个 Skill 卡片
@@ -245,20 +232,22 @@ export function SkillsPage({ onClose, isDarkMode, currentProjectPath }: SkillsPa
               {loadingBody === skill.name ? "加载中..." : isExpanded ? "收起" : "详情"}
             </button>
 
-            {/* 编辑内容按钮 */}
+            {/* VS Code 打开（不在工具内编辑） */}
+            {skill.source && (
+              <button
+                onClick={() => handleOpenSkillMdInVSCode(skill.name)}
+                className={`px-2 py-1 rounded-lg text-xs border transition-colors ${borderClass} ${textSecondary} hover:bg-slate-50 dark:hover:bg-slate-700`}
+                title="在 VS Code 打开 SKILL.md"
+              >
+                SKILL.md
+              </button>
+            )}
             <button
-              onClick={() => setEditingBodySkill(skill)}
+              onClick={() => handleOpenSkillToolsYamlInVSCode(skill.name)}
               className={`px-2 py-1 rounded-lg text-xs border transition-colors ${borderClass} ${textSecondary} hover:bg-slate-50 dark:hover:bg-slate-700`}
+              title="在 VS Code 打开 tools.yaml 并定位到该 Skill（用于编辑触发器等）"
             >
-              编辑
-            </button>
-
-            {/* 编辑触发规则按钮 */}
-            <button
-              onClick={() => setEditingSkill(skill)}
-              className={`px-2 py-1 rounded-lg text-xs border transition-colors ${borderClass} ${textSecondary} hover:bg-slate-50 dark:hover:bg-slate-700`}
-            >
-              触发器
+              tools.yaml
             </button>
 
             {/* 启用/禁用开关 */}
@@ -499,6 +488,18 @@ export function SkillsPage({ onClose, isDarkMode, currentProjectPath }: SkillsPa
           <div className="lg:col-span-2">
             <div className={`p-4 rounded-xl border ${cardClass}`}>
               <h3 className={`text-lg font-semibold mb-4 ${textPrimary}`}>触发设置</h3>
+              <div className="flex items-center justify-end mb-3">
+                <button
+                  onClick={handleOpenToolsConfigInVSCode}
+                  className={`px-3 py-1.5 rounded-lg text-xs border transition-colors ${borderClass} ${textSecondary} hover:bg-slate-50 dark:hover:bg-slate-700`}
+                  title="在 VS Code 打开 ~/.cc-spec/tools.yaml"
+                >
+                  <span className="inline-flex items-center gap-1.5">
+                    <Icons.FileText />
+                    VS Code 打开
+                  </span>
+                </button>
+              </div>
               <div className="grid grid-cols-3 gap-4">
                 <div>
                   <label className={`block text-sm font-medium mb-1 ${textPrimary}`}>
@@ -529,26 +530,6 @@ export function SkillsPage({ onClose, isDarkMode, currentProjectPath }: SkillsPa
           </div>
         </div>
       ) : null}
-
-      {/* 触发规则编辑器弹窗 */}
-      {editingSkill && (
-        <TriggerEditor
-          skill={editingSkill}
-          isDarkMode={isDarkMode}
-          onSave={handleSaveSkillTriggers}
-          onClose={() => setEditingSkill(null)}
-        />
-      )}
-
-      {/* Markdown 内容编辑器弹窗 */}
-      {editingBodySkill && (
-        <BodyEditor
-          skill={editingBodySkill}
-          isDarkMode={isDarkMode}
-          onSave={handleSaveSkillBody}
-          onClose={() => setEditingBodySkill(null)}
-        />
-      )}
     </div>
   );
 }

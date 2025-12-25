@@ -9,7 +9,8 @@
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
+use std::process::Command as ProcessCommand;
 
 // ============================================================================
 // 版本与常量
@@ -1619,6 +1620,100 @@ pub fn save_tools_config(config: &ToolsConfig) -> Result<(), String> {
     Ok(())
 }
 
+fn strip_windows_extended_prefix(path: &Path) -> String {
+    let s = path.to_string_lossy().to_string();
+    #[cfg(windows)]
+    {
+        if s.starts_with(r"\\?\") {
+            return s[4..].to_string();
+        }
+    }
+    s
+}
+
+fn open_in_vscode(path: &Path, line: Option<u32>, col: Option<u32>) -> Result<(), String> {
+    let mut cmd = ProcessCommand::new("code");
+    if let Some(line) = line {
+        let col = col.unwrap_or(1).max(1);
+        let target = format!("{}:{}:{}", strip_windows_extended_prefix(path), line.max(1), col);
+        cmd.args(["-g", &target]);
+    } else {
+        cmd.arg(strip_windows_extended_prefix(path));
+    }
+
+    if cmd.spawn().is_ok() {
+        return Ok(());
+    }
+
+    #[cfg(windows)]
+    {
+        ProcessCommand::new("cmd")
+            .args(["/C", "start", "", &strip_windows_extended_prefix(path)])
+            .spawn()
+            .map_err(|e| format!("Failed to open file: {}", e))?;
+        return Ok(());
+    }
+
+    #[cfg(target_os = "macos")]
+    {
+        ProcessCommand::new("open")
+            .arg(path)
+            .spawn()
+            .map_err(|e| format!("Failed to open file: {}", e))?;
+        return Ok(());
+    }
+
+    #[cfg(all(unix, not(target_os = "macos")))]
+    {
+        ProcessCommand::new("xdg-open")
+            .arg(path)
+            .spawn()
+            .map_err(|e| format!("Failed to open file: {}", e))?;
+        return Ok(());
+    }
+}
+
+fn ensure_tools_yaml_exists() -> Result<PathBuf, String> {
+    let path = tools_config_path();
+    if path.exists() {
+        return Ok(path);
+    }
+    let config = ToolsConfig::default();
+    save_tools_config(&config)?;
+    Ok(path)
+}
+
+fn find_tools_yaml_line_for_skill(path: &Path, skill_name: &str) -> Option<u32> {
+    let content = fs::read_to_string(path).ok()?;
+    let needle = format!("name: {}", skill_name);
+    let mut in_skills_section = false;
+
+    for (idx, line) in content.lines().enumerate() {
+        let trimmed = line.trim();
+        if trimmed == "skills:" {
+            in_skills_section = true;
+            continue;
+        }
+        if in_skills_section && trimmed.ends_with(':') && !trimmed.starts_with('-') && !trimmed.starts_with("skills:") {
+            // Leaving skills section when another top-level key starts.
+            if !line.starts_with(' ') && !line.starts_with('\t') {
+                in_skills_section = false;
+            }
+        }
+        if in_skills_section && trimmed.contains(&needle) {
+            return Some((idx + 1) as u32);
+        }
+    }
+
+    // fallback: search whole file
+    for (idx, line) in content.lines().enumerate() {
+        if line.trim().contains(&needle) {
+            return Some((idx + 1) as u32);
+        }
+    }
+    None
+}
+
 // ============================================================================
 // Tauri Commands
 // ============================================================================
@@ -1818,6 +1913,46 @@ pub async fn update_skill_body(
     }
 
     Err(format!("Skill '{}' 不存在", skill_name))
+}
+
+/// 在 VS Code 中打开 tools.yaml（只打开，不在工具内编辑）
+#[tauri::command]
+pub async fn open_tools_config_in_vscode() -> Result<(), String> {
+    let path = ensure_tools_yaml_exists()?;
+    open_in_vscode(&path, Some(1), Some(1))
+}
+
+/// 在 VS Code 中打开 Skill 对应的编辑位置
+///
+/// - `target = "skill_md"`：打开 `<source>/SKILL.md`（用于编辑内容/frontmatter）
+/// - `target = "tools_yaml"`：打开 `~/.cc-spec/tools.yaml` 并定位到该 Skill（用于编辑触发器等）
+#[tauri::command]
+pub async fn open_skill_in_vscode(skill_name: String, target: Option<String>) -> Result<(), String> {
+    let config = load_tools_config()?;
+    let skill = config
+        .skills
+        .user
+        .iter()
+        .find(|s| s.name == skill_name)
+        .or_else(|| config.skills.builtin.iter().find(|s| s.name == skill_name))
+        .ok_or_else(|| format!("Skill '{}' 不存在", skill_name))?;
+
+    let target = target.unwrap_or_else(|| "tools_yaml".to_string());
+    if target == "skill_md" {
+        let source = skill
+            .source
+            .as_ref()
+            .ok_or_else(|| "该 Skill 没有 source 路径（可能是内置 Skill）".to_string())?;
+        let skill_md = PathBuf::from(source).join("SKILL.md");
+        if !skill_md.exists() {
+            return Err(format!("SKILL.md 不存在: {}", skill_md.display()));
+        }
+        return open_in_vscode(&skill_md, Some(1), Some(1));
+    }
+
+    let tools_yaml = ensure_tools_yaml_exists()?;
+    let line = find_tools_yaml_line_for_skill(&tools_yaml, &skill_name).unwrap_or(1);
+    open_in_vscode(&tools_yaml, Some(line), Some(1))
 }
 
 /// 获取项目 Skills 安装状态

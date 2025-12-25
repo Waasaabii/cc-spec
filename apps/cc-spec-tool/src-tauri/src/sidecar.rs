@@ -7,6 +7,17 @@ use tauri::Emitter;
 use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::process::Command;
 
+#[cfg(debug_assertions)]
+fn dev_project_root() -> Result<PathBuf, String> {
+    let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    manifest_dir
+        .parent()
+        .and_then(|p| p.parent())
+        .and_then(|p| p.parent())
+        .map(|p| p.to_path_buf())
+        .ok_or_else(|| "Failed to resolve cc-spec repo root from CARGO_MANIFEST_DIR".to_string())
+}
+
 /// Sidecar 命令执行结果
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct SidecarResult {
@@ -54,13 +65,28 @@ pub async fn run_ccspec_command(
     working_dir: Option<String>,
     app_handle: tauri::AppHandle,
 ) -> Result<SidecarResult, String> {
-    let (program, cmd_args) = match get_sidecar_path(&app_handle) {
-        Ok(path) => (path.to_string_lossy().to_string(), args),
+    let (program, cmd_args, command_cwd) = match get_sidecar_path(&app_handle) {
+        Ok(path) => (
+            path.to_string_lossy().to_string(),
+            args,
+            working_dir.clone(),
+        ),
         Err(e) if e == "dev_mode" => {
-            // 开发模式使用 uv run cc-spec
-            let mut all_args = vec!["run".to_string(), "cc-spec".to_string()];
+            // 开发模式：uv run 需要显式指定 cc-spec 项目目录，否则在目标项目目录会变成“直接 spawn cc-spec”
+            // 目标：让 uv 使用 cc-spec 仓库作为 project，同时让 cc-spec 在 working_dir 下运行。
+            let project_root = dev_project_root()?;
+            let mut all_args = vec![
+                "run".to_string(),
+                "--project".to_string(),
+                project_root.to_string_lossy().to_string(),
+            ];
+            if let Some(dir) = &working_dir {
+                all_args.push("--directory".to_string());
+                all_args.push(dir.clone());
+            }
+            all_args.push("cc-spec".to_string());
             all_args.extend(args);
-            ("uv".to_string(), all_args)
+            ("uv".to_string(), all_args, Some(project_root.to_string_lossy().to_string()))
         }
         Err(e) => return Err(e),
     };
@@ -75,7 +101,7 @@ pub async fn run_ccspec_command(
     command.stdout(Stdio::piped());
     command.stderr(Stdio::piped());
 
-    if let Some(dir) = working_dir {
+    if let Some(dir) = command_cwd {
         command.current_dir(dir);
     }
 
@@ -100,12 +126,26 @@ pub async fn run_ccspec_stream(
     event_id: String,
     app_handle: tauri::AppHandle,
 ) -> Result<(), String> {
-    let (program, cmd_args) = match get_sidecar_path(&app_handle) {
-        Ok(path) => (path.to_string_lossy().to_string(), args),
+    let (program, cmd_args, command_cwd) = match get_sidecar_path(&app_handle) {
+        Ok(path) => (
+            path.to_string_lossy().to_string(),
+            args,
+            working_dir.clone(),
+        ),
         Err(e) if e == "dev_mode" => {
-            let mut all_args = vec!["run".to_string(), "cc-spec".to_string()];
+            let project_root = dev_project_root()?;
+            let mut all_args = vec![
+                "run".to_string(),
+                "--project".to_string(),
+                project_root.to_string_lossy().to_string(),
+            ];
+            if let Some(dir) = &working_dir {
+                all_args.push("--directory".to_string());
+                all_args.push(dir.clone());
+            }
+            all_args.push("cc-spec".to_string());
             all_args.extend(args);
-            ("uv".to_string(), all_args)
+            ("uv".to_string(), all_args, Some(project_root.to_string_lossy().to_string()))
         }
         Err(e) => return Err(e),
     };
@@ -120,7 +160,7 @@ pub async fn run_ccspec_stream(
     command.stdout(Stdio::piped());
     command.stderr(Stdio::piped());
 
-    if let Some(dir) = working_dir {
+    if let Some(dir) = command_cwd {
         command.current_dir(dir);
     }
 
@@ -186,9 +226,18 @@ pub async fn check_sidecar_available(app_handle: tauri::AppHandle) -> Result<boo
     match get_sidecar_path(&app_handle) {
         Ok(path) => Ok(path.exists()),
         Err(e) if e == "dev_mode" => {
-            // 开发模式检查 uv 是否可用
+            // 开发模式检查 uv + cc-spec 项目是否可用
+            let project_root = dev_project_root()?;
+            let project_root_str = project_root.to_string_lossy().to_string();
             let output = Command::new("uv")
-                .args(["run", "cc-spec", "--version"])
+                .args([
+                    "run",
+                    "--project",
+                    &project_root_str,
+                    "cc-spec",
+                    "--version",
+                ])
+                .current_dir(project_root)
                 .output()
                 .await;
             Ok(output.is_ok() && output.unwrap().status.success())

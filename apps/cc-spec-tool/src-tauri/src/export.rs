@@ -3,7 +3,7 @@
 use serde::{Deserialize, Serialize};
 use std::fs::{self, File};
 use std::io::{Read, Write};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use tauri::Emitter;
 use zip::write::FileOptions;
 use zip::ZipWriter;
@@ -15,6 +15,14 @@ pub struct ExportMetadata {
     pub project_path: String,
     pub session_count: usize,
     pub total_events: usize,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct RequirementsExportMetadata {
+    pub version: String,
+    pub exported_at: String,
+    pub project_path: String,
+    pub file_count: usize,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -49,6 +57,104 @@ fn resolve_history_dir(project_path: &str) -> PathBuf {
         return legacy_dir;
     }
     new_dir
+}
+
+fn is_requirement_file(path: &Path) -> bool {
+    let Some(name) = path.file_name().and_then(|n| n.to_str()) else {
+        return false;
+    };
+    matches!(name, "proposal.md" | "detail.md" | "review.md" | "mini-proposal.md")
+}
+
+fn collect_requirement_files(dir: &Path, out: &mut Vec<PathBuf>) -> Result<(), String> {
+    if !dir.exists() {
+        return Ok(());
+    }
+    let entries = fs::read_dir(dir).map_err(|e| format!("Failed to read dir: {}", e))?;
+    for entry in entries {
+        let entry = entry.map_err(|e| format!("Failed to read dir entry: {}", e))?;
+        let path = entry.path();
+        if path.is_dir() {
+            collect_requirement_files(&path, out)?;
+            continue;
+        }
+        if is_requirement_file(&path) {
+            out.push(path);
+        }
+    }
+    Ok(())
+}
+
+fn zip_entry_path(project_root: &Path, path: &Path) -> String {
+    let rel = path.strip_prefix(project_root).unwrap_or(path);
+    rel.to_string_lossy().replace('\\', "/")
+}
+
+/// 导出项目的“需求文档”（proposal/detail/review/mini-proposal）为 zip
+///
+/// 仅导出需求相关 Markdown，不包含会话 ndjson / 索引等其他产物。
+#[tauri::command]
+pub async fn export_requirements(
+    project_path: String,
+    output_path: String,
+) -> Result<String, String> {
+    let project_root = PathBuf::from(&project_path);
+    let cc_spec_dir = project_root.join(".cc-spec");
+    if !cc_spec_dir.exists() {
+        return Err("No .cc-spec directory found".to_string());
+    }
+
+    let mut files: Vec<PathBuf> = Vec::new();
+    let changes_dir = cc_spec_dir.join("changes");
+    collect_requirement_files(&changes_dir, &mut files)?;
+
+    // 兼容旧目录结构：.cc-spec/archive/（若存在则一并扫描）
+    let archive_dir = cc_spec_dir.join("archive");
+    collect_requirement_files(&archive_dir, &mut files)?;
+
+    if files.is_empty() {
+        return Err("No requirements files found".to_string());
+    }
+
+    let zip_path = PathBuf::from(&output_path);
+    let file = File::create(&zip_path)
+        .map_err(|e| format!("Failed to create export file: {}", e))?;
+
+    let mut zip = ZipWriter::new(file);
+    let options = FileOptions::default()
+        .compression_method(zip::CompressionMethod::Deflated)
+        .unix_permissions(0o644);
+
+    let metadata = RequirementsExportMetadata {
+        version: "1.0".to_string(),
+        exported_at: chrono::Utc::now().to_rfc3339(),
+        project_path: project_path.clone(),
+        file_count: files.len(),
+    };
+
+    zip.start_file("metadata.json", options)
+        .map_err(|e| format!("Failed to write metadata: {}", e))?;
+    zip.write_all(serde_json::to_string_pretty(&metadata).unwrap().as_bytes())
+        .map_err(|e| format!("Failed to write metadata: {}", e))?;
+
+    for path in files.iter() {
+        let mut content = Vec::new();
+        File::open(path)
+            .map_err(|e| format!("Failed to read requirements file: {}", e))?
+            .read_to_end(&mut content)
+            .map_err(|e| format!("Failed to read requirements file: {}", e))?;
+
+        let entry_name = zip_entry_path(&project_root, path);
+        zip.start_file(entry_name, options)
+            .map_err(|e| format!("Failed to add file to archive: {}", e))?;
+        zip.write_all(&content)
+            .map_err(|e| format!("Failed to write file to archive: {}", e))?;
+    }
+
+    zip.finish()
+        .map_err(|e| format!("Failed to finalize archive: {}", e))?;
+
+    Ok(output_path)
 }
 
 #[tauri::command]
