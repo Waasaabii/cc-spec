@@ -128,8 +128,20 @@ fn save_state(mut state: ProjectsState) -> Result<(), String> {
     let tmp = path.with_extension("json.tmp");
     fs::write(&tmp, serde_json::to_string_pretty(&state).unwrap())
         .map_err(|e| format!("Failed to write project registry: {}", e))?;
-    fs::rename(&tmp, &path)
-        .map_err(|e| format!("Failed to persist project registry: {}", e))?;
+    // Windows: rename 不能覆盖已存在文件（WinError 183）。
+    // 优先 rename（原子替换），失败且目标存在时降级为 copy+remove。
+    match fs::rename(&tmp, &path) {
+        Ok(()) => {}
+        Err(err) => {
+            if path.exists() {
+                fs::copy(&tmp, &path)
+                    .map_err(|e| format!("Failed to persist project registry: {}", e))?;
+                let _ = fs::remove_file(&tmp);
+            } else {
+                return Err(format!("Failed to persist project registry: {}", err));
+            }
+        }
+    }
     Ok(())
 }
 

@@ -86,7 +86,18 @@ fn save_sessions(path: &PathBuf, mut value: Value) -> Result<(), String> {
     let tmp = path.with_extension("json.tmp");
     std::fs::write(&tmp, serde_json::to_string_pretty(&value).unwrap())
         .map_err(|e| format!("写入 sessions 临时文件失败: {}", e))?;
-    std::fs::rename(&tmp, path).map_err(|e| format!("写入 sessions 失败: {}", e))?;
+    // Windows: rename 不能覆盖已存在文件（WinError 183），会导致 sessions.json 无法更新。
+    match std::fs::rename(&tmp, path) {
+        Ok(()) => {}
+        Err(err) => {
+            if path.exists() {
+                std::fs::copy(&tmp, path).map_err(|e| format!("写入 sessions 失败: {}", e))?;
+                let _ = std::fs::remove_file(&tmp);
+            } else {
+                return Err(format!("写入 sessions 失败: {}", err));
+            }
+        }
+    }
     Ok(())
 }
 

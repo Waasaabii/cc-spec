@@ -116,9 +116,19 @@ impl Default for ClaudeSettings {
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 struct CodexSettings {
+    /// "auto" 表示自动检测，否则为自定义路径
+    #[serde(default = "default_codex_path")]
+    path: String,
+    /// 自定义路径（当 path 不是 "auto" 时使用）
+    #[serde(default)]
+    custom_path: Option<String>,
     /// CX 最大并发数
     #[serde(default = "default_cx_max_concurrent")]
     max_concurrent: u8,
+}
+
+fn default_codex_path() -> String {
+    "auto".to_string()
 }
 
 fn default_cx_max_concurrent() -> u8 {
@@ -127,7 +137,11 @@ fn default_cx_max_concurrent() -> u8 {
 
 impl Default for CodexSettings {
     fn default() -> Self {
-        Self { max_concurrent: 5 }
+        Self {
+            path: "auto".to_string(),
+            custom_path: None,
+            max_concurrent: 5,
+        }
     }
 }
 
@@ -802,6 +816,146 @@ fn terminate_process(pid: i64) -> Result<(), String> {
     force_terminate_process(pid)
 }
 
+// ============================================================================
+// Codex 路径检测
+// ============================================================================
+
+fn validate_codex_path(path: &str) -> bool {
+    let p = std::path::PathBuf::from(path);
+    if !p.exists() {
+        return false;
+    }
+    if cfg!(windows) {
+        // Windows 上 `where.exe codex` 可能返回一个无扩展名的 sh 脚本（MSYS/Cygwin shim），
+        // 该文件虽然存在但无法通过 CreateProcess 直接执行，需排除以避免 relay 启动失败。
+        let ext = p.extension().and_then(|s| s.to_str()).unwrap_or("");
+        if ext.is_empty() {
+            if let Ok(mut file) = std::fs::File::open(&p) {
+                use std::io::Read;
+                let mut head = [0u8; 2];
+                if file.read(&mut head).ok() == Some(2) && &head == b"#!" {
+                    return false;
+                }
+            }
+        }
+    }
+    true
+}
+
+/// 检测 Codex CLI 路径
+/// 优先级: custom_path > CODEX_PATH > which/where > 常见路径
+pub fn detect_codex_path(custom_path: Option<&str>) -> Result<String, String> {
+    // 1. settings 中的自定义路径
+    if let Some(path) = custom_path {
+        if !path.is_empty() && path != "auto" && validate_codex_path(path) {
+            return Ok(path.to_string());
+        }
+    }
+
+    // 2. 环境变量 CODEX_PATH
+    if let Ok(path) = std::env::var("CODEX_PATH") {
+        if validate_codex_path(&path) {
+            return Ok(path);
+        }
+    }
+
+    // 3. which/where 命令
+    let cmd = if cfg!(windows) { "where" } else { "which" };
+    if let Ok(output) = std::process::Command::new(cmd).arg("codex").output() {
+        if output.status.success() {
+            let candidates = String::from_utf8_lossy(&output.stdout)
+                .lines()
+                .map(|s| s.trim().to_string())
+                .filter(|s| !s.is_empty() && validate_codex_path(s))
+                .collect::<Vec<_>>();
+            if cfg!(windows) {
+                // Windows: 优先选择可执行入口（.exe/.cmd/.bat），避免选到无扩展名的 sh shim。
+                for suffix in [".exe", ".cmd", ".bat"] {
+                    if let Some(p) = candidates
+                        .iter()
+                        .find(|p| p.to_ascii_lowercase().ends_with(suffix))
+                    {
+                        return Ok(p.clone());
+                    }
+                }
+            } else if let Some(p) = candidates.first() {
+                return Ok(p.clone());
+            }
+        }
+    }
+
+    // 4. npm 全局目录
+    if let Ok(output) = std::process::Command::new("npm")
+        .args(["config", "get", "prefix"])
+        .output()
+    {
+        if output.status.success() {
+            let prefix = String::from_utf8_lossy(&output.stdout).trim().to_string();
+            let npm_path = if cfg!(windows) {
+                format!("{}\\codex.cmd", prefix)
+            } else {
+                format!("{}/bin/codex", prefix)
+            };
+            if validate_codex_path(&npm_path) {
+                return Ok(npm_path);
+            }
+        }
+    }
+
+    // 5. 常见安装位置
+    let common_paths: Vec<Option<String>> = if cfg!(windows) {
+        vec![
+            std::env::var("APPDATA")
+                .map(|p| format!("{}\\npm\\codex.cmd", p))
+                .ok(),
+            std::env::var("LOCALAPPDATA")
+                .map(|p| format!("{}\\npm\\codex.cmd", p))
+                .ok(),
+        ]
+    } else {
+        vec![
+            Some("/usr/local/bin/codex".to_string()),
+            Some("/opt/homebrew/bin/codex".to_string()),
+            std::env::var("HOME")
+                .map(|h| format!("{}/.local/bin/codex", h))
+                .ok(),
+            std::env::var("HOME")
+                .map(|h| format!("{}/.npm-global/bin/codex", h))
+                .ok(),
+        ]
+    };
+
+    for path in common_paths.into_iter().flatten() {
+        if validate_codex_path(&path) {
+            return Ok(path);
+        }
+    }
+
+    Err("Codex CLI 未找到。请安装 Codex CLI 或在设置中手动指定路径。".to_string())
+}
+
+/// 获取有效的 codex 路径（从 settings 或自动检测）
+pub fn get_effective_codex_path(settings: &ViewerSettings) -> Result<String, String> {
+    // 如果有自定义路径且有效，使用它
+    if let Some(ref custom) = settings.codex.custom_path {
+        if !custom.trim().is_empty() && validate_codex_path(custom) {
+            return Ok(custom.clone());
+        }
+    }
+    // 否则自动检测
+    detect_codex_path(None)
+}
+
+#[tauri::command]
+fn cmd_detect_codex_path() -> Result<String, String> {
+    detect_codex_path(None)
+}
+
+#[tauri::command]
+fn cmd_validate_codex_path(path: String) -> Result<bool, String> {
+    Ok(validate_codex_path(&path))
+}
+
 #[tauri::command]
 fn get_settings() -> ViewerSettings {
     load_settings()
@@ -839,6 +993,10 @@ fn codex_terminal_start(project_path: String, app_handle: tauri::AppHandle) -> R
         return Err("project_path 为空".to_string());
     }
     let settings = load_settings();
+
+    // 获取 codex 可执行文件路径
+    let codex_bin = get_effective_codex_path(&settings)?;
+
     let launch = codex_sessions::create_terminal_session(&project_path)?;
     codex_sessions::launch_relay_terminal(
         &app_handle,
@@ -846,6 +1004,7 @@ fn codex_terminal_start(project_path: String, app_handle: tauri::AppHandle) -> R
         "127.0.0.1",
         settings.port,
         &launch.session_id,
+        Some(&codex_bin),
     )?;
     Ok(launch.session_id)
 }
@@ -924,6 +1083,17 @@ fn codex_terminal_kill(
     });
     codex_sessions::publish_control_to("127.0.0.1", settings.port, &project_path, &session_id, ctrl)?;
     Ok(())
+}
+
+#[tauri::command]
+fn codex_session_delete(project_path: String, session_id: String) -> Result<(), String> {
+    if project_path.trim().is_empty() {
+        return Err("project_path 为空".to_string());
+    }
+    if session_id.trim().is_empty() {
+        return Err("session_id 为空".to_string());
+    }
+    codex_sessions::delete_session_record(&project_path, &session_id)
 }
 
 #[tauri::command]
@@ -1167,10 +1337,13 @@ fn main() {
             stop_session,
             graceful_stop_session,
             launch_claude_terminal,
+            cmd_detect_codex_path,
+            cmd_validate_codex_path,
             codex_terminal_start,
             codex_terminal_send_input,
             codex_terminal_pause,
             codex_terminal_kill,
+            codex_session_delete,
             codex_pause,
             codex_resume,
             projects::import_project,

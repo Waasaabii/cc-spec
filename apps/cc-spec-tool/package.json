@@ -5,6 +5,9 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "dev:full": "concurrently -k -n \"tauri,sidecar\" -c \"yellow,magenta\" \"tauri dev\" \"bun run watch:sidecar\"",
+    "watch:sidecar": "cargo watch -C src-tauri -w src/bin -x \"build --bin cc-spec-codex-relay --bin cc-spec-codex-notify\"",
+    "build:sidecar": "cargo build --manifest-path src-tauri/Cargo.toml --bin cc-spec-codex-relay --bin cc-spec-codex-notify",
     "build": "tsc -b && vite build",
     "preview": "vite preview",
     "tauri": "tauri"
@@ -24,6 +27,7 @@
     "@types/react-dom": "^18.3.3",
     "@types/react-syntax-highlighter": "^15.5.13",
     "@vitejs/plugin-react": "^4.3.4",
+    "concurrently": "^9.1.2",
     "tailwindcss": "^4.0.0",
     "typescript": "^5.7.2",
     "vite": "^6.1.0"
