@@ -135,3 +135,10 @@ kb:
       min_score: 0.5
       boost_same_file: 1.5
       boost_recent_workflow: 2.0
+acceptance:
+  commands:
+  - lint
+  - test
+  - build
+  - type-check
+  auto_generate_criteria: true
