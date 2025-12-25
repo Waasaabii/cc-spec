@@ -3,12 +3,13 @@ import { invoke } from "@tauri-apps/api/core";
 import { Icons } from "../icons/Icons";
 import { RunCard } from "../chat/RunCard";
 import { ProjectArtifactsPanel } from "./ProjectArtifactsPanel";
+import { ProjectCodexPanel } from "./ProjectCodexPanel";
 import { ProjectSkillsPanel } from "../settings/ProjectSkillsPanel";
 import type { ProjectRecord } from "../../types/projects";
 import type { Language, LayoutMode, RunState, Theme, translations } from "../../types/viewer";
 import type { ChangeSummary } from "../../types/artifacts";
 
-type ProjectTab = "overview" | "skills" | "artifacts" | "runs";
+type ProjectTab = "overview" | "skills" | "codex" | "artifacts" | "runs";
 
 type IndexLevels = {
   l1_summary: boolean;
@@ -137,7 +138,8 @@ export function ProjectPage({
             </button>
             <button
               onClick={() => onLaunchClaudeTerminal()}
-              className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold transition-colors ${isDark ? "bg-purple-600 text-white hover:bg-purple-500" : "bg-orange-500 text-white hover:bg-orange-600"}`}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold transition-colors text-white hover:brightness-110"
+              style={{ backgroundColor: "#DA7756" }}
             >
               <Icons.Terminal />
               {t.openClaudeTerminal || "打开 Claude 终端"}
@@ -151,6 +153,9 @@ export function ProjectPage({
           </button>
           <button onClick={() => onTabChange("skills")} className={tabButtonClass("skills")}>
             {t.projectTabSkills || "Skills"}
+          </button>
+          <button onClick={() => onTabChange("codex")} className={tabButtonClass("codex")}>
+            {t.projectTabCodex || "Codex"}
           </button>
           <button onClick={() => onTabChange("artifacts")} className={tabButtonClass("artifacts")}>
             {t.projectTabArtifacts || "产物"}
@@ -234,6 +239,8 @@ export function ProjectPage({
         </div>
       ) : activeTab === "skills" ? (
         <ProjectSkillsPanel projectPath={project.path} isDarkMode={isDark} />
+      ) : activeTab === "codex" ? (
+        <ProjectCodexPanel projectPath={project.path} isDarkMode={isDark} t={t} />
       ) : activeTab === "runs" ? (
         <section className="flex flex-col gap-6">
           {runs.length === 0 ? (

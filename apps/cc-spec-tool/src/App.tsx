@@ -61,7 +61,7 @@ export default function App() {
     const [projectError, setProjectError] = useState<string | null>(null);
     const [layoutMode, setLayoutMode] = useState<LayoutMode>("list");
     const [activeView, setActiveView] = useState<"projects" | "project" | "settings" | "model-manager" | "commands-guide" | "skills">("projects");
-    const [activeProjectTab, setActiveProjectTab] = useState<"overview" | "skills" | "artifacts" | "runs">("overview");
+    const [activeProjectTab, setActiveProjectTab] = useState<"overview" | "skills" | "codex" | "artifacts" | "runs">("overview");
     const [showIndexPrompt, setShowIndexPrompt] = useState(false);
     const [removeProjectTarget, setRemoveProjectTarget] = useState<ProjectRecord | null>(null);
     const [removeProjectModalError, setRemoveProjectModalError] = useState<string | null>(null);
@@ -712,7 +712,6 @@ export default function App() {
                                     onEnter={handleEnterProject}
                                     onRemove={handleRemoveProject}
                                     onRefresh={loadProjects}
-                                    onLaunchClaudeTerminal={handleLaunchClaudeTerminal}
                                 />
                             </div>
                         ) : activeView === "project" ? (
