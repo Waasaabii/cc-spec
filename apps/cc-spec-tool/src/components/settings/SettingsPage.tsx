@@ -13,6 +13,7 @@ import { Icons } from "../icons/Icons";
 interface SettingsPageProps {
   onClose: () => void;
   isDarkMode: boolean;
+  onOpenModelManager?: () => void;
 }
 
 const defaultSettings: ViewerSettings = {
@@ -26,7 +27,7 @@ const defaultSettings: ViewerSettings = {
   ui: { theme: "system", language: "zh-CN" },
 };
 
-export function SettingsPage({ onClose, isDarkMode }: SettingsPageProps) {
+export function SettingsPage({ onClose, isDarkMode, onOpenModelManager }: SettingsPageProps) {
   const [settings, setSettings] = useState<ViewerSettings>(defaultSettings);
   const [concurrency, setConcurrency] = useState<ConcurrencyStatus | null>(null);
   const [saving, setSaving] = useState(false);
@@ -362,7 +363,7 @@ export function SettingsPage({ onClose, isDarkMode }: SettingsPageProps) {
             </div>
           </div>
 
-          {/* Translation Settings */}
+          {/* Translation Settings - Entry Card */}
           <div className={`p-6 rounded-2xl border ${cardClass}`}>
             <div className="flex items-center justify-between mb-4">
               <h3 className={`text-lg font-semibold ${textPrimary}`}>翻译模型</h3>
@@ -373,22 +374,14 @@ export function SettingsPage({ onClose, isDarkMode }: SettingsPageProps) {
 
             <div className="space-y-4">
               <div className={`text-xs space-y-1 ${textSecondary}`}>
-                <div className="flex justify-between"><span>模型版本:</span> <span className="font-mono">{translationStatus?.model_version || "-"}</span></div>
+                <div className="flex justify-between"><span>当前模型:</span> <span className="font-mono">{translationStatus?.model_version || "无"}</span></div>
                 <div className="flex justify-between"><span>文件大小:</span> <span className="font-mono">{formatBytes(translationStatus?.model_size)}</span></div>
                 <div className="flex justify-between"><span>缓存条目:</span> <span className="font-mono">{translationCache?.cached_count ?? 0}</span></div>
               </div>
 
-              {translationProgress && (
-                <div>
-                  <div className="flex justify-between text-xs mb-1">
-                    <span className={textSecondary}>{translationProgress.message}</span>
-                    <span className={textPrimary}>{Math.round(translationProgress.progress)}%</span>
-                  </div>
-                  <div className="h-1.5 w-full bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden">
-                    <div className="h-full bg-blue-500 transition-all duration-300" style={{ width: `${Math.min(100, Math.max(0, translationProgress.progress))}%` }}></div>
-                  </div>
-                </div>
-              )}
+              <p className={`text-xs ${textSecondary}`}>
+                支持从 HuggingFace 下载多种翻译模型，包括 T5、Opus MT 等。
+              </p>
 
               {translationError && (
                 <div className="text-xs text-red-500 bg-red-50 dark:bg-red-900/10 p-2 rounded">
@@ -396,28 +389,24 @@ export function SettingsPage({ onClose, isDarkMode }: SettingsPageProps) {
                 </div>
               )}
 
-              <div className="flex flex-wrap gap-2 pt-2">
+              <button
+                onClick={onOpenModelManager}
+                className={`w-full px-4 py-3 rounded-xl text-sm font-semibold text-white shadow-md transition-all hover:scale-[1.02] active:scale-[0.98] ${
+                  isDarkMode ? "bg-gradient-to-r from-purple-600 to-indigo-600" : "bg-gradient-to-r from-blue-600 to-indigo-600"
+                }`}
+              >
+                <div className="flex items-center justify-center gap-2">
+                  <Icons.Download />
+                  <span>打开模型管理</span>
+                </div>
+              </button>
+
+              <div className="flex flex-wrap gap-2">
                 <button
                   onClick={loadTranslationStatus}
                   className={`flex-1 px-3 py-1.5 rounded-lg text-xs border ${borderClass} ${textSecondary} hover:bg-slate-50 dark:hover:bg-slate-700`}
                 >
                   刷新状态
-                </button>
-                <button
-                  onClick={handleDownloadTranslation}
-                  disabled={translationDownloading}
-                  className={`flex-1 px-3 py-1.5 rounded-lg text-xs font-medium text-white shadow-sm transition-colors ${translationDownloading ? "bg-slate-400" : isDarkMode ? "bg-purple-600 hover:bg-purple-500" : "bg-blue-600 hover:bg-blue-500"}`}
-                >
-                  {translationDownloading ? "下载中..." : "下载模型"}
-                </button>
-              </div>
-              <div className="flex flex-wrap gap-2">
-                <button
-                  onClick={handleDeleteTranslation}
-                  disabled={translationDownloading}
-                  className={`flex-1 px-3 py-1.5 rounded-lg text-xs border border-red-200 text-red-600 hover:bg-red-50 dark:border-red-900/50 dark:text-red-400 dark:hover:bg-red-900/20`}
-                >
-                  删除模型
                 </button>
                 <button
                   onClick={handleClearTranslationCache}
