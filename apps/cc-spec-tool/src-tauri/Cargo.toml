@@ -4,6 +4,7 @@ version = "0.1.0"
 description = "cc-spec tools desktop app"
 authors = ["cc-spec"]
 edition = "2021"
+default-run = "cc-spec-tools"
 
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
@@ -37,6 +38,8 @@ futures-util = "0.3"
 
 # System monitoring
 sysinfo = "0.30"
+portable-pty = "0.9"
+terminal_size = "0.4"
 
 [features]
 default = ["custom-protocol"]

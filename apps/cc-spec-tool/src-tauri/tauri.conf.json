@@ -13,7 +13,9 @@
     "active": true,
     "targets": "all",
     "externalBin": [
-      "sidecar/cc-spec"
+      "sidecar/cc-spec",
+      "sidecar/cc-spec-codex-relay",
+      "sidecar/cc-spec-codex-notify"
     ],
     "resources": [
       "resources/skills/**/*"

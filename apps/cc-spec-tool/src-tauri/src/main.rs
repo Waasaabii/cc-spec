@@ -17,6 +17,7 @@ use std::time::Duration;
 use events::{AgentEvent, AgentEventType, AgentSource, EventDispatcher};
 
 mod claude;
+mod codex_sessions;
 mod codex_runner;
 mod cleanup;
 mod concurrency;
@@ -579,6 +580,7 @@ fn handle_ingest(mut stream: TcpStream, broadcaster: Arc<Broadcaster>, dispatche
     broadcaster.publish(payload);
 
     if let Some(value) = parsed {
+        codex_sessions::handle_ingest_event(&value, |payload| broadcaster.publish(payload));
         publish_agent_from_ingest(&value, &dispatcher, &broadcaster);
     }
 
@@ -832,6 +834,99 @@ fn launch_claude_terminal(
 }
 
 #[tauri::command]
+fn codex_terminal_start(project_path: String, app_handle: tauri::AppHandle) -> Result<String, String> {
+    if project_path.trim().is_empty() {
+        return Err("project_path 为空".to_string());
+    }
+    let settings = load_settings();
+    let launch = codex_sessions::create_terminal_session(&project_path)?;
+    codex_sessions::launch_relay_terminal(
+        &app_handle,
+        &project_path,
+        "127.0.0.1",
+        settings.port,
+        &launch.session_id,
+    )?;
+    Ok(launch.session_id)
+}
+
+#[tauri::command]
+fn codex_terminal_send_input(
+    project_path: String,
+    session_id: String,
+    text: String,
+    requested_by: Option<String>,
+) -> Result<String, String> {
+    if project_path.trim().is_empty() {
+        return Err("project_path 为空".to_string());
+    }
+    if session_id.trim().is_empty() {
+        return Err("session_id 为空".to_string());
+    }
+    if text.trim().is_empty() {
+        return Err("text 为空".to_string());
+    }
+    let settings = load_settings();
+    let by = requested_by.unwrap_or_else(|| "tool".to_string());
+    let request_id = codex_sessions::set_pending_request(&session_id, &project_path, &by, &text);
+    let ctrl = serde_json::json!({
+        "type": "codex.control",
+        "action": "send_input",
+        "requested_by": by,
+        "request_id": request_id,
+        "text": text,
+    });
+    codex_sessions::publish_control_to("127.0.0.1", settings.port, &project_path, &session_id, ctrl)?;
+    Ok(request_id)
+}
+
+#[tauri::command]
+fn codex_terminal_pause(
+    project_path: String,
+    session_id: String,
+    requested_by: Option<String>,
+) -> Result<(), String> {
+    if project_path.trim().is_empty() {
+        return Err("project_path 为空".to_string());
+    }
+    if session_id.trim().is_empty() {
+        return Err("session_id 为空".to_string());
+    }
+    let settings = load_settings();
+    let by = requested_by.unwrap_or_else(|| "tool".to_string());
+    let ctrl = serde_json::json!({
+        "type": "codex.control",
+        "action": "pause",
+        "requested_by": by,
+    });
+    codex_sessions::publish_control_to("127.0.0.1", settings.port, &project_path, &session_id, ctrl)?;
+    Ok(())
+}
+
+#[tauri::command]
+fn codex_terminal_kill(
+    project_path: String,
+    session_id: String,
+    requested_by: Option<String>,
+) -> Result<(), String> {
+    if project_path.trim().is_empty() {
+        return Err("project_path 为空".to_string());
+    }
+    if session_id.trim().is_empty() {
+        return Err("session_id 为空".to_string());
+    }
+    let settings = load_settings();
+    let by = requested_by.unwrap_or_else(|| "tool".to_string());
+    let ctrl = serde_json::json!({
+        "type": "codex.control",
+        "action": "kill",
+        "requested_by": by,
+    });
+    codex_sessions::publish_control_to("127.0.0.1", settings.port, &project_path, &session_id, ctrl)?;
+    Ok(())
+}
+
+#[tauri::command]
 fn codex_pause(
     project_path: String,
     session_id: String,
@@ -1072,6 +1167,10 @@ fn main() {
             stop_session,
             graceful_stop_session,
             launch_claude_terminal,
+            codex_terminal_start,
+            codex_terminal_send_input,
+            codex_terminal_pause,
+            codex_terminal_kill,
             codex_pause,
             codex_resume,
             projects::import_project,

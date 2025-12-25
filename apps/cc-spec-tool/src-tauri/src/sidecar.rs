@@ -29,7 +29,7 @@ pub struct SidecarResult {
 
 /// 获取 sidecar 可执行文件路径
 fn get_sidecar_path(_app_handle: &tauri::AppHandle) -> Result<PathBuf, String> {
-    // 开发模式：使用 uv run cc-spec
+    // 开发模式：使用 uv run -m cc_spec
     #[cfg(debug_assertions)]
     {
         // 在开发模式下返回 None，使用系统命令
@@ -84,7 +84,9 @@ pub async fn run_ccspec_command(
                 all_args.push("--directory".to_string());
                 all_args.push(dir.clone());
             }
-            all_args.push("cc-spec".to_string());
+            // 兼容 Windows：避免某些环境下 `cc-spec` 被当作外部可执行文件而触发 os error 193
+            all_args.push("-m".to_string());
+            all_args.push("cc_spec".to_string());
             all_args.extend(args);
             ("uv".to_string(), all_args, Some(project_root.to_string_lossy().to_string()))
         }
@@ -143,7 +145,8 @@ pub async fn run_ccspec_stream(
                 all_args.push("--directory".to_string());
                 all_args.push(dir.clone());
             }
-            all_args.push("cc-spec".to_string());
+            all_args.push("-m".to_string());
+            all_args.push("cc_spec".to_string());
             all_args.extend(args);
             ("uv".to_string(), all_args, Some(project_root.to_string_lossy().to_string()))
         }
@@ -234,7 +237,8 @@ pub async fn check_sidecar_available(app_handle: tauri::AppHandle) -> Result<boo
                     "run",
                     "--project",
                     &project_root_str,
-                    "cc-spec",
+                    "-m",
+                    "cc_spec",
                     "--version",
                 ])
                 .current_dir(project_root)
