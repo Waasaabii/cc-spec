@@ -4,13 +4,17 @@ import { useEffect, useRef, useState, useCallback } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { SettingsPage } from "./components/settings/SettingsPage";
+import { ModelManagerPage } from "./components/settings/ModelManagerPage";
+import { SkillsPage } from "./components/settings/SkillsPage";
 import { RunCard } from "./components/chat/RunCard";
 import { Icons } from "./components/icons/Icons";
 import { ProjectPanel } from "./components/projects/ProjectPanel";
-import { SkillsPanel } from "./components/skills/SkillsPanel";
+import { CommandsPanel } from "./components/commands-panel/CommandsPanel";
+import { CommandsGuidePage } from "./components/commands-panel/CommandsGuidePage";
 import { IndexPrompt } from "./components/index/IndexPrompt";
+import { TitleBar } from "./components/layout/TitleBar";
 import { useTauriEvents, type TauriAgentEvent } from "./hooks/useTauriEvents";
-import { useSkills } from "./hooks/useSkills";
+import { useCommands } from "./hooks/useCommands";
 import {
     parseStreamLine,
     parseCodeChanges,
@@ -56,8 +60,9 @@ export default function App() {
     const [projectLoading, setProjectLoading] = useState(false);
     const [projectError, setProjectError] = useState<string | null>(null);
     const [layoutMode, setLayoutMode] = useState<LayoutMode>("list");
-    const [activeView, setActiveView] = useState<"projects" | "runs" | "settings">("projects");
+    const [activeView, setActiveView] = useState<"projects" | "runs" | "settings" | "model-manager" | "commands-guide" | "skills">("projects");
     const [showIndexPrompt, setShowIndexPrompt] = useState(false);
+    const [userSelectedProject, setUserSelectedProject] = useState(false); // 区分用户主动选择 vs 启动恢复
     const eventSourceRef = useRef<EventSource | null>(null);
     const reconnectTimerRef = useRef<number | null>(null);
     const runsRef = useRef<RunState[]>([]);
@@ -65,15 +70,15 @@ export default function App() {
     const historyLoadingRef = useRef<Set<string>>(new Set());
     const saveTimerRef = useRef<number | null>(null);
     const {
-        skills,
-        loading: skillsLoading,
-        error: skillsError,
-        version: skillsVersion,
+        commands,
+        loading: commandsLoading,
+        error: commandsError,
+        version: commandsVersion,
         updateNeeded,
         checkStatus,
-        installSkills,
-        uninstallSkills,
-    } = useSkills();
+        installCommands,
+        uninstallCommands,
+    } = useCommands();
 
     const bringWindowToFront = useCallback(async () => {
         try {
@@ -126,32 +131,34 @@ export default function App() {
                 return [record, ...next];
             });
             setCurrentProject(record);
+            setUserSelectedProject(true); // 用户主动导入项目
 
-            // 导入后自动安装 Skills（静默，不阻断流程）
-            installSkills(record.path).catch((err) => {
-                console.error("Skills 自动安装失败:", err);
+            // 导入后自动安装 Commands（静默，不阻断流程）
+            installCommands(record.path).catch((err) => {
+                console.error("Commands 自动安装失败:", err);
             });
 
-            // 导入后刷新 Skills 状态
+            // 导入后刷新 Commands 状态
             checkStatus(record.path);
         } catch (error) {
             setProjectError(error instanceof Error ? error.message : String(error));
         } finally {
             setProjectLoading(false);
         }
-    }, [t.projectPathRequired, installSkills, checkStatus]);
+    }, [t.projectPathRequired, installCommands, checkStatus]);
 
     const handleSelectProject = useCallback(async (projectId: string) => {
         setProjectLoading(true);
         setProjectError(null);
         try {
-            const selected = await invoke<ProjectRecord | null>("set_current_project", { project_id: projectId });
+            const selected = await invoke<ProjectRecord | null>("set_current_project", { projectId });
             if (!selected) {
                 setProjectError(t.projectNotFound);
                 return;
             }
             setProjects((prev) => prev.map((project) => (project.id === selected.id ? selected : project)));
             setCurrentProject(selected);
+            setUserSelectedProject(true); // 用户主动选择项目
         } catch (error) {
             setProjectError(error instanceof Error ? error.message : String(error));
         } finally {
@@ -160,11 +167,18 @@ export default function App() {
     }, [t.projectNotFound]);
 
     const handleRemoveProject = useCallback(async (projectId: string) => {
-        if (!window.confirm(t.confirmRemoveProject)) return;
+        // 使用 Tauri 原生对话框确认
+        const { ask } = await import("@tauri-apps/plugin-dialog");
+        const confirmed = await ask(t.confirmRemoveProject, {
+            title: "确认删除",
+            kind: "warning",
+        });
+        if (!confirmed) return;
+
         setProjectLoading(true);
         setProjectError(null);
         try {
-            const removed = await invoke<boolean>("remove_project", { project_id: projectId });
+            const removed = await invoke<boolean>("remove_project", { projectId });
             if (!removed) {
                 setProjectError(t.projectNotFound);
                 return;
@@ -186,7 +200,7 @@ export default function App() {
         setProjectLoading(true);
         setProjectError(null);
         try {
-            await invoke("launch_claude_terminal", { project_path: currentProject.path });
+            await invoke("launch_claude_terminal", { projectPath: currentProject.path });
         } catch (error) {
             setProjectError(error instanceof Error ? error.message : String(error));
         } finally {
@@ -194,20 +208,20 @@ export default function App() {
         }
     }, [currentProject?.path, t.noProjectSelected]);
 
-    const handleRefreshSkills = useCallback(async () => {
+    const handleRefreshCommands = useCallback(async () => {
         if (!currentProject?.path) return;
         await checkStatus(currentProject.path);
     }, [currentProject?.path, checkStatus]);
 
-    const handleInstallSkills = useCallback(async () => {
+    const handleInstallCommands = useCallback(async () => {
         if (!currentProject?.path) return;
-        await installSkills(currentProject.path);
-    }, [currentProject?.path, installSkills]);
+        await installCommands(currentProject.path);
+    }, [currentProject?.path, installCommands]);
 
-    const handleUninstallSkills = useCallback(async () => {
+    const handleUninstallCommands = useCallback(async () => {
         if (!currentProject?.path) return;
-        await uninstallSkills(currentProject.path);
-    }, [currentProject?.path, uninstallSkills]);
+        await uninstallCommands(currentProject.path);
+    }, [currentProject?.path, uninstallCommands]);
 
     useEffect(() => {
         invoke<ViewerSettings>("get_settings")
@@ -233,7 +247,7 @@ export default function App() {
             const roots = new Set(runs.map(r => r.projectRoot).filter(Boolean));
             for (const root of roots) {
                 try {
-                    const raw = await invoke<string>('load_sessions', { project_path: root });
+                    const raw = await invoke<string>('load_sessions', { projectPath: root });
                     const data = JSON.parse(raw);
                     if (data.sessions) setSessions(prev => ({ ...prev, ...data.sessions }));
                 } catch { }
@@ -250,7 +264,7 @@ export default function App() {
             const grouped = groupRunsByProject(runsRef.current);
             for (const [projectRoot, history] of grouped) {
                 if (!historyLoadedRef.current.has(projectRoot)) continue;
-                invoke("save_history", { project_path: projectRoot, history_json: JSON.stringify(history) }).catch(() => { });
+                invoke("save_history", { projectPath: projectRoot, historyJson: JSON.stringify(history) }).catch(() => { });
             }
         }, HISTORY_SAVE_DEBOUNCE_MS);
     }, []);
@@ -258,7 +272,7 @@ export default function App() {
     const ensureHistoryLoaded = useCallback((projectRoot: string) => {
         if (!projectRoot || historyLoadedRef.current.has(projectRoot) || historyLoadingRef.current.has(projectRoot)) return;
         historyLoadingRef.current.add(projectRoot);
-        invoke<string>("load_history", { project_path: projectRoot })
+        invoke<string>("load_history", { projectPath: projectRoot })
             .then((raw) => {
                 const parsed = parseHistoryPayload(raw);
                 if (parsed && parsed.length > 0) setRuns((prev) => mergeHistoryRuns(prev, parsed));
@@ -288,14 +302,15 @@ export default function App() {
     useEffect(() => {
         let active = true;
         const checkIndexPrompt = async () => {
-            if (!currentProject?.path) {
+            // 只在用户主动选择项目时才显示弹窗，启动时自动恢复的项目不弹窗
+            if (!currentProject?.path || !userSelectedProject) {
                 if (active) setShowIndexPrompt(false);
                 return;
             }
             try {
                 const [exists, dismissed] = await Promise.all([
-                    invoke<boolean>("check_index_exists", { project_path: currentProject.path }),
-                    invoke<boolean>("get_index_settings_prompt_dismissed", { project_path: currentProject.path }),
+                    invoke<boolean>("check_index_exists", { projectPath: currentProject.path }),
+                    invoke<boolean>("get_index_settings_prompt_dismissed", { projectPath: currentProject.path }),
                 ]);
                 if (active) setShowIndexPrompt(!exists && !dismissed);
             } catch {
@@ -306,7 +321,7 @@ export default function App() {
         return () => {
             active = false;
         };
-    }, [currentProject?.path]);
+    }, [currentProject?.path, userSelectedProject]);
 
     useEffect(() => { scheduleHistorySave(); }, [runs, scheduleHistorySave]);
     useEffect(() => () => { if (saveTimerRef.current) clearTimeout(saveTimerRef.current); }, []);
@@ -576,8 +591,33 @@ export default function App() {
         ? runs.filter((run) => run.projectRoot && isSamePath(run.projectRoot, currentProject.path))
         : runs;
 
+    const toolbarButtons = (
+        <div className="flex items-center gap-1.5 px-2">
+            {activeView === "runs" && currentProject && (
+                <>
+                    <div className={`flex rounded-lg p-0.5 gap-0.5 ${theme === "dark" ? "bg-slate-800" : "bg-slate-100"}`}>
+                        <button onClick={() => setLayoutMode("list")} className={`p-1.5 rounded-md transition-all ${layoutMode === "list" ? (theme === "dark" ? "bg-slate-600 text-slate-100 shadow-sm" : "bg-white text-slate-800 shadow-sm") : (theme === "dark" ? "text-slate-400 hover:text-slate-200" : "text-slate-400 hover:text-slate-600")}`} title="List View"><Icons.List /></button>
+                        <button onClick={() => setLayoutMode("grid")} className={`p-1.5 rounded-md transition-all ${layoutMode === "grid" ? (theme === "dark" ? "bg-slate-600 text-slate-100 shadow-sm" : "bg-white text-slate-800 shadow-sm") : (theme === "dark" ? "text-slate-400 hover:text-slate-200" : "text-slate-400 hover:text-slate-600")}`} title="Grid View"><Icons.Grid /></button>
+                    </div>
+                    <div className={`w-px h-4 mx-1 ${theme === "dark" ? "bg-slate-700" : "bg-slate-300"}`}></div>
+                </>
+            )}
+            <button onClick={() => setTheme(theme === "dark" ? "light" : "dark")} className={`flex items-center gap-1.5 px-2 py-1.5 rounded-lg transition-colors text-[11px] font-semibold ${theme === "dark" ? "hover:bg-slate-800 text-slate-300" : "hover:bg-slate-100 text-slate-600"}`} title={theme === "dark" ? t.lightMode : t.darkMode}>{theme === "dark" ? <Icons.Sun /> : <Icons.Moon />}</button>
+            <button onClick={() => setLang(lang === "zh" ? "en" : "zh")} className={`flex items-center gap-1.5 px-2 py-1.5 rounded-lg transition-colors text-[11px] font-semibold ${theme === "dark" ? "hover:bg-slate-800 text-slate-300" : "hover:bg-slate-100 text-slate-600"}`}><Icons.Globe />{lang === "zh" ? "EN" : "中文"}</button>
+            <button onClick={() => setActiveView("settings")} className={`flex items-center gap-1.5 px-2 py-1.5 rounded-lg transition-colors text-[11px] font-semibold ${activeView === "settings" ? (theme === "dark" ? "bg-slate-800 text-slate-100" : "bg-slate-100 text-slate-800") : (theme === "dark" ? "hover:bg-slate-800 text-slate-300" : "hover:bg-slate-100 text-slate-600")}`} title="Settings"><Icons.Cog /></button>
+            {activeView === "runs" && runs.length > 0 && (
+                <>
+                    <div className={`w-px h-4 mx-1 ${theme === "dark" ? "bg-slate-700" : "bg-slate-300"}`}></div>
+                    <button onClick={() => setRuns([])} className={`flex items-center gap-1.5 px-2 py-1.5 rounded-lg transition-colors text-[11px] font-semibold ${theme === "dark" ? "hover:bg-orange-900/40 text-orange-300" : "hover:bg-orange-50 text-orange-700"}`}><Icons.Trash />{t.clearRuns}</button>
+                </>
+            )}
+        </div>
+    );
+
     return (
-        <div className={`min-h-screen font-sans transition-colors duration-300 ${theme === "dark" ? "bg-slate-900 text-slate-100 selection:bg-purple-500/30" : `text-slate-800 selection:bg-orange-100 ${layoutMode === "grid" ? "bg-slate-50/50" : "bg-slate-50/30"}`}`}>
+        <div className={`h-screen flex flex-col font-sans transition-colors duration-300 ${theme === "dark" ? "bg-slate-900 text-slate-100 selection:bg-purple-500/30" : `text-slate-800 selection:bg-orange-100 ${layoutMode === "grid" ? "bg-slate-50/50" : "bg-slate-50/30"}`}`}>
+            {/* 自定义标题栏 */}
+            <TitleBar theme={theme} rightContent={toolbarButtons} />
             {/* Background Decor */}
             <div className="fixed inset-0 pointer-events-none z-[-1] overflow-hidden">
                 {theme === "dark" ? (
@@ -595,18 +635,9 @@ export default function App() {
                 )}
             </div>
 
-            <div className="flex w-full h-screen">
-                <aside className={`flex-none w-64 border-r ${theme === "dark" ? "bg-slate-900/80 border-slate-800" : "bg-white/70 border-slate-200"}`}>
-                    <div className="flex h-full flex-col p-5 gap-6">
-                        <div className="flex items-center gap-3">
-                            <div className={`relative w-10 h-10 rounded-xl flex items-center justify-center shadow-lg overflow-hidden ${theme === "dark" ? "bg-slate-700" : "bg-white"}`}>
-                                <img src="/logo.gif" alt="CS" className="w-full h-full object-cover" />
-                            </div>
-                            <div>
-                                <div className={`text-sm font-semibold ${theme === "dark" ? "text-slate-100" : "text-slate-900"}`}>{t.title}</div>
-                                <div className={`text-[11px] ${theme === "dark" ? "text-slate-400" : "text-slate-500"}`}>{t.subtitle}</div>
-                            </div>
-                        </div>
+            <div className="flex w-full flex-1 min-h-0">
+                <aside className={`flex-none w-64 border-r pt-2 ${theme === "dark" ? "bg-slate-900/80 border-slate-800" : "bg-white/70 border-slate-200"}`}>
+                    <div className="flex h-full flex-col p-3 gap-4">
 
                         <nav className="flex flex-col gap-2">
                             <button
@@ -620,6 +651,20 @@ export default function App() {
                                 className={`px-3 py-2 rounded-xl text-left text-sm font-semibold transition-colors ${activeView === "runs" ? (theme === "dark" ? "bg-slate-800 text-slate-100" : "bg-slate-900 text-white") : (theme === "dark" ? "text-slate-400 hover:text-slate-200 hover:bg-slate-800/60" : "text-slate-500 hover:text-slate-800 hover:bg-slate-100")}`}
                             >
                                 {t.navRuns}
+                            </button>
+                            <button
+                                onClick={() => setActiveView("commands-guide")}
+                                className={`flex items-center gap-2 px-3 py-2 rounded-xl text-left text-sm font-semibold transition-colors ${activeView === "commands-guide" ? (theme === "dark" ? "bg-slate-800 text-slate-100" : "bg-slate-900 text-white") : (theme === "dark" ? "text-slate-400 hover:text-slate-200 hover:bg-slate-800/60" : "text-slate-500 hover:text-slate-800 hover:bg-slate-100")}`}
+                            >
+                                <Icons.Book />
+                                {t.navCommandsGuide || "Commands 指南"}
+                            </button>
+                            <button
+                                onClick={() => setActiveView("skills")}
+                                className={`flex items-center gap-2 px-3 py-2 rounded-xl text-left text-sm font-semibold transition-colors ${activeView === "skills" ? (theme === "dark" ? "bg-slate-800 text-slate-100" : "bg-slate-900 text-white") : (theme === "dark" ? "text-slate-400 hover:text-slate-200 hover:bg-slate-800/60" : "text-slate-500 hover:text-slate-800 hover:bg-slate-100")}`}
+                            >
+                                <Icons.Sparkles />
+                                Skills 管理
                             </button>
                         </nav>
 
@@ -654,29 +699,9 @@ export default function App() {
                 </aside>
 
                 <div className="flex-1 flex flex-col min-w-0">
-                    {/* Toolbar */}
-                    <header className="flex-none px-6 py-3 flex items-center justify-end z-50">
-                        <div className={`flex items-center gap-2 backdrop-blur-md p-1.5 rounded-2xl border shadow-sm ${theme === "dark" ? "bg-slate-800/60 border-slate-700/50" : "bg-white/60 border-white/50"}`}>
-                            {activeView === "runs" && currentProject && (
-                                <>
-                                    <div className={`flex rounded-xl p-1 gap-1 ${theme === "dark" ? "bg-slate-700/50" : "bg-slate-100/50"}`}>
-                                        <button onClick={() => setLayoutMode("list")} className={`p-2 rounded-lg transition-all ${layoutMode === "list" ? (theme === "dark" ? "bg-slate-600 text-slate-100 shadow-sm" : "bg-white text-slate-800 shadow-sm") : (theme === "dark" ? "text-slate-400 hover:text-slate-200" : "text-slate-400 hover:text-slate-600")}`} title="List View"><Icons.List /></button>
-                                        <button onClick={() => setLayoutMode("grid")} className={`p-2 rounded-lg transition-all ${layoutMode === "grid" ? (theme === "dark" ? "bg-slate-600 text-slate-100 shadow-sm" : "bg-white text-slate-800 shadow-sm") : (theme === "dark" ? "text-slate-400 hover:text-slate-200" : "text-slate-400 hover:text-slate-600")}`} title="Grid View"><Icons.Grid /></button>
-                                    </div>
-                                    <div className={`w-px h-6 mx-1 ${theme === "dark" ? "bg-slate-600" : "bg-slate-200"}`}></div>
-                                </>
-                            )}
-                            <button onClick={() => setTheme(theme === "dark" ? "light" : "dark")} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl transition-colors text-[11px] font-semibold ${theme === "dark" ? "hover:bg-slate-700/80 text-slate-300" : "hover:bg-white/80 text-slate-600"}`} title={theme === "dark" ? t.lightMode : t.darkMode}>{theme === "dark" ? <Icons.Sun /> : <Icons.Moon />}{theme === "dark" ? t.lightMode : t.darkMode}</button>
-                            <button onClick={() => setLang(lang === "zh" ? "en" : "zh")} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl transition-colors text-[11px] font-semibold ${theme === "dark" ? "hover:bg-slate-700/80 text-slate-300" : "hover:bg-white/80 text-slate-600"}`}><Icons.Globe />{lang === "zh" ? "EN" : "中文"}</button>
-                            <button onClick={() => setActiveView("settings")} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl transition-colors text-[11px] font-semibold ${activeView === "settings" ? (theme === "dark" ? "bg-slate-700 text-slate-100" : "bg-white text-slate-800 shadow-sm") : (theme === "dark" ? "hover:bg-slate-700/80 text-slate-300" : "hover:bg-white/80 text-slate-600")}`} title="Settings"><Icons.Cog /></button>
-                            {activeView === "runs" && runs.length > 0 && (
-                                <button onClick={() => setRuns([])} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl transition-colors text-[11px] font-semibold ${theme === "dark" ? "bg-orange-900/40 text-orange-300 hover:bg-orange-900/60 hover:text-orange-200" : "bg-orange-50 text-orange-700 hover:bg-orange-100 hover:text-orange-800"}`}><Icons.Trash />{t.clearRuns}</button>
-                            )}
-                        </div>
-                    </header>
-
                     {/* Content Area */}
-                    <main className="flex-1 overflow-y-auto px-6 pb-8 custom-scrollbar">
+                    {/* Content Area */}
+                    <main className="flex-1 overflow-y-auto px-6 py-4 custom-scrollbar">
                         {activeView === "projects" ? (
                             <div className="mx-auto w-full max-w-6xl flex flex-col gap-6">
                                 <ProjectPanel
@@ -695,23 +720,49 @@ export default function App() {
                             </div>
                         ) : activeView === "settings" ? (
                             <div className="mx-auto w-full max-w-6xl flex flex-col gap-6">
-                                <SettingsPage onClose={() => setActiveView("projects")} isDarkMode={theme === "dark"} />
+                                <SettingsPage
+                                    onClose={() => setActiveView("projects")}
+                                    isDarkMode={theme === "dark"}
+                                    onOpenModelManager={() => setActiveView("model-manager")}
+                                />
+                            </div>
+                        ) : activeView === "model-manager" ? (
+                            <div className="mx-auto w-full max-w-6xl flex flex-col gap-6">
+                                <ModelManagerPage
+                                    onClose={() => setActiveView("settings")}
+                                    isDarkMode={theme === "dark"}
+                                />
+                            </div>
+                        ) : activeView === "commands-guide" ? (
+                            <div className="mx-auto w-full max-w-6xl flex flex-col gap-6">
+                                <CommandsGuidePage
+                                    onClose={() => setActiveView("projects")}
+                                    isDarkMode={theme === "dark"}
+                                />
+                            </div>
+                        ) : activeView === "skills" ? (
+                            <div className="mx-auto w-full max-w-6xl flex flex-col gap-6">
+                                <SkillsPage
+                                    onClose={() => setActiveView("projects")}
+                                    isDarkMode={theme === "dark"}
+                                    currentProjectPath={currentProject?.path}
+                                />
                             </div>
                         ) : currentProject ? (
                             <div className="mx-auto w-full max-w-6xl flex flex-col gap-6">
                                 {/* 当前项目的 Commands 管理 */}
-                                <SkillsPanel
+                                <CommandsPanel
                                     theme={theme}
                                     t={t}
                                     projectPath={currentProject.path}
-                                    skills={skills}
-                                    loading={skillsLoading}
-                                    error={skillsError}
-                                    version={skillsVersion}
+                                    commands={commands}
+                                    loading={commandsLoading}
+                                    error={commandsError}
+                                    version={commandsVersion}
                                     updateNeeded={updateNeeded}
-                                    onRefresh={handleRefreshSkills}
-                                    onInstall={handleInstallSkills}
-                                    onUninstall={handleUninstallSkills}
+                                    onRefresh={handleRefreshCommands}
+                                    onInstall={handleInstallCommands}
+                                    onUninstall={handleUninstallCommands}
                                 />
                                 {/* 运行记录 */}
                                 {visibleRuns.length === 0 ? (
@@ -726,7 +777,7 @@ export default function App() {
                                         <p className={`text-sm max-w-sm text-center leading-relaxed ${theme === "dark" ? "text-slate-400" : "text-slate-500"}`}>
                                             {t.projectEmptyHint}
                                         </p>
-                                        <code className={`px-2 py-0.5 rounded font-mono text-xs mt-3 inline-block ${theme === "dark" ? "bg-slate-800 text-slate-300" : "bg-slate-100 text-slate-600"}`}>{sseUrl}</code>
+
                                     </div>
                                 ) : (
                                     <div className={`${layoutMode === "grid" ? "grid grid-cols-1 md:grid-cols-2 2xl:grid-cols-3 gap-4" : "flex flex-col gap-6 w-full"} mx-auto`}>
@@ -763,7 +814,7 @@ export default function App() {
             `}</style>
 
             {showIndexPrompt && currentProject?.path && (
-                <IndexPrompt projectPath={currentProject.path} theme={theme} onClose={() => setShowIndexPrompt(false)} />
+                <IndexPrompt projectPath={currentProject.path} theme={theme} t={t} onClose={() => setShowIndexPrompt(false)} />
             )}
         </div>
     );
