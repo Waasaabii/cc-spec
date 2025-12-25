@@ -1089,3 +1089,16 @@ graph TD
 
 - **W9: 数据库与导出** - 2/2 ✅ (2025-12-23)
   - W9-T1: PostgreSQL Docker 集成 ✅
+
+## Bug Fixes
+
+### BF-1: Fix Skill Body Editor Preview Scroll [CX]
+
+**Issue**: Generated content overflowed the container without scrolling. Preview mode lacked markdown rendering.
+
+**Fix**:
+1. Refactor `BodyEditor.tsx` layout to use Flexbox column + `flex-1` for scroll areas.
+2. Add simple Markdown rendering for preview.
+
+**Status**: ✅ Fixed
+
