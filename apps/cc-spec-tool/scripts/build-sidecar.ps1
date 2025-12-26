@@ -6,6 +6,7 @@ $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $ViewerRoot = Split-Path -Parent $ScriptDir
 $ProjectRoot = Split-Path -Parent (Split-Path -Parent $ViewerRoot)
 $SidecarDir = Join-Path $ViewerRoot "sidecar"
+$TauriSidecarDir = Join-Path $ViewerRoot "src-tauri\\sidecar"
 $SpecFile = Join-Path $SidecarDir "cc-spec.spec"
 $SrcPath = Join-Path $ProjectRoot "src"
 
@@ -16,6 +17,9 @@ Write-Host "Sidecar dir: $SidecarDir"
 # 确保 sidecar 目录存在
 if (-not (Test-Path $SidecarDir)) {
     New-Item -ItemType Directory -Path $SidecarDir -Force | Out-Null
+}
+if (-not (Test-Path $TauriSidecarDir)) {
+    New-Item -ItemType Directory -Path $TauriSidecarDir -Force | Out-Null
 }
 
 # 切换到项目根目录
@@ -57,6 +61,11 @@ try {
 
         Copy-Item $SourceExe $TargetPlatformExe -Force
         Write-Host "Created platform-specific sidecar: $TargetName" -ForegroundColor Green
+
+        # 同步到 Tauri externalBin 目录（src-tauri/sidecar）
+        $TauriTargetPlatformExe = Join-Path $TauriSidecarDir $TargetName
+        Copy-Item $SourceExe $TauriTargetPlatformExe -Force
+        Write-Host "Copied to Tauri sidecar: $TauriTargetPlatformExe" -ForegroundColor Green
 
         # 显示文件大小
         $Size = (Get-Item $TargetExe).Length / 1MB

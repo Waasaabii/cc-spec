@@ -77,3 +77,4 @@ reference/
 .cursor
 .gemini
 tmp/
+.ace-tool/

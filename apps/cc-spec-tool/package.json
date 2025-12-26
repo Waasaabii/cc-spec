@@ -5,9 +5,12 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "dev:frontend": "node scripts/dev-frontend.mjs",
     "dev:full": "concurrently -k -n \"tauri,sidecar\" -c \"yellow,magenta\" \"tauri dev\" \"bun run watch:sidecar\"",
-    "watch:sidecar": "cargo watch -C src-tauri -w src/bin -x \"build --bin cc-spec-codex-relay --bin cc-spec-codex-notify\"",
+    "watch:sidecar": "node scripts/watch-sidecar.mjs",
     "build:sidecar": "cargo build --manifest-path src-tauri/Cargo.toml --bin cc-spec-codex-relay --bin cc-spec-codex-notify",
+    "build:cli": "node scripts/build-tauri.mjs --no-frontend --no-sidecars",
+    "build:tauri": "node scripts/build-tauri.mjs",
     "build": "tsc -b && vite build",
     "preview": "vite preview",
     "tauri": "tauri"

@@ -12,7 +12,9 @@ import sys
 from pathlib import Path
 
 # 项目根目录
-project_root = Path(__file__).parent.parent.parent.parent
+# PyInstaller 在执行 spec 时不一定注入 `__file__`（PyInstaller 6.17+），推荐使用 SPECPATH。
+spec_dir = Path(globals().get("SPECPATH", Path.cwd())).resolve()
+project_root = spec_dir.parent.parent.parent
 src_path = project_root / "src"
 
 # 分析配置
@@ -35,7 +37,6 @@ a = Analysis(
         "rich",
         "yaml",
         "httpx",
-        "aiohttp",
     ],
     hookspath=[],
     hooksconfig={},
