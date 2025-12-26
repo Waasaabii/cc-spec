@@ -1,14 +1,23 @@
 # cc-spec
 
-**Spec-Driven AI-Assisted Development Workflow CLI Tool**
+**Spec-Driven AI-Assisted Development Workflow Tool**
 
 English | [中文](../README.md)
+
+[![Version](https://img.shields.io/badge/version-0.2.1-blue.svg)](https://github.com/Waasaabii/cc-spec)
 
 ---
 
 ## Introduction
 
-cc-spec is a spec-driven development CLI tool that combines the best of [OpenSpec](https://github.com/hannesrudolph/openspec) and [Spec-Kit](https://github.com/github/spec-kit), designed specifically for Claude Code's SubAgent concurrent execution capabilities.
+cc-spec is a spec-driven development tool that combines the best of [OpenSpec](https://github.com/hannesrudolph/openspec) and [Spec-Kit](https://github.com/github/spec-kit), designed for **Claude Code orchestration + Codex execution** workflow.
+
+The project consists of two main modules:
+
+| Module | Path | Tech Stack | Description |
+|--------|------|------------|-------------|
+| **CLI Tool** | `src/cc_spec/` | Python (uv + Typer + Rich) | Command-line workflow tool |
+| **Desktop App** | `apps/cc-spec-tool/` | Tauri + React + Rust | GUI visualization & session management |
 
 ### Key Features
 
@@ -21,7 +30,63 @@ cc-spec is a spec-driven development CLI tool that combines the best of [OpenSpe
 
 ---
 
-## Installation
+## Desktop App (cc-spec-tool)
+
+`apps/cc-spec-tool/` is a desktop GUI application built with Tauri 2.0, providing visual interface for managing Codex/Claude sessions.
+
+### Features
+
+- **Project Management**: Import, switch, and remove projects
+- **Codex Session Management**: Terminal/ConPTY relay mode with session monitoring and auto-retry
+- **Claude Integration**: Start and manage Claude CLI sessions
+- **Task Scheduling**: Concurrency control and queue management
+- **Real-time Status**: SSE event stream + sessions.json dual-track synchronization
+
+### Architecture
+
+```
+apps/cc-spec-tool/
+├── src/                    # React Frontend
+│   ├── App.tsx             # Main app entry
+│   ├── components/         # UI components
+│   │   ├── projects/       # Project management
+│   │   └── icons/          # Icon components
+│   ├── hooks/              # React Hooks
+│   └── types/              # TypeScript types
+├── src-tauri/              # Rust Backend
+│   ├── src/
+│   │   ├── main.rs         # Tauri entry, registers all commands
+│   │   ├── codex_sessions.rs   # Codex session management (core)
+│   │   ├── codex_runner.rs     # Codex CLI executor
+│   │   ├── claude.rs           # Claude session management
+│   │   ├── projects.rs         # Project management
+│   │   └── concurrency.rs      # Concurrency control
+│   └── tauri.conf.json     # Tauri config
+├── sidecar/                # Python Sidecar (cc-spec CLI packaged)
+└── scripts/                # Build scripts
+```
+
+### Development
+
+```bash
+cd apps/cc-spec-tool
+
+# Install dependencies
+bun install
+
+# Development mode
+bun run tauri dev
+
+# Build release
+bun run tauri build
+
+# Build Sidecar (package cc-spec CLI)
+pwsh scripts/build-sidecar.ps1
+```
+
+---
+
+## CLI Tool Installation
 
 Requires [uv](https://docs.astral.sh/uv/) to be installed first.
 

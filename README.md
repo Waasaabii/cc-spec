@@ -1,24 +1,23 @@
 # cc-spec
 
-**规范驱动的 AI 辅助开发工作流 CLI 工具**
+**规范驱动的 AI 辅助开发工作流工具**
 
 [English](./docs/README.en.md) | 中文
 
-[![Version](https://img.shields.io/badge/version-0.1.9-blue.svg)](https://github.com/Waasaabii/cc-spec)
+[![Version](https://img.shields.io/badge/version-0.2.1-blue.svg)](https://github.com/Waasaabii/cc-spec)
 
 ---
 
 ## 简介
 
-cc-spec 是一个整合了 [OpenSpec](https://github.com/hannesrudolph/openspec) 和 [Spec-Kit](https://github.com/github/spec-kit) 精华的规范驱动开发 CLI 工具，面向 **Claude Code 编排 + Codex 执行** 的规格驱动开发工作流。
+cc-spec 是一个整合了 [OpenSpec](https://github.com/hannesrudolph/openspec) 和 [Spec-Kit](https://github.com/github/spec-kit) 精华的规范驱动开发工具，面向 **Claude Code 编排 + Codex 执行** 的规格驱动开发工作流。
 
-## ps
-```typescript
-openspec缺少打分环节。speckit又对模型的改造太大，完全忽略了模型能力，所以两个都不喜欢用
-你们说我是不是贱
-虽然一开始就是从自己的工作流优化的，但自己的工作流又缺少openspec和speckit的牛逼之处
+项目包含两个主要模块：
 
-```
+| 模块 | 路径 | 技术栈 | 说明 |
+|------|------|--------|------|
+| **CLI 工具** | `src/cc_spec/` | Python (uv + Typer + Rich) | 命令行工作流工具 |
+| **桌面应用** | `apps/cc-spec-tool/` | Tauri + React + Rust | GUI 可视化与会话管理 |
 
 ### 核心特性
 
@@ -32,7 +31,63 @@ openspec缺少打分环节。speckit又对模型的改造太大，完全忽略�
 
 ---
 
-## 安装
+## 桌面应用 (cc-spec-tool)
+
+`apps/cc-spec-tool/` 是基于 Tauri 2.0 构建的桌面 GUI 应用，提供可视化界面管理 Codex/Claude 会话。
+
+### 功能特性
+
+- **项目管理**: 导入、切换、删除项目
+- **Codex 会话管理**: 终端/ConPTY relay 模式，支持会话监控与自动重试
+- **Claude 集成**: 启动和管理 Claude CLI 会话
+- **任务调度**: 并发控制、队列管理
+- **实时状态**: SSE 事件流 + sessions.json 双轨状态同步
+
+### 技术架构
+
+```
+apps/cc-spec-tool/
+├── src/                    # React 前端
+│   ├── App.tsx             # 主应用入口
+│   ├── components/         # UI 组件
+│   │   ├── projects/       # 项目管理组件
+│   │   └── icons/          # 图标组件
+│   ├── hooks/              # React Hooks
+│   └── types/              # TypeScript 类型定义
+├── src-tauri/              # Rust 后端
+│   ├── src/
+│   │   ├── main.rs         # Tauri 入口，注册所有命令
+│   │   ├── codex_sessions.rs   # Codex 会话管理（核心）
+│   │   ├── codex_runner.rs     # Codex CLI 执行器
+│   │   ├── claude.rs           # Claude 会话管理
+│   │   ├── projects.rs         # 项目管理
+│   │   └── concurrency.rs      # 并发控制
+│   └── tauri.conf.json     # Tauri 配置
+├── sidecar/                # Python Sidecar（cc-spec CLI 打包）
+└── scripts/                # 构建脚本
+```
+
+### 开发命令
+
+```bash
+cd apps/cc-spec-tool
+
+# 安装依赖
+bun install
+
+# 开发模式
+bun run tauri dev
+
+# 构建发布版
+bun run tauri build
+
+# 构建 Sidecar（打包 cc-spec CLI）
+pwsh scripts/build-sidecar.ps1
+```
+
+---
+
+## CLI 工具安装
 
 需要先安装 [uv](https://docs.astral.sh/uv/)。
 

@@ -1,97 +1,267 @@
 # CLAUDE.md
 
-本文件为 Claude Code (claude.ai/code) 和 Codex CLI 在此代码库中工作时提供指导。
+本文件为 Claude Code 在此代码库中工作时提供指导。
 
 ## 语言偏好
 
 请使用中文回答问题和编写注释。
 
-## 可用工具
-
-本项目提供 RAG 知识库查询功能，可以使用以下命令：
-
-```bash
-# 语义搜索知识库
-uv run cc-spec kb query "搜索关键词"
-uv run cc-spec kb query "关键词" --top-k 10  # 返回更多结果
-
-# 查看知识库统计
-uv run cc-spec kb stats
-
-# 重建知识库（如果查询报错）
-uv run cc-spec kb init
-```
-
 ## 项目概述
 
-cc-spec 是一个规范驱动的 AI 辅助开发工作流 CLI 工具，整合了 OpenSpec 和 Spec-Kit 的设计精华。提供 7 步标准工作流，支持 SubAgent 并发执行（Claude Code 中最多 10 个并发）。
+cc-spec 是一个规范驱动的 AI 辅助开发工作流工具，包含两个主要模块：
 
-## 开发命令
+| 模块 | 路径 | 技术栈 | 说明 |
+|------|------|--------|------|
+| **桌面应用** | `apps/cc-spec-tool/` | Tauri 2.0 + React + Rust | GUI 可视化与会话管理（**主要开发目标**） |
+| **CLI 工具** | `src/cc_spec/` | Python (uv + Typer + Rich) | 命令行工作流工具 |
+
+---
+
+## 桌面应用开发 (apps/cc-spec-tool/)
+
+### 技术栈
+
+- **前端**: React + TypeScript + TailwindCSS
+- **后端**: Rust + Tauri 2.0
+- **包管理**: bun
+- **构建**: Vite + Tauri CLI
+
+### 目录结构
+
+```
+apps/cc-spec-tool/
+├── src/                        # React 前端
+│   ├── App.tsx                 # 主应用入口
+│   ├── components/             # UI 组件
+│   │   ├── projects/           # 项目管理
+│   │   │   ├── ProjectPanel.tsx
+│   │   │   ├── ProjectPage.tsx
+│   │   │   └── ProjectCodexPanel.tsx  # Codex 会话面板
+│   │   ├── icons/Icons.tsx     # 图标组件
+│   │   └── chat/               # 聊天组件
+│   ├── hooks/                  # React Hooks
+│   │   ├── useSettings.ts
+│   │   ├── useSkills.ts
+│   │   └── useSidecar.ts
+│   └── types/                  # TypeScript 类型定义
+│       └── viewer.ts
+├── src-tauri/                  # Rust 后端
+│   ├── src/
+│   │   ├── main.rs             # Tauri 入口，注册所有命令
+│   │   ├── codex_sessions.rs   # Codex 会话管理（核心模块）
+│   │   ├── codex_runner.rs     # Codex CLI 执行器
+│   │   ├── claude.rs           # Claude 会话管理
+│   │   ├── projects.rs         # 项目管理
+│   │   ├── concurrency.rs      # 并发控制
+│   │   └── skills.rs           # Skills 配置管理
+│   ├── Cargo.toml              # Rust 依赖
+│   └── tauri.conf.json         # Tauri 配置
+├── sidecar/                    # Python Sidecar
+│   └── cc-spec.spec            # PyInstaller 打包配置
+├── scripts/                    # 构建脚本
+│   ├── build-sidecar.ps1       # 构建 Sidecar
+│   ├── build-tauri.mjs         # 构建 Tauri
+│   └── dev-frontend.mjs        # 前端开发服务
+└── package.json
+```
+
+### 开发命令
 
 ```bash
-# 安装依赖（使用 uv）
-uv sync
-uv sync --dev  # 包含开发依赖
+cd apps/cc-spec-tool
+
+# 安装依赖
+bun install
+
+# 开发模式（前端 + Tauri）
+bun run tauri dev
+
+# 仅前端开发
+bun run dev
+
+# 类型检查
+bun run type-check
+
+# 构建发布版
+bun run tauri build
+
+# 构建 Sidecar（打包 cc-spec CLI 为可执行文件）
+pwsh scripts/build-sidecar.ps1
+```
+
+### 核心模块说明
+
+#### 1. Codex 会话管理 (`codex_sessions.rs`)
+
+负责 Codex 终端会话的生命周期管理：
+
+- **会话创建**: `create_terminal_session()` - 生成终端交互式会话
+- **控制消息**: `publish_control_to()` - 发送 pause/resume/kill 控制
+- **状态持久化**: `upsert_session_record()` - 写入 sessions.json
+- **自动重试**: 崩溃/未知退出时自动重试（最多 3 次）
+
+关键数据结构：
+```rust
+struct PendingRequest {
+    id: String,
+    prompt: String,
+    requested_by: String,
+    created_at_ms: u64,
+}
+
+struct SupervisorState {
+    project_root: Option<String>,
+    pending: Option<PendingRequest>,
+    retry_count: u32,
+}
+```
+
+#### 2. Codex 执行器 (`codex_runner.rs`)
+
+执行 Codex CLI 并管理结果：
+
+- **执行**: `run_codex()` - 同步执行 Codex 命令
+- **会话注册**: `register_session()` / `update_session()`
+- **结果处理**: `CodexRunResult` 包含 message/exit_code/elapsed_s
+
+#### 3. Claude 会话 (`claude.rs`)
+
+管理 Claude CLI 会话（ConPTY 模式）：
+
+- **启动**: `start_claude()` - 启动 Claude CLI 进程
+- **消息发送**: `send_claude_message()`
+- **事件广播**: 通过 Tauri 事件系统推送
+
+#### 4. 项目管理 (`projects.rs`)
+
+- `import_project()` - 导入项目
+- `list_projects()` - 列出所有项目
+- `get_current_project()` / `set_current_project()`
+
+### Tauri 命令注册
+
+所有 Tauri 命令在 `main.rs` 中注册：
+
+```rust
+tauri::Builder::default()
+    .invoke_handler(tauri::generate_handler![
+        // 设置
+        get_settings, set_settings,
+        // 并发控制
+        get_concurrency_status, cancel_queued_task, update_concurrency_limits,
+        // 会话管理
+        save_history, load_history, load_sessions, stop_session,
+        // Codex 终端
+        codex_terminal_start, codex_terminal_send_input,
+        codex_terminal_pause, codex_terminal_kill,
+        // Codex 执行
+        codex_pause, codex_resume,
+        // 项目
+        projects::import_project, projects::list_projects, ...
+        // Claude
+        claude::start_claude, claude::send_claude_message, ...
+    ])
+```
+
+### 前端状态管理
+
+主要状态在 `App.tsx` 中管理：
+
+- `projects` / `currentProject` - 项目列表与当前项目
+- `runs` - 运行记录
+- `activeView` - 当前视图 (projects/project)
+- `theme` / `lang` - 主题与语言
+
+### 事件系统
+
+双轨事件通路：
+1. **SSE**: `codex.*` 事件（实时流）
+2. **Tauri Event**: `agent.*` 事件（Claude 相关）
+
+---
+
+## CLI 工具开发 (src/cc_spec/)
+
+### 开发命令
+
+```bash
+# 安装依赖
+uv sync --dev
 
 # 运行 CLI
 uv run cc-spec --help
-uv run cc-spec <command>
 
 # 运行测试
-uv run pytest                           # 全部测试
-uv run pytest tests/test_config.py      # 单个文件
-uv run pytest -k "test_name"            # 按名称运行单个测试
-uv run pytest tests/integration/        # 仅集成测试
+uv run pytest
+uv run pytest -k "test_name"
 
 # 代码检查
-uv run ruff check src/                  # lint 检查
-uv run ruff check --fix src/            # lint 自动修复
-uv run mypy src/cc_spec/                # 类型检查
+uv run ruff check src/
+uv run mypy src/cc_spec/
 ```
 
-## 架构
+### 源码结构
 
-### 源码结构 (`src/cc_spec/`)
+- **`commands/`** - CLI 命令实现
+- **`core/`** - 核心业务逻辑（config, state, delta, scoring）
+- **`subagent/`** - SubAgent 并行执行系统
+- **`rag/`** - RAG 知识库（ChromaDB + fastembed）
+- **`embedding/`** - Embedding 服务管理
+- **`codex/`** - Codex CLI 客户端
 
-- **`__init__.py`** - Typer CLI 应用入口，注册所有命令
-- **`commands/`** - 命令实现（init, specify, clarify, plan, apply, checklist, archive, quick-delta, list, goto, update）
-- **`core/`** - 核心业务逻辑：
-  - `config.py` - 配置管理（Config, SubAgentProfile, AgentsConfig 数据类）
-  - `state.py` - 工作流状态持久化
-  - `delta.py` - Delta 变更追踪（ADDED/MODIFIED/REMOVED/RENAMED）
-  - `scoring.py` - 检查清单打分（≥80 分通过）
-  - `id_manager.py` - ID 系统（C-001, S-001, A-001 格式）
-  - `templates.py` - 模板加载
-  - `command_generator.py` - AI 工具命令文件生成
-- **`subagent/`** - SubAgent 执行系统：
-  - `executor.py` - 并行任务执行
-  - `task_parser.py` - Wave/Task-ID 格式解析
-  - `result_collector.py` - 执行结果聚合
-- **`ui/`** - Rich 控制台 UI 组件（display, prompts, progress）
-- **`utils/`** - 工具函数（files, download）
-- **`templates/`** - 内置模板文件
+### RAG 知识库
 
-### 工作流数据 (`/.cc-spec/`)
+```bash
+# 语义搜索
+uv run cc-spec kb query "搜索关键词"
 
-```
-.cc-spec/
-├── config.yaml           # 项目配置
-├── changes/              # 活跃变更（C-xxx ID）
-│   └── <change-name>/
-│       ├── proposal.md   # 变更提案
-│       ├── plan.md       # 执行计划
-│       └── tasks.md      # Wave/Task 定义
-└── archive/              # 已完成变更（A-xxx ID）
+# 查看统计
+uv run cc-spec kb stats
+
+# 重建知识库
+uv run cc-spec kb init
 ```
 
-### 多 AI 工具支持
-
-工具为 17+ AI 工具（Claude, Cursor, Gemini, Copilot 等）生成命令文件。配置在 `config.yaml` 的 `agents.enabled[]` 中。
+---
 
 ## 关键约定
 
-- 所有命令使用 Typer + Rich 构建 CLI 界面
+### Tauri 开发
+
+- Rust 后端使用 `#[tauri::command]` 暴露命令
+- 前端通过 `invoke()` 调用后端命令
+- 会话状态持久化到 `.cc-spec/runtime/codex/sessions.json`
+- 使用 `serde_json` 序列化/反序列化
+
+### CLI 开发
+
+- 使用 Typer + Rich 构建 CLI
 - 配置文件格式为 YAML
 - Delta 格式：`ADDED:`、`MODIFIED:`、`REMOVED:`、`RENAMED: old → new`
-- 任务 ID 遵循 `W<wave>-T<task>` 格式（如 W1-T1, W2-T3）
-- 检查清单通过阈值：80 分（可配置）
+- 任务 ID：`W<wave>-T<task>` 格式
+
+---
+
+## 调试技巧
+
+### Tauri 后端调试
+
+```bash
+# 查看 Rust 日志
+RUST_LOG=debug bun run tauri dev
+
+# 查看 Codex 日志
+cat .cc-spec/runtime/codex/*.log
+```
+
+### 前端调试
+
+- 使用 Chrome DevTools (Tauri 开发模式自动打开)
+- React DevTools 扩展
+
+### 会话状态
+
+```bash
+# 查看当前会话状态
+cat .cc-spec/runtime/codex/sessions.json | jq
+```
