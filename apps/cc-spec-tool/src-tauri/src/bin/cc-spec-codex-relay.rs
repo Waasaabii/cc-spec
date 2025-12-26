@@ -21,15 +21,27 @@ use std::time::{Duration, SystemTime};
 use terminal_size::{terminal_size, Height, Width};
 
 #[cfg(windows)]
+use std::ffi::OsStr;
+#[cfg(windows)]
+use std::os::windows::ffi::OsStrExt;
+
+#[cfg(windows)]
 use windows_sys::Win32::Foundation::GetLastError;
 #[cfg(windows)]
+use windows_sys::Win32::Storage::FileSystem::CreateFileW;
+#[cfg(windows)]
 use windows_sys::Win32::System::Console::{
-    GenerateConsoleCtrlEvent, GetStdHandle, SetConsoleCtrlHandler, WriteConsoleInputW, CTRL_C_EVENT,
-    INPUT_RECORD, INPUT_RECORD_0, KEY_EVENT, KEY_EVENT_RECORD, KEY_EVENT_RECORD_0, STD_INPUT_HANDLE,
+    AllocConsole, GenerateConsoleCtrlEvent, GetConsoleMode, GetStdHandle, SetConsoleCtrlHandler,
+    SetStdHandle, WriteConsoleInputW, CTRL_C_EVENT, INPUT_RECORD, INPUT_RECORD_0, KEY_EVENT,
+    KEY_EVENT_RECORD, KEY_EVENT_RECORD_0, STD_ERROR_HANDLE, STD_INPUT_HANDLE, STD_OUTPUT_HANDLE,
 };
 
 fn now_iso() -> String {
     chrono::Utc::now().to_rfc3339()
+}
+
+fn notify_endpoint(args: &Args) -> String {
+    format!("http://{}:{}", args.viewer_host, args.viewer_port)
 }
 
 #[cfg(windows)]
@@ -42,6 +54,107 @@ unsafe extern "system" fn ignore_ctrl_handler(_ctrl_type: u32) -> i32 {
 }
 
 #[cfg(windows)]
+fn wide_null(s: &str) -> Vec<u16> {
+    OsStr::new(s).encode_wide().chain(std::iter::once(0)).collect()
+}
+
+#[cfg(windows)]
+fn ensure_console_stdio() -> Result<(), String> {
+    // 当 relay 由 GUI/pipe 环境启动时（例如 tauri dev 捕获 stdout/stderr），
+    // 子进程 codex 可能会收到非 TTY 的 stdin，从而报 “stdin is not a terminal”。
+    // 这里通过 CONIN$/CONOUT$ 修复标准句柄，必要时为 relay 分配一个 console。
+    const GENERIC_READ: u32 = 0x8000_0000;
+    const GENERIC_WRITE: u32 = 0x4000_0000;
+    const FILE_SHARE_READ: u32 = 0x0000_0001;
+    const FILE_SHARE_WRITE: u32 = 0x0000_0002;
+    const OPEN_EXISTING: u32 = 3;
+
+    fn has_console_input() -> bool {
+        let handle = unsafe { GetStdHandle(STD_INPUT_HANDLE) };
+        if handle.is_null() || handle as isize == -1 {
+            return false;
+        }
+        let mut mode: u32 = 0;
+        let ok = unsafe { GetConsoleMode(handle, &mut mode) };
+        ok != 0
+    }
+
+    fn try_fix() -> Result<(), String> {
+        let conin = unsafe {
+            CreateFileW(
+                wide_null("CONIN$").as_ptr(),
+                GENERIC_READ | GENERIC_WRITE,
+                FILE_SHARE_READ | FILE_SHARE_WRITE,
+                std::ptr::null(),
+                OPEN_EXISTING,
+                0,
+                std::ptr::null_mut(),
+            )
+        };
+        if conin.is_null() || conin as isize == -1 {
+            return Err(format!(
+                "打开 CONIN$ 失败: {} (err={})",
+                std::io::Error::last_os_error(),
+                unsafe { GetLastError() }
+            ));
+        }
+
+        let conout = unsafe {
+            CreateFileW(
+                wide_null("CONOUT$").as_ptr(),
+                GENERIC_READ | GENERIC_WRITE,
+                FILE_SHARE_READ | FILE_SHARE_WRITE,
+                std::ptr::null(),
+                OPEN_EXISTING,
+                0,
+                std::ptr::null_mut(),
+            )
+        };
+        if conout.is_null() || conout as isize == -1 {
+            return Err(format!(
+                "打开 CONOUT$ 失败: {} (err={})",
+                std::io::Error::last_os_error(),
+                unsafe { GetLastError() }
+            ));
+        }
+
+        let ok_in = unsafe { SetStdHandle(STD_INPUT_HANDLE, conin) };
+        let ok_out = unsafe { SetStdHandle(STD_OUTPUT_HANDLE, conout) };
+        let ok_err = unsafe { SetStdHandle(STD_ERROR_HANDLE, conout) };
+        if ok_in == 0 || ok_out == 0 || ok_err == 0 {
+            return Err(format!(
+                "SetStdHandle 失败: {} (err={})",
+                std::io::Error::last_os_error(),
+                unsafe { GetLastError() }
+            ));
+        }
+        Ok(())
+    }
+
+    if has_console_input() {
+        return Ok(());
+    }
+    if try_fix().is_ok() && has_console_input() {
+        return Ok(());
+    }
+
+    let ok = unsafe { AllocConsole() };
+    if ok == 0 {
+        return Err(format!(
+            "AllocConsole 失败: {} (err={})",
+            std::io::Error::last_os_error(),
+            unsafe { GetLastError() }
+        ));
+    }
+
+    try_fix()?;
+    if !has_console_input() {
+        return Err("修复 console stdio 后仍无法获取 console mode".to_string());
+    }
+    Ok(())
+}
+
+#[cfg(windows)]
 fn inject_text_to_console(text: &str) -> Result<(), String> {
     let handle = unsafe { GetStdHandle(STD_INPUT_HANDLE) };
     // INVALID_HANDLE_VALUE = -1，且 GetStdHandle 失败时返回 NULL
@@ -50,22 +163,39 @@ fn inject_text_to_console(text: &str) -> Result<(), String> {
     }
 
     let mut records: Vec<INPUT_RECORD> = Vec::new();
-    for ch in text.chars().chain(std::iter::once('\r')) {
-        let u = ch as u16;
+    // 注入文本后自动“回车”提交（无论原文本是否已带行尾换行，都保证最后追加一次 Enter）。
+    //
+    const ENABLE_LINE_INPUT: u32 = 0x0002;
+    let mut mode: u32 = 0;
+    let has_mode = unsafe { GetConsoleMode(handle, &mut mode) } != 0;
+    let line_input = has_mode && (mode & ENABLE_LINE_INPUT) != 0;
+
+    const VK_RETURN: u16 = 0x0D;
+    // 用于传递“Unicode 字符”的虚拟键码（类似 IME/粘贴产生的输入）。
+    // 比 `wVirtualKeyCode=0` 更容易被某些终端库识别/消费。
+    const VK_PACKET: u16 = 0xE7;
+    const SCAN_RETURN: u16 = 0x1C;
+
+    let mut push_key = |virtual_key: u16, scan_code: u16, unicode_char: u16| {
         let key_down = KEY_EVENT_RECORD {
             bKeyDown: 1,
             wRepeatCount: 1,
-            wVirtualKeyCode: 0,
-            wVirtualScanCode: 0,
-            uChar: KEY_EVENT_RECORD_0 { UnicodeChar: u },
+            wVirtualKeyCode: virtual_key,
+            wVirtualScanCode: scan_code,
+            uChar: KEY_EVENT_RECORD_0 {
+                UnicodeChar: unicode_char,
+            },
             dwControlKeyState: 0,
         };
         let key_up = KEY_EVENT_RECORD {
             bKeyDown: 0,
             wRepeatCount: 1,
-            wVirtualKeyCode: 0,
-            wVirtualScanCode: 0,
-            uChar: KEY_EVENT_RECORD_0 { UnicodeChar: u },
+            wVirtualKeyCode: virtual_key,
+            wVirtualScanCode: scan_code,
+            uChar: KEY_EVENT_RECORD_0 {
+                // keyup 通常不携带 UnicodeChar；某些输入库会依赖这一点区分按下/抬起。
+                UnicodeChar: 0,
+            },
             dwControlKeyState: 0,
         };
         records.push(INPUT_RECORD {
@@ -76,7 +206,23 @@ fn inject_text_to_console(text: &str) -> Result<(), String> {
             EventType: KEY_EVENT as u16,
             Event: INPUT_RECORD_0 { KeyEvent: key_up },
         });
+    };
+
+    let trimmed = text.trim_end_matches(['\r', '\n']);
+    for ch in trimmed.chars() {
+        match ch {
+            '\r' | '\n' => {
+                // Enter：优先用 VK_RETURN（更像真实按键）。
+                // 备注：之前用 VK_PACKET '\r' 在部分 TUI 下会“输入出现但不提交”，因此固定用 VK_RETURN。
+                let _ = line_input; // 仅用于调试/未来扩展
+                push_key(VK_RETURN, SCAN_RETURN, '\r' as u16);
+            }
+            _ => push_key(VK_PACKET, 0, ch as u16),
+        }
     }
+
+    // 最后追加一次 Enter 作为提交键
+    push_key(VK_RETURN, SCAN_RETURN, '\r' as u16);
 
     let mut written: u32 = 0;
     let ok = unsafe {
@@ -134,7 +280,7 @@ fn inject_ctrl_c_to_console() -> Result<(), String> {
         wRepeatCount: 1,
         wVirtualKeyCode: 0x43,
         wVirtualScanCode: 0x2E,
-        uChar: KEY_EVENT_RECORD_0 { UnicodeChar: 0x03 },
+        uChar: KEY_EVENT_RECORD_0 { UnicodeChar: 0 },
         dwControlKeyState: LEFT_CTRL_PRESSED,
     };
 
@@ -175,13 +321,27 @@ fn spawn_codex_direct(args: &Args) -> Result<(i32, std::process::Child), String>
     let codex_bin = &args.codex_bin;
     let codex_bin_lower = codex_bin.to_ascii_lowercase();
 
+    let notifier = resolve_notifier_path();
+    let notify_cfg = format!(
+        "notify={}",
+        toml_array_single(&[
+            notifier,
+            "--endpoint".to_string(),
+            notify_endpoint(args),
+            "--session-id".to_string(),
+            args.session_id.clone(),
+            "--project-root".to_string(),
+            args.project_root.clone(),
+        ])
+    );
+
     let mut cmd = if codex_bin_lower.ends_with(".cmd") || codex_bin_lower.ends_with(".bat") {
         let mut c = std::process::Command::new("cmd.exe");
-        c.args(["/c", codex_bin, "--yolo"]);
+        c.args(["/c", codex_bin, "--yolo", "--config", &notify_cfg]);
         c
     } else {
         let mut c = std::process::Command::new(codex_bin);
-        c.args(["--yolo"]);
+        c.args(["--yolo", "--config", &notify_cfg]);
         c
     };
     cmd.current_dir(&args.project_root);
@@ -202,6 +362,9 @@ fn main_windows_direct(args: Args) {
     // Windows 直连 console：避免在已有 console 下再创建 ConPTY，导致子进程 0xC0000142 秒退。
     unsafe {
         SetConsoleCtrlHandler(Some(ignore_ctrl_handler), 1);
+    }
+    if let Err(e) = ensure_console_stdio() {
+        eprintln!("[relay] ensure_console_stdio failed: {}", e);
     }
 
     let (tx, rx) = mpsc::channel::<RelayEvent>();
@@ -268,8 +431,6 @@ fn main_windows_direct(args: Args) {
 
     let mut codex_pid: i32 = -1;
     let mut generation: u64 = 1;
-    let mut last_stop_requested_by: Option<String> = None;
-    let mut last_stop_requested_at_ms: u64 = 0;
 
     // 启动 codex（直接挂载到当前 console）
     let mut current_child: Option<std::process::Child> = None;
@@ -337,10 +498,20 @@ fn main_windows_direct(args: Args) {
                 break;
             }
             RelayEvent::Control(cmd) => match cmd {
-                ControlCommand::SendInput { text, .. } => {
+                ControlCommand::SendInput {
+                    text,
+                    request_id,
+                    requested_by,
+                } => {
                     if text.trim().is_empty() {
                         continue;
                     }
+                    eprintln!(
+                        "[relay] control: send_input (by={:?}, request_id={:?}, len={})",
+                        requested_by,
+                        request_id,
+                        text.len()
+                    );
                     if codex_pid <= 0 {
                         generation = generation.wrapping_add(1);
                         let gen = generation;
@@ -389,12 +560,43 @@ fn main_windows_direct(args: Args) {
                             }
                         }
                     }
-                    let _ = inject_text_to_console(&text);
+                    match inject_text_to_console(&text) {
+                        Ok(()) => {
+                            eprintln!("[relay] inject ok");
+                        }
+                        Err(e) => {
+                            eprintln!("[relay] inject failed: {}", e);
+                            publish_event(
+                                &args.viewer_host,
+                                args.viewer_port,
+                                &serde_json::json!({
+                                    "type": "codex.control.error",
+                                    "ts": now_iso(),
+                                    "session_id": args.session_id.clone(),
+                                    "project_root": args.project_root.clone(),
+                                    "action": "send_input",
+                                    "requested_by": requested_by,
+                                    "request_id": request_id,
+                                    "error": e,
+                                }),
+                            );
+                        }
+                    }
                 }
-                ControlCommand::Retry { text, .. } => {
+                ControlCommand::Retry {
+                    text,
+                    request_id,
+                    requested_by,
+                } => {
                     if text.trim().is_empty() {
                         continue;
                     }
+                    eprintln!(
+                        "[relay] control: retry (by={:?}, request_id={:?}, len={})",
+                        requested_by,
+                        request_id,
+                        text.len()
+                    );
                     if codex_pid <= 0 {
                         generation = generation.wrapping_add(1);
                         let gen = generation;
@@ -443,11 +645,31 @@ fn main_windows_direct(args: Args) {
                             }
                         }
                     }
-                    let _ = inject_text_to_console(&text);
+                    match inject_text_to_console(&text) {
+                        Ok(()) => {
+                            eprintln!("[relay] inject ok");
+                        }
+                        Err(e) => {
+                            eprintln!("[relay] inject failed: {}", e);
+                            publish_event(
+                                &args.viewer_host,
+                                args.viewer_port,
+                                &serde_json::json!({
+                                    "type": "codex.control.error",
+                                    "ts": now_iso(),
+                                    "session_id": args.session_id.clone(),
+                                    "project_root": args.project_root.clone(),
+                                    "action": "retry",
+                                    "requested_by": requested_by,
+                                    "request_id": request_id,
+                                    "error": e,
+                                }),
+                            );
+                        }
+                    }
                 }
                 ControlCommand::Pause { requested_by } => {
-                    last_stop_requested_by = requested_by;
-                    last_stop_requested_at_ms = now_ms();
+                    eprintln!("[relay] control: pause (by={:?})", requested_by);
                     if codex_pid > 0 {
                         // 优先使用 console 输入注入方式，比 GenerateConsoleCtrlEvent 更可靠
                         if let Err(e) = inject_ctrl_c_to_console() {
@@ -457,15 +679,12 @@ fn main_windows_direct(args: Args) {
                     }
                 }
                 ControlCommand::Kill { requested_by } => {
-                    last_stop_requested_by = requested_by;
-                    last_stop_requested_at_ms = now_ms();
-
+                    eprintln!("[relay] control: kill (by={:?}, pid={})", requested_by, codex_pid);
                     kill_pid(codex_pid);
 
-                    let reason = match &last_stop_requested_by {
-                        Some(v) if v == "claude_code" => "claude_requested",
-                        Some(_) => "tool_requested",
-                        None => "tool_requested",
+                    let reason = match requested_by.as_deref() {
+                        Some("claude_code") => "claude_requested",
+                        _ => "tool_requested",
                     };
                     publish_event(
                         &args.viewer_host,
@@ -488,22 +707,7 @@ fn main_windows_direct(args: Args) {
                 if gen != generation {
                     continue;
                 }
-                let now = now_ms();
-                let exit_reason = if let Some(by) = &last_stop_requested_by {
-                    if now.saturating_sub(last_stop_requested_at_ms) <= 5000 {
-                        if by == "claude_code" {
-                            "claude_requested"
-                        } else {
-                            "tool_requested"
-                        }
-                    } else {
-                        "crash_or_unknown"
-                    }
-                } else if exit_code == 0 {
-                    "user_requested"
-                } else {
-                    "crash_or_unknown"
-                };
+                let exit_reason = if exit_code == 0 { "user_requested" } else { "crash_or_unknown" };
 
                 publish_event(
                     &args.viewer_host,
@@ -519,7 +723,6 @@ fn main_windows_direct(args: Args) {
                 );
 
                 codex_pid = -1;
-                last_stop_requested_by = None;
             }
             // Windows direct 模式下不使用的事件
             _ => {}
@@ -656,6 +859,7 @@ fn terminal_pty_size() -> PtySize {
     }
 }
 
+#[cfg(not(windows))]
 fn toml_escape(s: &str) -> String {
     let mut out = String::with_capacity(s.len() + 2);
     out.push('"');
@@ -673,12 +877,53 @@ fn toml_escape(s: &str) -> String {
     out
 }
 
+#[cfg(not(windows))]
 fn toml_array(values: &[String]) -> String {
     let joined = values.iter().map(|v| toml_escape(v)).collect::<Vec<_>>().join(",");
     format!("[{}]", joined)
 }
 
+#[cfg(windows)]
+fn toml_escape_single(s: &str) -> String {
+    // TOML 单引号字符串不会处理转义；仅需将 `'` 表达为 `''`。
+    let mut out = String::with_capacity(s.len() + 2);
+    out.push('\'');
+    for ch in s.chars() {
+        if ch == '\'' {
+            out.push_str("''");
+        } else {
+            out.push(ch);
+        }
+    }
+    out.push('\'');
+    out
+}
+
+#[cfg(windows)]
+fn toml_array_single(values: &[String]) -> String {
+    let joined = values
+        .iter()
+        .map(|v| toml_escape_single(v))
+        .collect::<Vec<_>>()
+        .join(",");
+    format!("[{}]", joined)
+}
+
 fn resolve_notifier_path() -> String {
+    fn normalize_path(p: &std::path::Path) -> String {
+        let raw = p.to_string_lossy().to_string();
+        if cfg!(windows) {
+            // canonicalize() 在 Windows 上常返回 \\?\ 前缀；对 Node/child_process.spawn 更兼容的写法是去掉该前缀。
+            if let Some(rest) = raw.strip_prefix(r"\\?\") {
+                if let Some(unc) = rest.strip_prefix("UNC\\") {
+                    return format!(r"\\{}", unc);
+                }
+                return rest.to_string();
+            }
+        }
+        raw
+    }
+
     let exe = std::env::current_exe().ok();
     if let Some(exe) = exe {
         if let Some(dir) = exe.parent() {
@@ -688,7 +933,7 @@ fn resolve_notifier_path() -> String {
                 dir.join("cc-spec-codex-notify")
             };
             if direct.exists() {
-                return direct.to_string_lossy().to_string();
+                return normalize_path(&direct);
             }
             // dev 模式下 externalBin 常带 target triple 后缀：cc-spec-codex-notify-<triple>.exe
             if let Ok(entries) = std::fs::read_dir(dir) {
@@ -697,10 +942,10 @@ fn resolve_notifier_path() -> String {
                     let name = path.file_name().and_then(|v| v.to_str()).unwrap_or("");
                     if cfg!(windows) {
                         if name.starts_with("cc-spec-codex-notify-") && name.ends_with(".exe") {
-                            return path.to_string_lossy().to_string();
+                            return normalize_path(&path);
                         }
                     } else if name.starts_with("cc-spec-codex-notify-") {
-                        return path.to_string_lossy().to_string();
+                        return normalize_path(&path);
                     }
                 }
             }
@@ -799,13 +1044,26 @@ fn spawn_codex(
     // 直接启动 codex（对于 .cmd/.bat 文件，通过 cmd.exe /c 运行）
     let codex_bin = &args.codex_bin;
     let codex_bin_lower = codex_bin.to_ascii_lowercase();
+    let notifier = resolve_notifier_path();
+    let notify_cfg = format!(
+        "notify={}",
+        toml_array(&[
+            notifier,
+            "--endpoint".to_string(),
+            notify_endpoint(args),
+            "--session-id".to_string(),
+            args.session_id.clone(),
+            "--project-root".to_string(),
+            args.project_root.clone(),
+        ])
+    );
     let mut cmd = if codex_bin_lower.ends_with(".cmd") || codex_bin_lower.ends_with(".bat") {
         let mut c = CommandBuilder::new("cmd.exe");
-        c.args(["/c", codex_bin, "--yolo"]);
+        c.args(["/c", codex_bin, "--yolo", "--config", &notify_cfg]);
         c
     } else {
         let mut c = CommandBuilder::new(codex_bin);
-        c.args(["--yolo"]);
+        c.args(["--yolo", "--config", &notify_cfg]);
         c
     };
     cmd.cwd(&args.project_root);
@@ -849,7 +1107,7 @@ fn kill_pid(pid: i32) {
     }
     if cfg!(windows) {
         let _ = std::process::Command::new("taskkill")
-            .args(["/PID", &pid.to_string(), "/F"])
+            .args(["/PID", &pid.to_string(), "/T", "/F"])
             .output();
     } else {
         let _ = std::process::Command::new("kill")
@@ -949,8 +1207,6 @@ fn main_pty(args: Args) {
     let mut writer: Option<Box<dyn Write + Send>> = None;
     let mut codex_pid: i32 = -1;
     let mut generation: u64 = 1;
-    let mut last_stop_requested_by: Option<String> = None;
-    let mut last_stop_requested_at_ms: u64 = 0;
     let mut last_user_interrupt_at_ms: u64 = 0;
 
     // 启动 codex
@@ -1203,17 +1459,13 @@ fn main_pty(args: Args) {
                     }
                 }
                 ControlCommand::Pause { requested_by } => {
-                    last_stop_requested_by = requested_by;
-                    last_stop_requested_at_ms = now_ms();
+                    let _ = requested_by;
                     if let Some(w) = writer.as_mut() {
                         let _ = w.write_all(&[0x03]);
                         let _ = w.flush();
                     }
                 }
                 ControlCommand::Kill { requested_by } => {
-                    last_stop_requested_by = requested_by;
-                    last_stop_requested_at_ms = now_ms();
-
                     // 1. 杀掉 codex 进程
                     kill_pid(codex_pid);
 
@@ -1221,10 +1473,9 @@ fn main_pty(args: Args) {
                     drop(writer.take());
 
                     // 3. 发送退出事件
-                    let reason = match &last_stop_requested_by {
-                        Some(v) if v == "claude_code" => "claude_requested",
-                        Some(_) => "tool_requested",
-                        None => "tool_requested",
+                    let reason = match requested_by.as_deref() {
+                        Some("claude_code") => "claude_requested",
+                        _ => "tool_requested",
                     };
                     publish_event(
                         &args.viewer_host,
@@ -1241,7 +1492,6 @@ fn main_pty(args: Args) {
 
                     // 4. 清理状态并退出 relay
                     codex_pid = -1;
-                    last_stop_requested_by = None;
                     break;
                 }
                 ControlCommand::Retry {
@@ -1250,8 +1500,7 @@ fn main_pty(args: Args) {
                     ..
                 } => {
                     // 重试 = 杀掉旧进程（如有）+ 拉起新 codex + 注入 prompt
-                    last_stop_requested_by = requested_by;
-                    last_stop_requested_at_ms = now_ms();
+                    let _ = requested_by;
                     generation = generation.wrapping_add(1);
                     let gen = generation;
                     kill_pid(codex_pid);
@@ -1364,17 +1613,7 @@ fn main_pty(args: Args) {
                     continue;
                 }
                 let now = now_ms();
-                let exit_reason = if let Some(by) = &last_stop_requested_by {
-                    if now.saturating_sub(last_stop_requested_at_ms) <= 5000 {
-                        if by == "claude_code" {
-                            "claude_requested"
-                        } else {
-                            "tool_requested"
-                        }
-                    } else {
-                        "crash_or_unknown"
-                    }
-                } else if now.saturating_sub(last_user_interrupt_at_ms) <= 2000 {
+                let exit_reason = if now.saturating_sub(last_user_interrupt_at_ms) <= 2000 {
                     "user_requested"
                 } else if exit_code == 0 {
                     "user_requested"
@@ -1398,7 +1637,6 @@ fn main_pty(args: Args) {
                 // codex 已退出，等待 tool 的 restart/retry；stdin 继续读但会被丢弃
                 writer = None;
                 codex_pid = -1;
-                last_stop_requested_by = None;
             }
         }
     }

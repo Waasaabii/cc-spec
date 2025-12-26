@@ -38,6 +38,10 @@ export function ProjectCodexPanel({
   const [prompt, setPrompt] = useState("");
   const [sending, setSending] = useState(false);
 
+  const selectedSession = selectedSessionId ? sessions[selectedSessionId] : undefined;
+  const selectedState = selectedSession?.state ?? "-";
+  const selectedRunning = selectedState === "running";
+
   const load = useCallback(async () => {
     setError(null);
     try {
@@ -114,6 +118,34 @@ export function ProjectCodexPanel({
     }
   }, [projectPath, selectedSessionId]);
 
+  const deleteSessionById = useCallback(async (sid: string) => {
+    if (!sid) return;
+    const rec = sessions[sid];
+    const running = rec?.state === "running";
+
+    const ok = window.confirm(
+      running
+        ? t.confirmStopAndDelete
+        : t.confirmDeleteSession,
+    );
+    if (!ok) return;
+
+    setLoading(true);
+    setError(null);
+    try {
+      if (running) {
+        await invoke("codex_terminal_kill", { projectPath, sessionId: sid, requestedBy: "tool" });
+      }
+      await invoke("codex_session_delete", { projectPath, sessionId: sid });
+      if (sid === selectedSessionId) setSelectedSessionId("");
+      await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setLoading(false);
+    }
+  }, [projectPath, sessions, selectedSessionId, load]);
+
   const sendPrompt = useCallback(async () => {
     if (!selectedSessionId || !prompt.trim()) return;
     setSending(true);
@@ -164,22 +196,6 @@ export function ProjectCodexPanel({
             <Icons.Terminal />
             {t.projectCodexNewSession || "新建会话"}
           </button>
-          <button
-            onClick={() => void pauseSession()}
-            disabled={loading || !selectedSessionId}
-            className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold transition-colors ${isDarkMode ? "bg-slate-800 text-slate-300 hover:bg-slate-700 disabled:opacity-60" : "bg-slate-100 text-slate-600 hover:bg-slate-200 disabled:opacity-60"}`}
-          >
-            <Icons.Pause />
-            {t.pause || "暂停"}
-          </button>
-          <button
-            onClick={() => void killSession()}
-            disabled={loading || !selectedSessionId}
-            className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold transition-colors ${isDarkMode ? "bg-rose-600 text-white hover:bg-rose-500 disabled:opacity-60" : "bg-rose-500 text-white hover:bg-rose-600 disabled:opacity-60"}`}
-          >
-            <Icons.Trash />
-            {t.stop || "停止"}
-          </button>
         </div>
       </div>
 
@@ -196,22 +212,41 @@ export function ProjectCodexPanel({
                 const active = sid === selectedSessionId;
                 const state = rec.state ?? "-";
                 const updated = rec.updated_at ?? rec.created_at ?? "-";
+                const running = state === "running";
                 return (
-                  <button
-                    key={sid}
-                    onClick={() => setSelectedSessionId(sid)}
-                    className={`w-full text-left rounded-xl border px-3 py-2 transition-colors ${active
-                      ? (isDarkMode ? "border-purple-500/60 bg-purple-500/10" : "border-orange-200 bg-orange-50")
-                      : (isDarkMode ? "border-slate-800 bg-slate-900/40 hover:bg-slate-800/60" : "border-slate-100 bg-white hover:bg-slate-50")
-                      }`}
-                  >
-                    <div className={`text-xs font-mono truncate ${isDarkMode ? "text-slate-200" : "text-slate-700"}`}>{sid}</div>
-                    <div className={`mt-1 text-[11px] flex flex-wrap gap-2 ${isDarkMode ? "text-slate-400" : "text-slate-500"}`}>
-                      <span className="font-mono">{state}</span>
-                      {typeof rec.pid === "number" ? <span className="font-mono">pid={rec.pid}</span> : null}
-                    </div>
-                    <div className={`mt-1 text-[10px] font-mono truncate ${isDarkMode ? "text-slate-500" : "text-slate-400"}`}>{updated}</div>
-                  </button>
+                  <div key={sid} className="relative group">
+                    <button
+                      onClick={() => setSelectedSessionId(sid)}
+                      className={`w-full text-left rounded-xl border px-3 py-2 transition-colors ${active
+                        ? (isDarkMode ? "border-purple-500/60 bg-purple-500/10" : "border-orange-200 bg-orange-50")
+                        : (isDarkMode ? "border-slate-800 bg-slate-900/40 hover:bg-slate-800/60" : "border-slate-100 bg-white hover:bg-slate-50")
+                        }`}
+                    >
+                      <div className={`text-xs font-mono truncate ${isDarkMode ? "text-slate-200" : "text-slate-700"}`}>{sid}</div>
+                      <div className={`mt-1 text-[11px] flex flex-wrap items-center gap-2 ${isDarkMode ? "text-slate-400" : "text-slate-500"}`}>
+                        <span className={`inline-flex items-center gap-1 font-mono ${running ? (isDarkMode ? "text-emerald-300" : "text-emerald-700") : ""}`}>
+                          <span className={`inline-block h-1.5 w-1.5 rounded-full ${running ? "bg-emerald-500" : (isDarkMode ? "bg-slate-600" : "bg-slate-300")}`} />
+                          {state}
+                        </span>
+                        {typeof rec.pid === "number" ? <span className="font-mono">pid={rec.pid}</span> : null}
+                      </div>
+                      <div className={`mt-1 text-[10px] font-mono truncate ${isDarkMode ? "text-slate-500" : "text-slate-400"}`}>{updated}</div>
+                    </button>
+
+                    <button
+                      onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        void deleteSessionById(sid);
+                      }}
+                      disabled={loading}
+                      className={`absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity inline-flex items-center justify-center rounded-lg border p-1.5 disabled:pointer-events-none ${isDarkMode ? "border-slate-700 bg-slate-950/70 text-slate-300 hover:bg-slate-900" : "border-slate-200 bg-white/90 text-slate-600 hover:bg-slate-50"}`}
+                      title={t.deleteSession}
+                      aria-label={t.deleteSession}
+                    >
+                      <Icons.Trash />
+                    </button>
+                  </div>
                 );
               })
             )}
@@ -224,20 +259,53 @@ export function ProjectCodexPanel({
               <div className={`text-[10px] uppercase tracking-[0.2em] font-semibold ${isDarkMode ? "text-slate-500" : "text-slate-400"}`}>
                 {t.projectCodexSelected || "当前会话"}
               </div>
-              <div className={`mt-1 text-xs font-mono break-all ${isDarkMode ? "text-slate-200" : "text-slate-700"}`}>
-                {selectedSessionId || "-"}
+              <div className="mt-1 flex flex-wrap items-center gap-2">
+                <div className={`text-xs font-mono break-all ${isDarkMode ? "text-slate-200" : "text-slate-700"}`}>
+                  {selectedSessionId || "-"}
+                </div>
+                <div
+                  className={`inline-flex items-center gap-1 rounded-lg border px-2 py-0.5 text-[10px] font-mono ${isDarkMode ? "border-slate-800 text-slate-400 bg-slate-950/40" : "border-slate-200 text-slate-500 bg-slate-50"}`}
+                  title={t.sessionStatus}
+                >
+                  <span className={`inline-block h-1.5 w-1.5 rounded-full ${selectedRunning ? "bg-emerald-500" : (isDarkMode ? "bg-slate-600" : "bg-slate-300")}`} />
+                  {selectedSessionId ? selectedState : "-"}
+                </div>
               </div>
             </div>
-            {selectedSessionId ? (
-              <button
-                onClick={() => void copySessionId(selectedSessionId)}
-                className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold transition-colors ${isDarkMode ? "bg-slate-800 text-slate-300 hover:bg-slate-700" : "bg-slate-100 text-slate-600 hover:bg-slate-200"}`}
-                title={t.copy || "复制"}
-              >
-                <Icons.Copy />
-                {t.copy || "复制"}
-              </button>
-            ) : null}
+            <div className="flex flex-wrap items-center justify-end gap-2">
+              {selectedSessionId ? (
+                <button
+                  onClick={() => void copySessionId(selectedSessionId)}
+                  className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold transition-colors ${isDarkMode ? "bg-slate-800 text-slate-300 hover:bg-slate-700" : "bg-slate-100 text-slate-600 hover:bg-slate-200"}`}
+                  title={t.copy || "复制"}
+                >
+                  <Icons.Copy />
+                  {t.copy || "复制"}
+                </button>
+              ) : null}
+
+              {selectedSessionId && selectedRunning ? (
+                <button
+                  onClick={() => void pauseSession()}
+                  disabled={loading}
+                  className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold transition-colors ${isDarkMode ? "bg-slate-800 text-slate-300 hover:bg-slate-700 disabled:opacity-60" : "bg-slate-100 text-slate-600 hover:bg-slate-200 disabled:opacity-60"}`}
+                >
+                  <Icons.Pause />
+                  {t.pause || "暂停"}
+                </button>
+              ) : null}
+
+              {selectedSessionId && selectedRunning ? (
+                <button
+                  onClick={() => void killSession()}
+                  disabled={loading}
+                  className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold transition-colors ${isDarkMode ? "bg-rose-600 text-white hover:bg-rose-500 disabled:opacity-60" : "bg-rose-500 text-white hover:bg-rose-600 disabled:opacity-60"}`}
+                >
+                  <Icons.Stop />
+                  {t.stop || "停止"}
+                </button>
+              ) : null}
+            </div>
           </div>
 
           <div className="mt-4">
@@ -247,6 +315,14 @@ export function ProjectCodexPanel({
             <textarea
               value={prompt}
               onChange={(e) => setPrompt(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key !== "Enter") return;
+                if ((e as unknown as { isComposing?: boolean }).isComposing) return;
+                if (e.shiftKey) return;
+                if (sending || !selectedSessionId || !prompt.trim()) return;
+                e.preventDefault();
+                void sendPrompt();
+              }}
               placeholder={t.projectCodexPromptPlaceholder || "例如：总结这个项目的结构…"}
               rows={4}
               className={`mt-2 w-full rounded-2xl border px-3 py-2 text-sm font-mono outline-none resize-y ${isDarkMode ? "bg-slate-950/60 border-slate-800 text-slate-200 placeholder:text-slate-600" : "bg-white border-slate-200 text-slate-800 placeholder:text-slate-400"}`}

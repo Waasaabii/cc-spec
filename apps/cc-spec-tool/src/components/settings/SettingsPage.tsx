@@ -8,12 +8,17 @@ import type {
   TranslationDownloadProgress,
   TranslationModelStatus,
 } from "../../types/translation";
+import { translations } from "../../types/viewer";
 import { Icons } from "../icons/Icons";
+
+// 翻译对象类型
+type TranslationMap = typeof translations.zh;
 
 interface SettingsPageProps {
   onClose: () => void;
   isDarkMode: boolean;
   onOpenModelManager?: () => void;
+  t: TranslationMap;
 }
 
 const defaultSettings: ViewerSettings = {
@@ -27,7 +32,7 @@ const defaultSettings: ViewerSettings = {
   ui: { theme: "system", language: "zh-CN" },
 };
 
-export function SettingsPage({ onClose, isDarkMode, onOpenModelManager }: SettingsPageProps) {
+export function SettingsPage({ onClose, isDarkMode, onOpenModelManager, t }: SettingsPageProps) {
   const [settings, setSettings] = useState<ViewerSettings>(defaultSettings);
   const [concurrency, setConcurrency] = useState<ConcurrencyStatus | null>(null);
   const [saving, setSaving] = useState(false);
@@ -107,7 +112,7 @@ export function SettingsPage({ onClose, isDarkMode, onOpenModelManager }: Settin
     setMessage(null);
     try {
       await invoke("set_settings", { settings });
-      setMessage("Settings saved!");
+      setMessage(t.settingsSaved);
       setTimeout(() => setMessage(null), 2000);
     } catch (err) {
       setMessage(`Failed: ${err}`);
@@ -188,22 +193,22 @@ export function SettingsPage({ onClose, isDarkMode, onOpenModelManager }: Settin
     <div className="flex flex-col gap-8 pb-10">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className={`text-2xl font-bold ${textPrimary}`}>设置</h1>
-          <p className={`text-sm mt-1 ${textSecondary}`}>配置应用参数、并发限制及模型选项</p>
+          <h1 className={`text-2xl font-bold ${textPrimary}`}>{t.settingsTitle}</h1>
+          <p className={`text-sm mt-1 ${textSecondary}`}>{t.settingsDesc}</p>
         </div>
         <div className="flex gap-3">
           <button
             onClick={onClose}
             className={`px-4 py-2 rounded-xl text-sm font-semibold transition-colors border ${isDarkMode ? "bg-transparent border-slate-600 text-slate-300 hover:bg-slate-800" : "bg-white border-slate-200 text-slate-600 hover:bg-slate-50"}`}
           >
-            返回
+            {t.goBack}
           </button>
           <button
             onClick={handleSave}
             disabled={saving}
             className={`px-4 py-2 rounded-xl text-sm font-semibold text-white shadow-md transition-all active:scale-95 ${saving ? "bg-slate-500 cursor-wait" : isDarkMode ? "bg-purple-600 hover:bg-purple-500" : "bg-blue-600 hover:bg-blue-500"}`}
           >
-            {saving ? "保存中..." : "保存设置"}
+            {saving ? t.savingSettings : t.saveSettings}
           </button>
         </div>
       </div>
@@ -222,20 +227,20 @@ export function SettingsPage({ onClose, isDarkMode, onOpenModelManager }: Settin
           {/* Concurrency Card */}
           {concurrency && (
             <div className={`p-6 rounded-2xl border ${cardClass}`}>
-              <h3 className={`text-lg font-semibold mb-4 ${textPrimary}`}>并发状态</h3>
+              <h3 className={`text-lg font-semibold mb-4 ${textPrimary}`}>{t.concurrencyStatus}</h3>
               <div className="grid grid-cols-3 gap-4">
                 <div className={`p-3 rounded-xl border ${isDarkMode ? "bg-slate-900/50 border-slate-700" : "bg-slate-50 border-slate-100"}`}>
                   <div className="text-xs font-medium text-slate-500 mb-1">CC (Claude)</div>
                   <div className={`text-xl font-bold ${textPrimary}`}>{concurrency.cc_running}/{concurrency.cc_max}</div>
-                  {concurrency.cc_queued > 0 && <div className="text-xs text-amber-500 font-medium">+{concurrency.cc_queued} 排队</div>}
+                  {concurrency.cc_queued > 0 && <div className="text-xs text-amber-500 font-medium">+{concurrency.cc_queued} {t.queued}</div>}
                 </div>
                 <div className={`p-3 rounded-xl border ${isDarkMode ? "bg-slate-900/50 border-slate-700" : "bg-slate-50 border-slate-100"}`}>
                   <div className="text-xs font-medium text-slate-500 mb-1">CX (Codex)</div>
                   <div className={`text-xl font-bold ${textPrimary}`}>{concurrency.cx_running}/{concurrency.cx_max}</div>
-                  {concurrency.cx_queued > 0 && <div className="text-xs text-amber-500 font-medium">+{concurrency.cx_queued} 排队</div>}
+                  {concurrency.cx_queued > 0 && <div className="text-xs text-amber-500 font-medium">+{concurrency.cx_queued} {t.queued}</div>}
                 </div>
                 <div className={`p-3 rounded-xl border ${isDarkMode ? "bg-slate-900/50 border-slate-700" : "bg-slate-50 border-slate-100"}`}>
-                  <div className="text-xs font-medium text-slate-500 mb-1">总计</div>
+                  <div className="text-xs font-medium text-slate-500 mb-1">{t.total}</div>
                   <div className={`text-xl font-bold ${concurrency.total_running >= concurrency.total_max ? "text-red-500" : textPrimary}`}>
                     {concurrency.total_running}/{concurrency.total_max}
                   </div>
@@ -243,7 +248,7 @@ export function SettingsPage({ onClose, isDarkMode, onOpenModelManager }: Settin
               </div>
               {concurrency.total_running >= concurrency.total_max && (
                 <div className="mt-4 text-xs font-medium text-red-500 flex items-center gap-2">
-                  <Icons.Warn /> 达到并发上限，新任务将排队等待
+                  <Icons.Warn /> {t.concurrencyLimitReached}
                 </div>
               )}
             </div>
@@ -251,18 +256,18 @@ export function SettingsPage({ onClose, isDarkMode, onOpenModelManager }: Settin
 
           {/* Claude Settings */}
           <div className={`p-6 rounded-2xl border ${cardClass}`}>
-            <h3 className={`text-lg font-semibold mb-4 ${textPrimary}`}>Claude 配置</h3>
+            <h3 className={`text-lg font-semibold mb-4 ${textPrimary}`}>{t.claudeConfig}</h3>
             <div className="flex flex-col gap-4">
               <div className="flex flex-col gap-2">
-                <label className={`text-sm font-medium ${textPrimary}`}>执行路径</label>
+                <label className={`text-sm font-medium ${textPrimary}`}>{t.execPath}</label>
                 <div className="flex gap-4">
                   <label className={`flex items-center gap-2 text-sm cursor-pointer ${textSecondary}`}>
                     <input type="radio" className={checkboxClass} checked={settings.claude.path === "auto"} onChange={() => updateClaude("path", "auto")} />
-                    自动检测
+                    {t.autoDetect}
                   </label>
                   <label className={`flex items-center gap-2 text-sm cursor-pointer ${textSecondary}`}>
                     <input type="radio" className={checkboxClass} checked={settings.claude.path === "custom"} onChange={() => updateClaude("path", "custom")} />
-                    自定义路径
+                    {t.customPath}
                   </label>
                 </div>
                 {settings.claude.path === "custom" && (
@@ -270,13 +275,13 @@ export function SettingsPage({ onClose, isDarkMode, onOpenModelManager }: Settin
                     type="text"
                     value={settings.claude.custom_path || ""}
                     onChange={(e) => updateClaude("custom_path", e.target.value)}
-                    placeholder="输入 claude 可执行文件路径"
+                    placeholder={t.enterClaudePath}
                     className={inputClass}
                   />
                 )}
               </div>
               <div>
-                <label className={`block text-sm font-medium mb-2 ${textPrimary}`}>最大并发数</label>
+                <label className={`block text-sm font-medium mb-2 ${textPrimary}`}>{t.maxConcurrent}</label>
                 <div className="flex items-center gap-4">
                   <input
                     type="number"
@@ -286,7 +291,7 @@ export function SettingsPage({ onClose, isDarkMode, onOpenModelManager }: Settin
                     onChange={(e) => updateClaude("max_concurrent", parseInt(e.target.value) || 1)}
                     className={`${inputClass} w-24`}
                   />
-                  <span className="text-xs text-slate-500">建议值: 1-2</span>
+                  <span className="text-xs text-slate-500">{t.suggestedValue}</span>
                 </div>
               </div>
             </div>
@@ -294,29 +299,29 @@ export function SettingsPage({ onClose, isDarkMode, onOpenModelManager }: Settin
 
           {/* UI Settings */}
           <div className={`p-6 rounded-2xl border ${cardClass}`}>
-            <h3 className={`text-lg font-semibold mb-4 ${textPrimary}`}>界面显示</h3>
+            <h3 className={`text-lg font-semibold mb-4 ${textPrimary}`}>{t.uiDisplay}</h3>
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <label className={`block text-sm font-medium mb-2 ${textPrimary}`}>主题</label>
+                <label className={`block text-sm font-medium mb-2 ${textPrimary}`}>{t.theme}</label>
                 <select
                   value={settings.ui.theme}
                   onChange={(e) => updateUi("theme", e.target.value)}
                   className={inputClass}
                 >
-                  <option value="system">跟随系统</option>
-                  <option value="dark">深色模式</option>
-                  <option value="light">浅色模式</option>
+                  <option value="system">{t.followSystem}</option>
+                  <option value="dark">{t.darkTheme}</option>
+                  <option value="light">{t.lightTheme}</option>
                 </select>
               </div>
               <div>
-                <label className={`block text-sm font-medium mb-2 ${textPrimary}`}>语言</label>
+                <label className={`block text-sm font-medium mb-2 ${textPrimary}`}>{t.languageLabel}</label>
                 <select
                   value={settings.ui.language}
                   onChange={(e) => updateUi("language", e.target.value)}
                   className={inputClass}
                 >
-                  <option value="zh-CN">简体中文</option>
-                  <option value="en-US">English</option>
+                  <option value="zh-CN">{t.chineseSimplified}</option>
+                  <option value="en-US">{t.englishLang}</option>
                 </select>
               </div>
             </div>
@@ -327,10 +332,10 @@ export function SettingsPage({ onClose, isDarkMode, onOpenModelManager }: Settin
         <div className="flex flex-col gap-6">
           {/* Codex Settings */}
           <div className={`p-6 rounded-2xl border ${cardClass}`}>
-            <h3 className={`text-lg font-semibold mb-4 ${textPrimary}`}>Codex 配置</h3>
+            <h3 className={`text-lg font-semibold mb-4 ${textPrimary}`}>{t.codexConfig}</h3>
             <div>
               <div className="flex justify-between mb-2">
-                <label className={`text-sm font-medium ${textPrimary}`}>最大并发数</label>
+                <label className={`text-sm font-medium ${textPrimary}`}>{t.maxConcurrent}</label>
                 <span className={`text-sm font-bold ${isDarkMode ? "text-purple-400" : "text-blue-600"}`}>{settings.codex.max_concurrent}</span>
               </div>
               <input
@@ -350,15 +355,15 @@ export function SettingsPage({ onClose, isDarkMode, onOpenModelManager }: Settin
 
           {/* Index Settings */}
           <div className={`p-6 rounded-2xl border ${cardClass}`}>
-            <h3 className={`text-lg font-semibold mb-4 ${textPrimary}`}>索引设置</h3>
+            <h3 className={`text-lg font-semibold mb-4 ${textPrimary}`}>{t.indexSettings}</h3>
             <div className="flex flex-col gap-3">
               <label className={`flex items-center gap-3 p-3 rounded-lg border cursor-pointer transition-colors ${settings.index.enabled ? (isDarkMode ? "bg-purple-900/20 border-purple-500/50" : "bg-blue-50 border-blue-200") : borderClass}`}>
                 <input type="checkbox" className={checkboxClass} checked={settings.index.enabled} onChange={(e) => updateIndex("enabled", e.target.checked)} />
-                <span className={`text-sm font-medium ${textPrimary}`}>启用多级索引</span>
+                <span className={`text-sm font-medium ${textPrimary}`}>{t.enableMultiLevelIndex}</span>
               </label>
               <label className={`flex items-center gap-3 p-3 rounded-lg border cursor-pointer transition-colors ${settings.index.auto_update ? (isDarkMode ? "bg-purple-900/20 border-purple-500/50" : "bg-blue-50 border-blue-200") : borderClass}`}>
                 <input type="checkbox" className={checkboxClass} checked={settings.index.auto_update} onChange={(e) => updateIndex("auto_update", e.target.checked)} />
-                <span className={`text-sm font-medium ${textPrimary}`}>自动更新索引</span>
+                <span className={`text-sm font-medium ${textPrimary}`}>{t.autoUpdateIndex}</span>
               </label>
             </div>
           </div>
@@ -366,21 +371,21 @@ export function SettingsPage({ onClose, isDarkMode, onOpenModelManager }: Settin
           {/* Translation Settings - Entry Card */}
           <div className={`p-6 rounded-2xl border ${cardClass}`}>
             <div className="flex items-center justify-between mb-4">
-              <h3 className={`text-lg font-semibold ${textPrimary}`}>翻译模型</h3>
+              <h3 className={`text-lg font-semibold ${textPrimary}`}>{t.translationModel}</h3>
               <div className={`px-2 py-0.5 rounded text-xs font-semibold ${translationStatus?.downloaded ? "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300" : "bg-slate-100 text-slate-600 dark:bg-slate-700 dark:text-slate-400"}`}>
-                {translationStatus?.downloaded ? (translationStatus?.loaded ? "已加载" : "已下载") : "未下载"}
+                {translationStatus?.downloaded ? (translationStatus?.loaded ? t.loaded : t.downloaded) : t.notDownloaded}
               </div>
             </div>
 
             <div className="space-y-4">
               <div className={`text-xs space-y-1 ${textSecondary}`}>
-                <div className="flex justify-between"><span>当前模型:</span> <span className="font-mono">{translationStatus?.model_version || "无"}</span></div>
-                <div className="flex justify-between"><span>文件大小:</span> <span className="font-mono">{formatBytes(translationStatus?.model_size)}</span></div>
-                <div className="flex justify-between"><span>缓存条目:</span> <span className="font-mono">{translationCache?.cached_count ?? 0}</span></div>
+                <div className="flex justify-between"><span>{t.currentModelLabel}:</span> <span className="font-mono">{translationStatus?.model_version || t.noneModel}</span></div>
+                <div className="flex justify-between"><span>{t.fileSize}:</span> <span className="font-mono">{formatBytes(translationStatus?.model_size)}</span></div>
+                <div className="flex justify-between"><span>{t.cacheEntriesLabel}:</span> <span className="font-mono">{translationCache?.cached_count ?? 0}</span></div>
               </div>
 
               <p className={`text-xs ${textSecondary}`}>
-                支持从 HuggingFace 下载多种翻译模型，包括 T5、Opus MT 等。
+                {t.translationModelDesc}
               </p>
 
               {translationError && (
@@ -397,7 +402,7 @@ export function SettingsPage({ onClose, isDarkMode, onOpenModelManager }: Settin
               >
                 <div className="flex items-center justify-center gap-2">
                   <Icons.Download />
-                  <span>打开模型管理</span>
+                  <span>{t.openModelManager}</span>
                 </div>
               </button>
 
@@ -406,13 +411,13 @@ export function SettingsPage({ onClose, isDarkMode, onOpenModelManager }: Settin
                   onClick={loadTranslationStatus}
                   className={`flex-1 px-3 py-1.5 rounded-lg text-xs border ${borderClass} ${textSecondary} hover:bg-slate-50 dark:hover:bg-slate-700`}
                 >
-                  刷新状态
+                  {t.refreshStatus}
                 </button>
                 <button
                   onClick={handleClearTranslationCache}
                   className={`flex-1 px-3 py-1.5 rounded-lg text-xs border ${borderClass} ${textSecondary} hover:bg-slate-50 dark:hover:bg-slate-700`}
                 >
-                  清空缓存
+                  {t.clearCache}
                 </button>
               </div>
             </div>

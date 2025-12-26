@@ -81,20 +81,20 @@ fn save_sessions(path: &PathBuf, mut value: Value) -> Result<(), String> {
         obj.entry("sessions".to_string()).or_insert(Value::from(serde_json::Map::new()));
     }
     if let Some(parent) = path.parent() {
-        std::fs::create_dir_all(parent).map_err(|e| format!("创建 sessions 目录失败: {}", e))?;
+        std::fs::create_dir_all(parent).map_err(|e| format!("Failed to create sessions directory: {}", e))?;
     }
     let tmp = path.with_extension("json.tmp");
     std::fs::write(&tmp, serde_json::to_string_pretty(&value).unwrap())
-        .map_err(|e| format!("写入 sessions 临时文件失败: {}", e))?;
+        .map_err(|e| format!("Failed to write sessions temp file: {}", e))?;
     // Windows: rename 不能覆盖已存在文件（WinError 183），会导致 sessions.json 无法更新。
     match std::fs::rename(&tmp, path) {
         Ok(()) => {}
         Err(err) => {
             if path.exists() {
-                std::fs::copy(&tmp, path).map_err(|e| format!("写入 sessions 失败: {}", e))?;
+                std::fs::copy(&tmp, path).map_err(|e| format!("Failed to write sessions: {}", e))?;
                 let _ = std::fs::remove_file(&tmp);
             } else {
-                return Err(format!("写入 sessions 失败: {}", err));
+                return Err(format!("Failed to write sessions: {}", err));
             }
         }
     }
@@ -108,7 +108,7 @@ fn register_session(path: &PathBuf, session_id: &str, task_summary: &str, pid: O
     let sessions = data
         .get_mut("sessions")
         .and_then(|v| v.as_object_mut())
-        .ok_or("sessions 字段缺失")?;
+        .ok_or("Missing sessions field")?;
     let created_at = sessions
         .get(session_id)
         .and_then(|v| v.get("created_at"))
@@ -145,7 +145,7 @@ fn update_session(
     let sessions = data
         .get_mut("sessions")
         .and_then(|v| v.as_object_mut())
-        .ok_or("sessions 字段缺失")?;
+        .ok_or("Missing sessions field")?;
     let record = sessions
         .entry(session_id.to_string())
         .or_insert_with(|| serde_json::json!({ "session_id": session_id, "created_at": now }));
@@ -364,7 +364,7 @@ fn run_codex_once(request: CodexRunRequest) -> Result<CodexRunResult, String> {
                     "run_id": run_id.clone(),
                     "session_id": request.session_id,
                     "error_type": "not_found",
-                    "message": format!("未找到 Codex CLI: {}", err),
+                    "message": format!("Codex CLI not found: {}", err),
                 }));
                 viewer.publish_event(serde_json::json!({
                     "type": "codex.completed",
@@ -377,7 +377,7 @@ fn run_codex_once(request: CodexRunRequest) -> Result<CodexRunResult, String> {
                     "duration_s": started.elapsed().as_secs_f64(),
                 }));
             }
-            return Err(format!("启动 Codex 失败: {}", err));
+            return Err(format!("Failed to start Codex: {}", err));
         }
     };
 
@@ -395,7 +395,7 @@ fn run_codex_once(request: CodexRunRequest) -> Result<CodexRunResult, String> {
     let session_registered = Arc::new(AtomicBool::new(false));
     if let Some(ref sid) = request.session_id {
         register_session(&sessions_file, sid, &task_summary, pid)
-            .map_err(|e| format!("注册 session 失败: {}", e))?;
+            .map_err(|e| format!("Failed to register session: {}", e))?;
         session_registered.store(true, Ordering::Relaxed);
     }
 
@@ -582,7 +582,7 @@ fn run_codex_once(request: CodexRunRequest) -> Result<CodexRunResult, String> {
     loop {
         if let Some(s) = child
             .try_wait()
-            .map_err(|e| format!("等待 Codex 失败: {}", e))?
+            .map_err(|e| format!("Failed to wait for Codex: {}", e))?
         {
             status = Some(s);
             break;
@@ -593,17 +593,17 @@ fn run_codex_once(request: CodexRunRequest) -> Result<CodexRunResult, String> {
             let _ = soft_stop(pid as i64);
             std::thread::sleep(Duration::from_secs(3));
             if let Ok(Some(_)) = child.try_wait() {
-                status = Some(child.wait().map_err(|e| format!("等待 Codex 失败: {}", e))?);
+                status = Some(child.wait().map_err(|e| format!("Failed to wait for Codex: {}", e))?);
                 break;
             }
             let _ = child.kill();
-            status = Some(child.wait().map_err(|e| format!("等待 Codex 失败: {}", e))?);
+            status = Some(child.wait().map_err(|e| format!("Failed to wait for Codex: {}", e))?);
             break;
         }
         std::thread::sleep(Duration::from_millis(200));
     }
 
-    let status = status.ok_or("Codex 退出状态未知".to_string())?;
+    let status = status.ok_or("Codex exit status unknown".to_string())?;
 
     if let Some(handle) = stdout_handle {
         let _ = handle.join();
@@ -688,7 +688,7 @@ pub fn run_codex(request: CodexRunRequest) -> Result<CodexRunResult, String> {
         std::thread::sleep(Duration::from_secs(2));
     }
 
-    let mut final_result = last_result.ok_or("Codex 执行失败且无结果")?;
+    let mut final_result = last_result.ok_or("Codex execution failed with no result")?;
     final_result.attempts = attempts;
     let hint = format!(
         "[cc-spec] Codex failed after {} attempts. You can resume with session_id={}",
@@ -712,18 +712,18 @@ pub fn pause_session(
     run_id: Option<String>,
 ) -> Result<(), String> {
     if session_id.trim().is_empty() {
-        return Err("session_id 为空".to_string());
+        return Err("session_id is empty".to_string());
     }
     let project_path = PathBuf::from(&project_path);
     let sessions_file = sessions_path(&project_path);
     if !sessions_file.exists() {
-        return Err("会话状态文件不存在".to_string());
+        return Err("Session state file not found".to_string());
     }
     let sessions_json = load_sessions(&sessions_file);
     let pid = match find_session_pid(&sessions_json, &session_id) {
         Some(pid) if pid > 0 => pid,
-        Some(_) => return Err("pid 无效".to_string()),
-        None => return Err("pid 未记录".to_string()),
+        Some(_) => return Err("Invalid pid".to_string()),
+        None => return Err("Pid not recorded".to_string()),
     };
     let _ = soft_stop(pid);
     update_session(
@@ -758,12 +758,12 @@ pub fn soft_stop(pid: i64) -> Result<(), String> {
         let _ = Command::new("taskkill")
             .args(["/PID", &pid_str])
             .output()
-            .map_err(|e| format!("soft_stop 失败: {}", e))?;
+            .map_err(|e| format!("soft_stop failed: {}", e))?;
     } else {
         let _ = Command::new("kill")
             .args(["-INT", &pid_str])
             .status()
-            .map_err(|e| format!("soft_stop 失败: {}", e))?;
+            .map_err(|e| format!("soft_stop failed: {}", e))?;
     }
     Ok(())
 }
@@ -774,18 +774,18 @@ pub fn force_kill(pid: i64) -> Result<(), String> {
         let output = Command::new("taskkill")
             .args(["/PID", &pid_str, "/F"])
             .output()
-            .map_err(|e| format!("force_kill 失败: {}", e))?;
+            .map_err(|e| format!("force_kill failed: {}", e))?;
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr);
-            return Err(format!("force_kill 失败: {}", stderr.trim()));
+            return Err(format!("force_kill failed: {}", stderr.trim()));
         }
     } else {
         let status = Command::new("kill")
             .args(["-9", &pid_str])
             .status()
-            .map_err(|e| format!("force_kill 失败: {}", e))?;
+            .map_err(|e| format!("force_kill failed: {}", e))?;
         if !status.success() {
-            return Err("force_kill 失败".to_string());
+            return Err("force_kill failed".to_string());
         }
     }
     Ok(())

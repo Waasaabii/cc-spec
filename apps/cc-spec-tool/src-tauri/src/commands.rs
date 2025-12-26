@@ -67,17 +67,17 @@ fn read_command_version(command_dir: &PathBuf) -> Option<String> {
 fn write_command_version(command_dir: &PathBuf, version: &str) -> Result<(), String> {
     let version_file = command_dir.join("VERSION");
     fs::write(version_file, version)
-        .map_err(|e| format!("写入版本文件失败: {}", e))
+        .map_err(|e| format!("Failed to write version file: {}", e))
 }
 
 /// 复制目录 (递归)
 fn copy_dir_all(src: &PathBuf, dst: &PathBuf) -> Result<(), String> {
     fs::create_dir_all(dst)
-        .map_err(|e| format!("创建目录失败: {}", e))?;
+        .map_err(|e| format!("Failed to create directory: {}", e))?;
 
     for entry in fs::read_dir(src)
-        .map_err(|e| format!("读取目录失败: {}", e))? {
-        let entry = entry.map_err(|e| format!("读取条目失败: {}", e))?;
+        .map_err(|e| format!("Failed to read directory: {}", e))? {
+        let entry = entry.map_err(|e| format!("Failed to read entry: {}", e))?;
         let src_path = entry.path();
         let dst_path = dst.join(entry.file_name());
 
@@ -85,7 +85,7 @@ fn copy_dir_all(src: &PathBuf, dst: &PathBuf) -> Result<(), String> {
             copy_dir_all(&src_path, &dst_path)?;
         } else {
             fs::copy(&src_path, &dst_path)
-                .map_err(|e| format!("复制文件失败: {}", e))?;
+                .map_err(|e| format!("Failed to copy file: {}", e))?;
         }
     }
     Ok(())
@@ -134,7 +134,7 @@ pub async fn install_commands(
 
     // 获取资源目录
     let resource_dir = get_resource_commands_dir(&app_handle)
-        .ok_or_else(|| "无法获取资源目录".to_string())?;
+        .ok_or_else(|| "Failed to get resource directory".to_string())?;
 
     if !resource_dir.exists() {
         // 开发模式：尝试从源代码目录读取
@@ -143,7 +143,7 @@ pub async fn install_commands(
             .join("skills");
 
         if !dev_commands_dir.exists() {
-            return Err("Commands 资源目录不存在".to_string());
+            return Err("Commands resource directory not found".to_string());
         }
     }
 
@@ -158,7 +158,7 @@ pub async fn install_commands(
 
     // 创建目标目录
     fs::create_dir_all(&target_dir)
-        .map_err(|e| format!("创建 commands 目录失败: {}", e))?;
+        .map_err(|e| format!("Failed to create commands directory: {}", e))?;
 
     let mut installed_count = 0;
     let mut skipped_count = 0;
@@ -171,7 +171,7 @@ pub async fn install_commands(
 
         // 检查源是否存在
         if !src_command_dir.exists() {
-            errors.push(format!("源 command 不存在: {}", name));
+            errors.push(format!("Source command not found: {}", name));
             commands.push(CommandStatus {
                 name: name.to_string(),
                 installed: false,
@@ -212,7 +212,7 @@ pub async fn install_commands(
                 });
             }
             Err(e) => {
-                errors.push(format!("安装 {} 失败: {}", name, e));
+                errors.push(format!("Failed to install {}: {}", name, e));
                 commands.push(CommandStatus {
                     name: name.to_string(),
                     installed: false,
@@ -241,7 +241,7 @@ pub async fn uninstall_commands(project_path: String) -> Result<(), String> {
         let command_dir = commands_dir.join(name);
         if command_dir.exists() {
             fs::remove_dir_all(&command_dir)
-                .map_err(|e| format!("删除 {} 失败: {}", name, e))?;
+                .map_err(|e| format!("Failed to delete {}: {}", name, e))?;
         }
     }
 

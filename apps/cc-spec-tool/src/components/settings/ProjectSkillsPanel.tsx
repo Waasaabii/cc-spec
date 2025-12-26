@@ -3,14 +3,16 @@
 import { useEffect, useState, useCallback } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import type { ProjectState, SkillScanResult, Skill } from "../../types/skills";
+import type { translations } from "../../types/viewer";
 import { Icons } from "../icons/Icons";
 
 interface ProjectSkillsPanelProps {
   projectPath: string | null;
   isDarkMode: boolean;
+  t: typeof translations["zh"];
 }
 
-export function ProjectSkillsPanel({ projectPath, isDarkMode }: ProjectSkillsPanelProps) {
+export function ProjectSkillsPanel({ projectPath, isDarkMode, t }: ProjectSkillsPanelProps) {
   const [projectState, setProjectState] = useState<ProjectState | null>(null);
   const [scanResult, setScanResult] = useState<SkillScanResult | null>(null);
   const [loading, setLoading] = useState(false);
@@ -64,7 +66,7 @@ export function ProjectSkillsPanel({ projectPath, isDarkMode }: ProjectSkillsPan
         projectPath,
       });
       setScanResult(result);
-      showMessage("success", `扫描完成，发现 ${result.skills.length} 个项目 Skills`);
+      showMessage("success", `${t.scanning.replace("...", "")}完成，发现 ${result.skills.length} 个项目 Skills`);
     } catch (err) {
       showMessage("error", `扫描失败: ${err}`);
     } finally {
@@ -82,7 +84,7 @@ export function ProjectSkillsPanel({ projectPath, isDarkMode }: ProjectSkillsPan
         skillsInstalled: skillNames,
       });
       await loadProjectState();
-      showMessage("success", "项目 Skills 状态已更新");
+      showMessage("success", t.skillsUpdated);
     } catch (err) {
       showMessage("error", `更新失败: ${err}`);
     }
@@ -117,7 +119,7 @@ export function ProjectSkillsPanel({ projectPath, isDarkMode }: ProjectSkillsPan
     return (
       <div className={`p-4 rounded-xl border ${cardClass}`}>
         <div className={`text-center py-6 ${textSecondary}`}>
-          <p>请先选择一个项目</p>
+          <p>{t.selectProjectFirst}</p>
         </div>
       </div>
     );
@@ -162,21 +164,21 @@ export function ProjectSkillsPanel({ projectPath, isDarkMode }: ProjectSkillsPan
                   : "bg-blue-600 text-white hover:bg-blue-500"
               } disabled:opacity-50`}
             >
-              {scanning ? "扫描中..." : "扫描项目目录"}
+              {scanning ? t.scanning : t.scanProjectDir}
             </button>
             <button
               onClick={loadProjectState}
               disabled={loading}
               className={`px-3 py-1.5 rounded-lg text-xs border transition-colors ${borderClass} ${textSecondary} hover:bg-slate-50 dark:hover:bg-slate-700`}
             >
-              刷新
+              {t.refresh}
             </button>
           </div>
         </div>
 
         {/* 项目状态 */}
         {loading ? (
-          <div className={`py-4 text-center ${textSecondary}`}>加载中...</div>
+          <div className={`py-4 text-center ${textSecondary}`}>{t.loading}...</div>
         ) : projectState ? (
           <div className="space-y-3">
             <div className="grid grid-cols-2 gap-4">
@@ -212,7 +214,7 @@ export function ProjectSkillsPanel({ projectPath, isDarkMode }: ProjectSkillsPan
                       <button
                         onClick={() => handleRemoveSkillFromProject(skillName)}
                         className="opacity-60 hover:opacity-100"
-                        title="从项目移除"
+                        title={t.removeFromProject}
                       >
                         <Icons.Close className="w-3 h-3" />
                       </button>
@@ -244,7 +246,7 @@ export function ProjectSkillsPanel({ projectPath, isDarkMode }: ProjectSkillsPan
         ) : (
           <div className={`py-4 text-center ${textSecondary}`}>
             <p>此项目尚未初始化 Skills 状态</p>
-            <p className="text-xs mt-1">点击"扫描项目目录"来检测项目 Skills</p>
+            <p className="text-xs mt-1">{t.clickToScan}</p>
           </div>
         )}
       </div>

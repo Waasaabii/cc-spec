@@ -974,25 +974,39 @@ fn set_settings(settings: ViewerSettings) -> Result<ViewerSettings, String> {
 fn launch_claude_terminal(
     project_path: String,
     session_id: Option<String>,
+    state: tauri::State<AppState>,
 ) -> Result<(), String> {
     if project_path.trim().is_empty() {
         return Err("project_path 为空".to_string());
     }
-    let settings = load_settings();
+    let port = state
+        .settings
+        .lock()
+        .map(|s| s.port)
+        .unwrap_or(DEFAULT_PORT);
     terminal::launch_claude_terminal(
         project_path,
         "127.0.0.1".to_string(),
-        settings.port,
+        port,
         session_id,
     )
 }
 
 #[tauri::command]
-fn codex_terminal_start(project_path: String, app_handle: tauri::AppHandle) -> Result<String, String> {
+fn codex_terminal_start(
+    project_path: String,
+    app_handle: tauri::AppHandle,
+    state: tauri::State<AppState>,
+) -> Result<String, String> {
     if project_path.trim().is_empty() {
         return Err("project_path 为空".to_string());
     }
     let settings = load_settings();
+    let port = state
+        .settings
+        .lock()
+        .map(|s| s.port)
+        .unwrap_or(DEFAULT_PORT);
 
     // 获取 codex 可执行文件路径
     let codex_bin = get_effective_codex_path(&settings)?;
@@ -1002,7 +1016,7 @@ fn codex_terminal_start(project_path: String, app_handle: tauri::AppHandle) -> R
         &app_handle,
         &project_path,
         "127.0.0.1",
-        settings.port,
+        port,
         &launch.session_id,
         Some(&codex_bin),
     )?;
@@ -1015,6 +1029,7 @@ fn codex_terminal_send_input(
     session_id: String,
     text: String,
     requested_by: Option<String>,
+    state: tauri::State<AppState>,
 ) -> Result<String, String> {
     if project_path.trim().is_empty() {
         return Err("project_path 为空".to_string());
@@ -1025,7 +1040,11 @@ fn codex_terminal_send_input(
     if text.trim().is_empty() {
         return Err("text 为空".to_string());
     }
-    let settings = load_settings();
+    let port = state
+        .settings
+        .lock()
+        .map(|s| s.port)
+        .unwrap_or(DEFAULT_PORT);
     let by = requested_by.unwrap_or_else(|| "tool".to_string());
     let request_id = codex_sessions::set_pending_request(&session_id, &project_path, &by, &text);
     let ctrl = serde_json::json!({
@@ -1035,7 +1054,7 @@ fn codex_terminal_send_input(
         "request_id": request_id,
         "text": text,
     });
-    codex_sessions::publish_control_to("127.0.0.1", settings.port, &project_path, &session_id, ctrl)?;
+    codex_sessions::publish_control_to("127.0.0.1", port, &project_path, &session_id, ctrl)?;
     Ok(request_id)
 }
 
@@ -1044,6 +1063,7 @@ fn codex_terminal_pause(
     project_path: String,
     session_id: String,
     requested_by: Option<String>,
+    state: tauri::State<AppState>,
 ) -> Result<(), String> {
     if project_path.trim().is_empty() {
         return Err("project_path 为空".to_string());
@@ -1051,14 +1071,18 @@ fn codex_terminal_pause(
     if session_id.trim().is_empty() {
         return Err("session_id 为空".to_string());
     }
-    let settings = load_settings();
+    let port = state
+        .settings
+        .lock()
+        .map(|s| s.port)
+        .unwrap_or(DEFAULT_PORT);
     let by = requested_by.unwrap_or_else(|| "tool".to_string());
     let ctrl = serde_json::json!({
         "type": "codex.control",
         "action": "pause",
         "requested_by": by,
     });
-    codex_sessions::publish_control_to("127.0.0.1", settings.port, &project_path, &session_id, ctrl)?;
+    codex_sessions::publish_control_to("127.0.0.1", port, &project_path, &session_id, ctrl)?;
     Ok(())
 }
 
@@ -1067,6 +1091,7 @@ fn codex_terminal_kill(
     project_path: String,
     session_id: String,
     requested_by: Option<String>,
+    state: tauri::State<AppState>,
 ) -> Result<(), String> {
     if project_path.trim().is_empty() {
         return Err("project_path 为空".to_string());
@@ -1074,14 +1099,18 @@ fn codex_terminal_kill(
     if session_id.trim().is_empty() {
         return Err("session_id 为空".to_string());
     }
-    let settings = load_settings();
+    let port = state
+        .settings
+        .lock()
+        .map(|s| s.port)
+        .unwrap_or(DEFAULT_PORT);
     let by = requested_by.unwrap_or_else(|| "tool".to_string());
     let ctrl = serde_json::json!({
         "type": "codex.control",
         "action": "kill",
         "requested_by": by,
     });
-    codex_sessions::publish_control_to("127.0.0.1", settings.port, &project_path, &session_id, ctrl)?;
+    codex_sessions::publish_control_to("127.0.0.1", port, &project_path, &session_id, ctrl)?;
     Ok(())
 }
 
@@ -1166,6 +1195,10 @@ fn load_history(project_path: String) -> Result<String, String> {
 
 #[tauri::command]
 fn load_sessions(project_path: String) -> Result<String, String> {
+    // dev 环境下 relay/tools 非正常退出时，sessions.json 可能遗留 running 状态；这里做一次 best-effort 修复。
+    if let Err(err) = codex_sessions::reconcile_stale_sessions(&project_path) {
+        eprintln!("reconcile sessions failed: {}", err);
+    }
     let path = sessions_path(&project_path);
     if !path.exists() {
         return Ok("{\"schema_version\":1,\"updated_at\":\"\",\"sessions\":{}}".to_string());
@@ -1275,17 +1308,16 @@ fn stop_session(project_path: String, session_id: String) -> Result<String, Stri
     }
 }
 
-fn start_server(port: u16) {
+fn bind_tools_server(port: u16) -> std::io::Result<(TcpListener, u16)> {
+    let addr = format!("127.0.0.1:{}", port);
+    let listener = TcpListener::bind(&addr)?;
+    let bound_port = listener.local_addr()?.port();
+    Ok((listener, bound_port))
+}
+
+fn start_server(listener: TcpListener) {
     let broadcaster = Arc::new(Broadcaster::new());
     let dispatcher = Arc::new(EventDispatcher::new());
-    let addr = format!("127.0.0.1:{}", port);
-    let listener = match TcpListener::bind(&addr) {
-        Ok(listener) => listener,
-        Err(err) => {
-            eprintln!("tools server failed to bind {}: {}", addr, err);
-            return;
-        }
-    };
 
     for stream in listener.incoming() {
         let broadcaster = Arc::clone(&broadcaster);
@@ -1311,11 +1343,43 @@ fn start_server(port: u16) {
 }
 
 fn main() {
-    let settings = load_settings();
-    let port = settings.port;
+    let mut settings = load_settings();
+    let desired_port = settings.port;
+    let mut listener = match bind_tools_server(desired_port) {
+        Ok((listener, bound_port)) => {
+            if bound_port != desired_port {
+                settings.port = bound_port;
+            }
+            Some(listener)
+        }
+        Err(err) => {
+            eprintln!(
+                "tools server failed to bind 127.0.0.1:{}: {}",
+                desired_port, err
+            );
+            None
+        }
+    };
+
+    #[cfg(debug_assertions)]
+    if listener.is_none() {
+        // 开发模式：端口被占用时，自动选择一个可用端口，避免 dev:full 反复启动失败。
+        if let Ok((bound, bound_port)) = bind_tools_server(0) {
+            eprintln!(
+                "tools server fell back to 127.0.0.1:{} (was {})",
+                bound_port, desired_port
+            );
+            settings.port = bound_port;
+            let _ = save_settings(&settings);
+            listener = Some(bound);
+        }
+    }
+
     let cc_max = settings.claude.max_concurrent;
     let cx_max = settings.codex.max_concurrent;
-    thread::spawn(move || start_server(port));
+    if let Some(listener) = listener {
+        thread::spawn(move || start_server(listener));
+    }
     let app_state = AppState {
         concurrency: Arc::new(concurrency::ConcurrencyController::new(cc_max, cx_max)),
         legacy_concurrency: Arc::new(ConcurrencyController::new()),

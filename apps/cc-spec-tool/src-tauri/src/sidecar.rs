@@ -50,11 +50,11 @@ fn get_sidecar_path(_app_handle: &tauri::AppHandle) -> Result<PathBuf, String> {
         _app_handle
             .path()
             .resource_dir()
-            .map_err(|e| format!("获取资源目录失败: {}", e))?
+            .map_err(|e| format!("Failed to get resource directory: {}", e))?
             .join("sidecar")
             .join(sidecar_name)
             .canonicalize()
-            .map_err(|e| format!("sidecar 路径不存在: {}", e))
+            .map_err(|e| format!("Sidecar path not found: {}", e))
     }
 }
 
@@ -110,7 +110,7 @@ pub async fn run_ccspec_command(
     let output = command
         .output()
         .await
-        .map_err(|e| format!("执行命令失败: {}", e))?;
+        .map_err(|e| format!("Command execution failed: {}", e))?;
 
     Ok(SidecarResult {
         success: output.status.success(),
@@ -169,10 +169,10 @@ pub async fn run_ccspec_stream(
 
     let mut child = command
         .spawn()
-        .map_err(|e| format!("启动命令失败: {}", e))?;
+        .map_err(|e| format!("Failed to start command: {}", e))?;
 
-    let stdout = child.stdout.take().ok_or("无法获取 stdout")?;
-    let stderr = child.stderr.take().ok_or("无法获取 stderr")?;
+    let stdout = child.stdout.take().ok_or("Failed to capture stdout")?;
+    let stderr = child.stderr.take().ok_or("Failed to capture stderr")?;
 
     let event_id_clone = event_id.clone();
     let app_handle_clone = app_handle.clone();
@@ -208,7 +208,7 @@ pub async fn run_ccspec_stream(
     let status = child
         .wait()
         .await
-        .map_err(|e| format!("等待进程失败: {}", e))?;
+        .map_err(|e| format!("Failed to wait for process: {}", e))?;
 
     // 等待输出读取完成
     let _ = stdout_handle.await;

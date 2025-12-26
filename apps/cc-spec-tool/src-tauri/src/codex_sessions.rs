@@ -11,6 +11,7 @@ use std::collections::HashMap;
 use std::io::Write;
 use std::net::TcpStream;
 use std::path::{Path, PathBuf};
+use std::process::Command;
 use std::sync::Mutex;
 use std::time::{Duration, SystemTime};
 use uuid::Uuid;
@@ -57,6 +58,27 @@ fn sessions_path(project_root: &str) -> PathBuf {
         .join("sessions.json")
 }
 
+fn is_process_running(pid: i64) -> Result<bool, String> {
+    let pid_str = pid.to_string();
+    if cfg!(windows) {
+        let output = Command::new("tasklist")
+            .args(["/FI", &format!("PID eq {}", pid_str)])
+            .output()
+            .map_err(|err| format!("Failed to check process: {}", err))?;
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        let running = stdout
+            .lines()
+            .any(|line| line.split_whitespace().any(|token| token == pid_str));
+        Ok(running)
+    } else {
+        let status = Command::new("kill")
+            .args(["-0", &pid_str])
+            .status()
+            .map_err(|err| format!("Failed to check process: {}", err))?;
+        Ok(status.success())
+    }
+}
+
 fn load_sessions(path: &PathBuf) -> Value {
     if let Ok(raw) = std::fs::read_to_string(path) {
         if let Ok(value) = serde_json::from_str::<Value>(&raw) {
@@ -78,21 +100,21 @@ fn save_sessions(path: &PathBuf, mut value: Value) -> Result<(), String> {
             .or_insert_with(|| Value::from(serde_json::Map::new()));
     }
     if let Some(parent) = path.parent() {
-        std::fs::create_dir_all(parent).map_err(|e| format!("创建 sessions 目录失败: {}", e))?;
+        std::fs::create_dir_all(parent).map_err(|e| format!("Failed to create sessions directory: {}", e))?;
     }
     let tmp = path.with_extension("json.tmp");
     std::fs::write(&tmp, serde_json::to_string_pretty(&value).unwrap())
-        .map_err(|e| format!("写入 sessions 临时文件失败: {}", e))?;
+        .map_err(|e| format!("Failed to write sessions temp file: {}", e))?;
     // Windows: rename 不能覆盖已存在文件（WinError 183）。
     // 这里先尝试 rename（原子替换），失败且目标存在时降级为 copy+remove。
     match std::fs::rename(&tmp, path) {
         Ok(()) => {}
         Err(err) => {
             if path.exists() {
-                std::fs::copy(&tmp, path).map_err(|e| format!("写入 sessions 失败: {}", e))?;
+                std::fs::copy(&tmp, path).map_err(|e| format!("Failed to write sessions: {}", e))?;
                 let _ = std::fs::remove_file(&tmp);
             } else {
-                return Err(format!("写入 sessions 失败: {}", err));
+                return Err(format!("Failed to write sessions: {}", err));
             }
         }
     }
@@ -111,7 +133,7 @@ fn upsert_session_record(project_root: &str, session_id: &str, patch: Value) -> 
     let sessions = data
         .get_mut("sessions")
         .and_then(|v| v.as_object_mut())
-        .ok_or("sessions 字段缺失")?;
+        .ok_or("Missing sessions field")?;
 
     let record = sessions.entry(session_id.to_string()).or_insert_with(|| {
         json!({
@@ -136,7 +158,7 @@ fn upsert_session_record(project_root: &str, session_id: &str, patch: Value) -> 
 /// 从 sessions.json 中删除指定会话记录。
 pub fn delete_session_record(project_root: &str, session_id: &str) -> Result<(), String> {
     if project_root.trim().is_empty() || session_id.trim().is_empty() {
-        return Err("project_root 或 session_id 为空".to_string());
+        return Err("project_root or session_id is empty".to_string());
     }
     let _guard = SESSIONS_FILE_LOCK.lock().unwrap();
     let path = sessions_path(project_root);
@@ -145,10 +167,10 @@ pub fn delete_session_record(project_root: &str, session_id: &str) -> Result<(),
     let sessions = data
         .get_mut("sessions")
         .and_then(|v| v.as_object_mut())
-        .ok_or("sessions 字段缺失")?;
+        .ok_or("Missing sessions field")?;
 
     if sessions.remove(session_id).is_none() {
-        return Err(format!("会话 {} 不存在", session_id));
+        return Err(format!("Session {} not found", session_id));
     }
 
     // 同时清理 supervisor 中的记录
@@ -158,6 +180,65 @@ pub fn delete_session_record(project_root: &str, session_id: &str) -> Result<(),
     }
 
     save_sessions(&path, data)
+}
+
+/// 修复 sessions.json 中的“僵尸 running 状态”：当 pid 对应进程已不存在时，标记为 exited。
+///
+/// 这主要用于 dev 环境下 tools server/relay 非正常退出（无法上报 exited）导致 UI 一直显示 running。
+pub fn reconcile_stale_sessions(project_root: &str) -> Result<bool, String> {
+    if project_root.trim().is_empty() {
+        return Ok(false);
+    }
+    let _guard = SESSIONS_FILE_LOCK.lock().unwrap();
+    let path = sessions_path(project_root);
+    if !path.exists() {
+        return Ok(false);
+    }
+
+    let mut data = load_sessions(&path);
+    let sessions = data
+        .get_mut("sessions")
+        .and_then(|v| v.as_object_mut())
+        .ok_or("Missing sessions field")?;
+
+    let mut changed = false;
+    let mut stale_ids: Vec<String> = Vec::new();
+
+    for (sid, rec) in sessions.iter_mut() {
+        let state = rec.get("state").and_then(|v| v.as_str()).unwrap_or("");
+        if state != "running" {
+            continue;
+        }
+        let pid = rec.get("pid").and_then(|v| v.as_i64()).unwrap_or(0);
+        if pid <= 0 {
+            continue;
+        }
+        if is_process_running(pid)? {
+            continue;
+        }
+
+        if let Some(obj) = rec.as_object_mut() {
+            obj.insert("state".to_string(), Value::from("exited"));
+            obj.insert("last_exit_reason".to_string(), Value::from("stale_pid"));
+            obj.insert("exit_code".to_string(), Value::Null);
+            obj.insert("updated_at".to_string(), Value::from(now_iso()));
+        }
+        stale_ids.push(sid.clone());
+        changed = true;
+    }
+
+    if changed {
+        // 同时清理 supervisor 记录，避免后续误触发自动重试。
+        if !stale_ids.is_empty() {
+            let mut guard = SUPERVISOR.lock().unwrap();
+            for sid in stale_ids {
+                guard.remove(&sid);
+            }
+        }
+        save_sessions(&path, data)?;
+    }
+
+    Ok(changed)
 }
 
 fn publish_sse_event<F: Fn(String)>(event_name: &str, body: &Value, publish: F) {
@@ -207,10 +288,10 @@ fn supervisor_reset_retry(session_id: &str) {
 }
 
 fn post_ingest(host: &str, port: u16, body: &Value) -> Result<(), String> {
-    let payload = serde_json::to_string(body).map_err(|e| format!("序列化失败: {}", e))?;
+    let payload = serde_json::to_string(body).map_err(|e| format!("Serialization failed: {}", e))?;
     let addr = format!("{}:{}", host, port);
     let mut stream =
-        TcpStream::connect(&addr).map_err(|e| format!("连接 ingest 失败 {}: {}", addr, e))?;
+        TcpStream::connect(&addr).map_err(|e| format!("Failed to connect to ingest {}: {}", addr, e))?;
     let request = format!(
         "POST /ingest HTTP/1.1\r\nHost: {}:{}\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
         host,
@@ -220,7 +301,7 @@ fn post_ingest(host: &str, port: u16, body: &Value) -> Result<(), String> {
     );
     stream
         .write_all(request.as_bytes())
-        .map_err(|e| format!("写入 ingest 失败: {}", e))?;
+        .map_err(|e| format!("Failed to write to ingest: {}", e))?;
     Ok(())
 }
 
@@ -364,6 +445,37 @@ pub fn handle_ingest_event<F: Fn(String)>(payload: &Value, publish: F) {
                 publish_sse_event("codex.managed.turn_complete", &managed, publish);
             }
         }
+        "codex.control.error" => {
+            let action = parse_string(payload, "action").unwrap_or_else(|| "unknown".to_string());
+            let error = parse_string(payload, "error").unwrap_or_else(|| "unknown".to_string());
+            let request_id = parse_string(payload, "request_id").unwrap_or_default();
+            let requested_by = parse_string(payload, "requested_by").unwrap_or_else(|| "unknown".to_string());
+
+            let msg = if request_id.is_empty() {
+                format!("[tool] {} 失败（by={}）：{}", action, requested_by, error)
+            } else {
+                format!(
+                    "[tool] {} 失败（by={}, request_id={}）：{}",
+                    action, requested_by, request_id, error
+                )
+            };
+
+            let _ = upsert_session_record(
+                &project_root,
+                &session_id,
+                json!({
+                    "message": msg,
+                    "state": "running",
+                }),
+            );
+
+            // 如果这次失败对应当前 pending，则清理 pending，避免 UI/调度方一直等待。
+            if let Some(pending) = supervisor_peek_pending(&session_id) {
+                if request_id.is_empty() || pending.id == request_id {
+                    let _ = supervisor_take_pending(&session_id);
+                }
+            }
+        }
         "codex.control" => {
             // 外部（Claude Code）也可能直接 POST /ingest，这里做一次 best-effort 记录。
             let action = payload.get("action").and_then(|v| v.as_str()).unwrap_or("");
@@ -412,16 +524,20 @@ pub struct LaunchResult {
 fn dev_sidecar_candidates(manifest_dir: &Path, name: &str) -> Vec<PathBuf> {
     let mut out = Vec::new();
     let sidecar_dir = manifest_dir.join("sidecar");
+    let alt_target_dir = manifest_dir.join("target-sidecar");
     if cfg!(windows) {
-        out.push(sidecar_dir.join(format!("{}.exe", name)));
         // 开发时优先使用本地构建产物，避免 sidecar 目录里的预构建二进制过期导致行为不一致。
+        // 同时支持 dev:full 的独立 target 目录（避免与 tauri dev 的 cargo build 锁竞争）。
+        out.push(alt_target_dir.join("debug").join(format!("{}.exe", name)));
         out.push(manifest_dir.join("target").join("debug").join(format!("{}.exe", name)));
+        out.push(alt_target_dir.join("release").join(format!("{}.exe", name)));
         out.push(
             manifest_dir
                 .join("target")
                 .join("release")
                 .join(format!("{}.exe", name)),
         );
+        out.push(sidecar_dir.join(format!("{}.exe", name)));
         // 支持 Tauri externalBin 的 target-triple 命名：<name>-<triple>.exe
         if let Ok(entries) = std::fs::read_dir(&sidecar_dir) {
             for entry in entries.flatten() {
@@ -437,9 +553,11 @@ fn dev_sidecar_candidates(manifest_dir: &Path, name: &str) -> Vec<PathBuf> {
             }
         }
     } else {
-        out.push(sidecar_dir.join(name));
+        out.push(alt_target_dir.join("debug").join(name));
         out.push(manifest_dir.join("target").join("debug").join(name));
+        out.push(alt_target_dir.join("release").join(name));
         out.push(manifest_dir.join("target").join("release").join(name));
+        out.push(sidecar_dir.join(name));
     }
     out
 }
@@ -457,11 +575,11 @@ pub fn resolve_sidecar_binary(app_handle: &tauri::AppHandle, name: &str) -> Resu
         return app_handle
             .path()
             .resource_dir()
-            .map_err(|e| format!("获取资源目录失败: {}", e))?
+            .map_err(|e| format!("Failed to get resource directory: {}", e))?
             .join("sidecar")
             .join(file_name)
             .canonicalize()
-            .map_err(|e| format!("sidecar 路径不存在: {}", e));
+            .map_err(|e| format!("Sidecar path not found: {}", e));
     }
 
     // 开发模式：优先从 src-tauri/sidecar 或 src-tauri/target/* 查找
@@ -472,20 +590,20 @@ pub fn resolve_sidecar_binary(app_handle: &tauri::AppHandle, name: &str) -> Resu
             if candidate.exists() {
                 return candidate
                     .canonicalize()
-                    .map_err(|e| format!("解析 sidecar 路径失败: {}", e));
+                    .map_err(|e| format!("Failed to resolve sidecar path: {}", e));
             }
         }
         Err(format!(
-            "未找到 sidecar 可执行文件: {}（请先构建 relay/notifier sidecar）",
+            "Sidecar executable not found: {} (please build relay/notifier sidecar first)",
             name
         ))
     }
 }
 
-/// 生成并登记一个“终端交互式”Codex session，返回 session_id。
+/// 生成并登记一个"终端交互式"Codex session，返回 session_id。
 pub fn create_terminal_session(project_root: &str) -> Result<LaunchResult, String> {
     if project_root.trim().is_empty() {
-        return Err("project_root 为空".to_string());
+        return Err("project_root is empty".to_string());
     }
     let session_id = Uuid::new_v4().to_string();
     upsert_session_record(
@@ -569,6 +687,28 @@ pub fn launch_relay_terminal(
 ) -> Result<(), String> {
     let relay_path = resolve_sidecar_binary(app_handle, "cc-spec-codex-relay")?;
 
+    // Windows 下运行中的 exe 会锁定文件，导致 dev:full 的 cargo watch 无法覆盖更新。
+    // 为了让 sidecar 支持热更新，这里按 session 复制一份 relay + notify 到项目 runtime 目录，再启动复制后的版本。
+    #[cfg(windows)]
+    let relay_path = {
+        let notify_path = resolve_sidecar_binary(app_handle, "cc-spec-codex-notify")?;
+        let dir = PathBuf::from(project_root)
+            .join(".cc-spec")
+            .join("runtime")
+            .join("codex")
+            .join("sidecar")
+            .join(session_id);
+        std::fs::create_dir_all(&dir)
+            .map_err(|e| format!("Failed to create sidecar runtime directory: {}", e))?;
+        let relay_dst = dir.join("cc-spec-codex-relay.exe");
+        let notify_dst = dir.join("cc-spec-codex-notify.exe");
+        std::fs::copy(&relay_path, &relay_dst)
+            .map_err(|e| format!("Failed to copy relay: {}", e))?;
+        std::fs::copy(&notify_path, &notify_dst)
+            .map_err(|e| format!("Failed to copy notify: {}", e))?;
+        relay_dst
+    };
+
     let mut cmd = std::process::Command::new(&relay_path);
     cmd.current_dir(project_root);
     cmd.args([
@@ -593,7 +733,14 @@ pub fn launch_relay_terminal(
         cmd.creation_flags(CREATE_NEW_CONSOLE);
     }
 
+    eprintln!(
+        "[cc-spec-tool] launch codex relay: {} (session_id={}, host={}, port={})",
+        relay_path.display(),
+        session_id,
+        host,
+        port
+    );
     cmd.spawn()
-        .map_err(|e| format!("启动 codex relay 失败: {}", e))?;
+        .map_err(|e| format!("Failed to start codex relay: {}", e))?;
     Ok(())
 }

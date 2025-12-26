@@ -1,15 +1,16 @@
 // TitleBar.tsx - 自定义窗口标题栏组件
 
 import { getCurrentWindow } from "@tauri-apps/api/window";
-import type { Theme } from "../../types/viewer";
+import type { Theme, translations } from "../../types/viewer";
 
 interface TitleBarProps {
     theme: Theme;
     title?: string;
     rightContent?: React.ReactNode;
+    t: typeof translations["zh"];
 }
 
-export function TitleBar({ theme, title = "cc-spec tools", rightContent }: TitleBarProps) {
+export function TitleBar({ theme, title = "cc-spec tools", rightContent, t }: TitleBarProps) {
     const appWindow = getCurrentWindow();
 
     const handleMinimize = async () => {
@@ -103,7 +104,7 @@ export function TitleBar({ theme, title = "cc-spec tools", rightContent }: Title
                             ? "hover:bg-slate-700 text-slate-400 hover:text-slate-200"
                             : "hover:bg-slate-100 text-slate-500 hover:text-slate-700"
                             }`}
-                        title="最小化"
+                        title={t.minimize}
                     >
                         <svg
                             className="w-3 h-3"
@@ -127,7 +128,7 @@ export function TitleBar({ theme, title = "cc-spec tools", rightContent }: Title
                             ? "hover:bg-slate-700 text-slate-400 hover:text-slate-200"
                             : "hover:bg-slate-100 text-slate-500 hover:text-slate-700"
                             }`}
-                        title="最大化/还原"
+                        title={t.maximizeRestore}
                     >
                         <svg
                             className="w-3 h-3"
@@ -147,7 +148,7 @@ export function TitleBar({ theme, title = "cc-spec tools", rightContent }: Title
                             ? "hover:bg-red-600 text-slate-400 hover:text-white"
                             : "hover:bg-red-500 text-slate-500 hover:text-white"
                             }`}
-                        title="关闭"
+                        title={t.close}
                     >
                         <svg
                             className="w-3 h-3"

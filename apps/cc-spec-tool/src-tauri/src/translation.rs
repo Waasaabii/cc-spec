@@ -424,11 +424,11 @@ async fn fetch_models_from_api() -> Result<Vec<TranslationModelInfo>, String> {
         Ok(resp) => {
             let status = resp.status();
             eprintln!("[translation] HuggingFace API error: {}", status);
-            Err(format!("HuggingFace API 错误: {}", status))
+            Err(format!("HuggingFace API error: {}", status))
         }
         Err(e) => {
             eprintln!("[translation] Failed to connect: {}", e);
-            Err(format!("无法连接 HuggingFace API: {}", e))
+            Err(format!("Failed to connect to HuggingFace API: {}", e))
         }
     }
 }
@@ -456,7 +456,7 @@ pub async fn download_model(
 ) -> Result<(), String> {
     let model_dir = get_model_dir(&model_id);
     std::fs::create_dir_all(&model_dir)
-        .map_err(|e| format!("创建模型目录失败: {}", e))?;
+        .map_err(|e| format!("Failed to create model directory: {}", e))?;
 
     // 更新注册表状态
     {
@@ -555,17 +555,17 @@ pub async fn download_model(
             let registry = get_model_registry();
             if let Ok(mut reg) = registry.write() {
                 if let Some(record) = reg.models.get_mut(&model_id) {
-                    record.state = ModelState::Error(format!("下载 {} 失败", filename));
+                    record.state = ModelState::Error(format!("Failed to download {}", filename));
                 }
             }
 
             let _ = app_handle.emit("translation.download.completed", serde_json::json!({
                 "success": false,
                 "model_id": &model_id,
-                "error": format!("下载 {} 失败", filename),
+                "error": format!("Failed to download {}", filename),
             }));
 
-            return Err(format!("下载 {} 失败", filename));
+            return Err(format!("Failed to download {}", filename));
         }
     }
 
@@ -630,7 +630,7 @@ async fn download_file_with_progress(
         .unwrap_or(0);
 
     let mut file = std::fs::File::create(file_path)
-        .map_err(|e| format!("创建文件失败: {}", e))?;
+        .map_err(|e| format!("Failed to create file: {}", e))?;
 
     let mut stream = response.bytes_stream();
     let mut file_downloaded: u64 = 0;
@@ -698,7 +698,7 @@ pub async fn load_model(model_id: String) -> Result<bool, String> {
     for filename in MODEL_REQUIRED_FILES {
         let path = model_dir.join(filename);
         if !path.exists() {
-            return Err(format!("模型文件缺失: {}", filename));
+            return Err(format!("Model file missing: {}", filename));
         }
     }
 
@@ -717,7 +717,7 @@ pub async fn load_model(model_id: String) -> Result<bool, String> {
         load_model_sync(&model_id_clone, &model_dir)
     })
     .await
-    .map_err(|e| format!("加载任务失败: {}", e))?;
+    .map_err(|e| format!("Failed to load model task: {}", e))?;
 
     match result {
         Ok(loaded) => {
@@ -775,24 +775,24 @@ fn load_model_sync(model_id: &str, model_dir: &PathBuf) -> Result<LoadedModel, S
     // 加载配置
     let config_path = model_dir.join("config.json");
     let config_str = std::fs::read_to_string(&config_path)
-        .map_err(|e| format!("读取 config.json 失败: {}", e))?;
+        .map_err(|e| format!("Failed to read config.json: {}", e))?;
     let config: Config = serde_json::from_str(&config_str)
-        .map_err(|e| format!("解析 config.json 失败: {}", e))?;
+        .map_err(|e| format!("Failed to parse config.json: {}", e))?;
 
     // 加载模型权重
     let model_path = model_dir.join("model.safetensors");
     let vb = unsafe {
         VarBuilder::from_mmaped_safetensors(&[model_path], DType::F32, &device)
-            .map_err(|e| format!("加载模型权重失败: {}", e))?
+            .map_err(|e| format!("Failed to load model weights: {}", e))?
     };
 
     let model = T5ForConditionalGeneration::load(vb, &config)
-        .map_err(|e| format!("创建模型失败: {}", e))?;
+        .map_err(|e| format!("Failed to create model: {}", e))?;
 
     // 加载 tokenizer
     let tokenizer_path = model_dir.join("tokenizer.json");
     let tokenizer = Tokenizer::from_file(&tokenizer_path)
-        .map_err(|e| format!("加载 tokenizer 失败: {}", e))?;
+        .map_err(|e| format!("Failed to load tokenizer: {}", e))?;
 
     Ok(LoadedModel {
         id: model_id.to_string(),
@@ -843,15 +843,15 @@ pub async fn translate_text(text: String) -> Result<String, String> {
     // 检查是否有模型加载
     let model_arc = LOADED_MODEL
         .get()
-        .ok_or("没有加载的模型，请先在模型管理中加载模型")?;
+        .ok_or("No model loaded. Please load a model first.")?;
 
     let text_clone = text.clone();
     let result = tokio::task::spawn_blocking(move || {
-        let mut model = model_arc.lock().map_err(|e| format!("获取模型锁失败: {}", e))?;
+        let mut model = model_arc.lock().map_err(|e| format!("Failed to acquire model lock: {}", e))?;
         translate_sync(&mut model, &text_clone)
     })
     .await
-    .map_err(|e| format!("翻译任务失败: {}", e))??;
+    .map_err(|e| format!("Translation task failed: {}", e))??;
 
     // 缓存结果
     {
@@ -872,7 +872,7 @@ fn translate_sync(model: &mut LoadedModel, text: &str) -> Result<String, String>
 
     let encoding = model.tokenizer
         .encode(input_text.clone(), true)
-        .map_err(|e| format!("分词失败: {}", e))?;
+        .map_err(|e| format!("Tokenization failed: {}", e))?;
 
     let mut input_ids: Vec<u32> = encoding.get_ids().to_vec();
     if input_ids.len() > MAX_INPUT_TOKENS {
@@ -880,35 +880,35 @@ fn translate_sync(model: &mut LoadedModel, text: &str) -> Result<String, String>
     }
 
     let input_tensor = Tensor::new(input_ids.as_slice(), &model.device)
-        .map_err(|e| format!("创建输入张量失败: {}", e))?
+        .map_err(|e| format!("Failed to create input tensor: {}", e))?
         .unsqueeze(0)
-        .map_err(|e| format!("扩展维度失败: {}", e))?;
+        .map_err(|e| format!("Failed to unsqueeze dimension: {}", e))?;
 
     let mut decoder_input_ids = vec![0u32];
     let eos_token_id = 1u32;
 
     for _ in 0..MAX_OUTPUT_TOKENS {
         let decoder_tensor = Tensor::new(decoder_input_ids.as_slice(), &model.device)
-            .map_err(|e| format!("创建解码器输入失败: {}", e))?
+            .map_err(|e| format!("Failed to create decoder input: {}", e))?
             .unsqueeze(0)
-            .map_err(|e| format!("扩展维度失败: {}", e))?;
+            .map_err(|e| format!("Failed to unsqueeze dimension: {}", e))?;
 
         let output = model.model
             .forward(&input_tensor, &decoder_tensor)
-            .map_err(|e| format!("模型前向传播失败: {}", e))?;
+            .map_err(|e| format!("Model forward pass failed: {}", e))?;
 
-        let seq_len = output.dim(1).map_err(|e| format!("获取序列长度失败: {}", e))?;
+        let seq_len = output.dim(1).map_err(|e| format!("Failed to get sequence length: {}", e))?;
         let last_logits = output
             .narrow(1, seq_len - 1, 1)
-            .map_err(|e| format!("获取最后 logits 失败: {}", e))?
+            .map_err(|e| format!("Failed to narrow last logits: {}", e))?
             .squeeze(1)
-            .map_err(|e| format!("压缩维度失败: {}", e))?;
+            .map_err(|e| format!("Failed to squeeze dimension: {}", e))?;
 
         let next_token = last_logits
             .argmax(1)
-            .map_err(|e| format!("argmax 失败: {}", e))?
+            .map_err(|e| format!("Argmax failed: {}", e))?
             .to_scalar::<u32>()
-            .map_err(|e| format!("转换标量失败: {}", e))?;
+            .map_err(|e| format!("Failed to convert to scalar: {}", e))?;
 
         if next_token == eos_token_id {
             break;
@@ -919,7 +919,7 @@ fn translate_sync(model: &mut LoadedModel, text: &str) -> Result<String, String>
 
     let output_text = model.tokenizer
         .decode(&decoder_input_ids[1..], true)
-        .map_err(|e| format!("解码失败: {}", e))?;
+        .map_err(|e| format!("Decoding failed: {}", e))?;
 
     Ok(output_text)
 }
@@ -1108,7 +1108,7 @@ pub async fn delete_model(model_id: String) -> Result<(), String> {
     if let Some(loaded) = LOADED_MODEL.get() {
         if let Ok(model) = loaded.lock() {
             if model.id == model_id {
-                return Err("无法删除正在使用的模型，请先卸载".to_string());
+                return Err("Cannot delete model in use. Please unload it first.".to_string());
             }
         }
     }
@@ -1116,7 +1116,7 @@ pub async fn delete_model(model_id: String) -> Result<(), String> {
     let model_dir = get_model_dir(&model_id);
     if model_dir.exists() {
         std::fs::remove_dir_all(&model_dir)
-            .map_err(|e| format!("删除模型目录失败: {}", e))?;
+            .map_err(|e| format!("Failed to delete model directory: {}", e))?;
     }
 
     // 从注册表移除

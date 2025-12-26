@@ -620,7 +620,7 @@ export default function App() {
     return (
         <div className={`h-screen flex flex-col font-sans transition-colors duration-300 ${theme === "dark" ? "bg-slate-900 text-slate-100 selection:bg-purple-500/30" : `text-slate-800 selection:bg-orange-100 ${layoutMode === "grid" ? "bg-slate-50/50" : "bg-slate-50/30"}`}`}>
             {/* 自定义标题栏 */}
-            <TitleBar theme={theme} rightContent={toolbarButtons} />
+            <TitleBar theme={theme} rightContent={toolbarButtons} t={t} />
             {/* Background Decor */}
             <div className="fixed inset-0 pointer-events-none z-[-1] overflow-hidden">
                 {theme === "dark" ? (
@@ -712,6 +712,7 @@ export default function App() {
                                     onEnter={handleEnterProject}
                                     onRemove={handleRemoveProject}
                                     onRefresh={loadProjects}
+                                    onLaunchClaudeTerminal={handleLaunchClaudeTerminal}
                                 />
                             </div>
                         ) : activeView === "project" ? (
@@ -751,6 +752,7 @@ export default function App() {
                                     onClose={() => setActiveView("projects")}
                                     isDarkMode={theme === "dark"}
                                     onOpenModelManager={() => setActiveView("model-manager")}
+                                    t={t}
                                 />
                             </div>
                         ) : activeView === "model-manager" ? (
@@ -758,6 +760,7 @@ export default function App() {
                                 <ModelManagerPage
                                     onClose={() => setActiveView("settings")}
                                     isDarkMode={theme === "dark"}
+                                    t={t}
                                 />
                             </div>
                         ) : activeView === "commands-guide" ? (
@@ -773,6 +776,7 @@ export default function App() {
                                     onClose={() => setActiveView("projects")}
                                     isDarkMode={theme === "dark"}
                                     currentProjectPath={currentProject?.path}
+                                    t={t}
                                 />
                             </div>
                         ) : null}

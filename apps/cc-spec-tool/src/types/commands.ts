@@ -1,5 +1,7 @@
 // types/commands.ts - Commands 管理类型定义
 
+import { translations, type Language } from "./viewer";
+
 /**
  * 单个 Command 状态
  */
@@ -73,73 +75,59 @@ export interface CommandUsageInfo {
 }
 
 /**
- * Commands 使用信息
+ * 获取 Commands 使用信息（支持国际化）
  */
-export const COMMAND_USAGE_INFO: CommandUsageInfo[] = [
-    {
-        name: "cc-spec-specify",
-        stage: "specify",
-        description: "与用户确认需求，输出 proposal.md",
-        example: "/cc-spec-specify 实现用户登录功能",
-        tips: [
-            "在开始新功能开发前使用",
-            "会生成 proposal.md 作为需求文档",
-            "建议先描述清楚功能目标和范围",
-        ],
-    },
-    {
-        name: "cc-spec-clarify",
-        stage: "clarify",
-        description: "CC↔CX 讨论或用户审查",
-        example: "/cc-spec-clarify",
-        tips: [
-            "用于审查任务执行结果",
-            "可以标记返工项",
-            "支持评分验收",
-        ],
-    },
-    {
-        name: "cc-spec-plan",
-        stage: "plan",
-        description: "用户确认后生成 tasks.yaml",
-        example: "/cc-spec-plan",
-        tips: [
-            "根据 proposal.md 生成执行计划",
-            "每个任务包含明确的验收标准",
-            "支持 Wave 分组并行执行",
-        ],
-    },
-    {
-        name: "cc-spec-apply",
-        stage: "apply",
-        description: "使用 SubAgent 执行任务",
-        example: "/cc-spec-apply W1-T1",
-        tips: [
-            "可以指定具体任务 ID 执行",
-            "支持批量执行整个 Wave",
-            "执行结果会自动记录",
-        ],
-    },
-    {
-        name: "cc-spec-accept",
-        stage: "accept",
-        description: "端到端验收",
-        example: "/cc-spec-accept",
-        tips: [
-            "验收所有任务完成情况",
-            "生成最终验收报告",
-            "通过后可以归档变更",
-        ],
-    },
-    {
-        name: "cc-spec-archive",
-        stage: "archive",
-        description: "归档已完成的变更",
-        example: "/cc-spec-archive",
-        tips: [
-            "将变更移动到 archive 目录",
-            "保留完整的变更历史",
-            "支持后续回溯查询",
-        ],
-    },
-];
+export function getCommandUsageInfo(lang: Language): CommandUsageInfo[] {
+    const t = translations[lang];
+    return [
+        {
+            name: "cc-spec-specify",
+            stage: "specify",
+            description: t.cmdSpecifyDesc,
+            example: "/cc-spec-specify 实现用户登录功能",
+            tips: [t.cmdSpecifyTip1, t.cmdSpecifyTip2, t.cmdSpecifyTip3],
+        },
+        {
+            name: "cc-spec-clarify",
+            stage: "clarify",
+            description: t.cmdClarifyDesc,
+            example: "/cc-spec-clarify",
+            tips: [t.cmdClarifyTip1, t.cmdClarifyTip2, t.cmdClarifyTip3],
+        },
+        {
+            name: "cc-spec-plan",
+            stage: "plan",
+            description: t.cmdPlanDesc,
+            example: "/cc-spec-plan",
+            tips: [t.cmdPlanTip1, t.cmdPlanTip2, t.cmdPlanTip3],
+        },
+        {
+            name: "cc-spec-apply",
+            stage: "apply",
+            description: t.cmdApplyDesc,
+            example: "/cc-spec-apply W1-T1",
+            tips: [t.cmdApplyTip1, t.cmdApplyTip2, t.cmdApplyTip3],
+        },
+        {
+            name: "cc-spec-accept",
+            stage: "accept",
+            description: t.cmdAcceptDesc,
+            example: "/cc-spec-accept",
+            tips: [t.cmdAcceptTip1, t.cmdAcceptTip2, t.cmdAcceptTip3],
+        },
+        {
+            name: "cc-spec-archive",
+            stage: "archive",
+            description: t.cmdArchiveDesc,
+            example: "/cc-spec-archive",
+            tips: [t.cmdArchiveTip1, t.cmdArchiveTip2, t.cmdArchiveTip3],
+        },
+    ];
+}
+
+/**
+ * Commands 使用信息（已废弃，请使用 getCommandUsageInfo）
+ * @deprecated 使用 getCommandUsageInfo(lang) 代替
+ */
+export const COMMAND_USAGE_INFO: CommandUsageInfo[] = getCommandUsageInfo("zh");
+

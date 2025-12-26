@@ -15,14 +15,19 @@ import {
   getModelStateText,
   getModelStateColor,
 } from "../../types/translation";
+import { translations } from "../../types/viewer";
 import { Icons } from "../icons/Icons";
+
+// 翻译对象类型
+type TranslationMap = typeof translations.zh;
 
 interface ModelManagerPageProps {
   onClose: () => void;
   isDarkMode: boolean;
+  t: TranslationMap;
 }
 
-export function ModelManagerPage({ onClose, isDarkMode }: ModelManagerPageProps) {
+export function ModelManagerPage({ onClose, isDarkMode, t }: ModelManagerPageProps) {
   const [status, setStatus] = useState<ModelManagerStatus | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadingHf, setLoadingHf] = useState(false);
@@ -38,11 +43,11 @@ export function ModelManagerPage({ onClose, isDarkMode }: ModelManagerPageProps)
       setStatus(s);
       setError(null);
     } catch (err) {
-      setError(`加载失败: ${err}`);
+      setError(`${t.loadFailed}: ${err}`);
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [t]);
 
   // 异步加载 HF 模型列表（乐观更新）
   const loadHfModels = useCallback(async () => {
@@ -111,7 +116,7 @@ export function ModelManagerPage({ onClose, isDarkMode }: ModelManagerPageProps)
     try {
       await invoke("download_model", { modelId });
     } catch (err) {
-      setError(`下载失败: ${err}`);
+      setError(`${t.downloadFailed}: ${err}`);
       setActionLoading(null);
     }
   };
@@ -124,7 +129,7 @@ export function ModelManagerPage({ onClose, isDarkMode }: ModelManagerPageProps)
       await invoke("load_model", { modelId });
       await loadLocalStatus();
     } catch (err) {
-      setError(`加载失败: ${err}`);
+      setError(`${t.loadFailed}: ${err}`);
     } finally {
       setActionLoading(null);
     }
@@ -138,7 +143,7 @@ export function ModelManagerPage({ onClose, isDarkMode }: ModelManagerPageProps)
       await invoke("unload_model");
       await loadLocalStatus();
     } catch (err) {
-      setError(`卸载失败: ${err}`);
+      setError(`${t.unloadFailed}: ${err}`);
     } finally {
       setActionLoading(null);
     }
@@ -146,14 +151,14 @@ export function ModelManagerPage({ onClose, isDarkMode }: ModelManagerPageProps)
 
   // 删除模型
   const handleDelete = async (modelId: string) => {
-    if (!confirm(`确定要删除模型 ${modelId} 吗？`)) return;
+    if (!confirm(`${t.confirmDeleteModel} (${modelId})`)) return;
     setActionLoading(modelId);
     setError(null);
     try {
       await invoke("delete_model", { modelId });
       await loadLocalStatus();
     } catch (err) {
-      setError(`删除失败: ${err}`);
+      setError(`${t.deleteFailed}: ${err}`);
     } finally {
       setActionLoading(null);
     }
@@ -171,7 +176,7 @@ export function ModelManagerPage({ onClose, isDarkMode }: ModelManagerPageProps)
   const renderResourceCard = (usage: ResourceUsage) => (
     <div className={`p-4 rounded-xl border ${cardClass}`}>
       <div className="flex items-center justify-between mb-3">
-        <h3 className={`text-sm font-semibold ${textPrimary}`}>资源占用</h3>
+        <h3 className={`text-sm font-semibold ${textPrimary}`}>{t.resourceUsage}</h3>
         <span className={`text-xs px-2 py-0.5 rounded ${
           usage.device === "CUDA"
             ? "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300"
@@ -182,25 +187,25 @@ export function ModelManagerPage({ onClose, isDarkMode }: ModelManagerPageProps)
       </div>
       <div className="grid grid-cols-2 gap-3">
         <div className={`p-3 rounded-lg ${isDarkMode ? "bg-slate-900/50" : "bg-slate-50"}`}>
-          <div className={`text-xs ${textSecondary}`}>内存</div>
+          <div className={`text-xs ${textSecondary}`}>{t.memory}</div>
           <div className={`text-lg font-bold ${textPrimary}`}>{usage.memory_mb.toFixed(1)} MB</div>
         </div>
         <div className={`p-3 rounded-lg ${isDarkMode ? "bg-slate-900/50" : "bg-slate-50"}`}>
-          <div className={`text-xs ${textSecondary}`}>CPU</div>
+          <div className={`text-xs ${textSecondary}`}>{t.cpuLabel}</div>
           <div className={`text-lg font-bold ${textPrimary}`}>{usage.cpu_percent.toFixed(1)}%</div>
         </div>
         <div className={`p-3 rounded-lg ${isDarkMode ? "bg-slate-900/50" : "bg-slate-50"}`}>
-          <div className={`text-xs ${textSecondary}`}>缓存条目</div>
+          <div className={`text-xs ${textSecondary}`}>{t.cacheEntriesLabel}</div>
           <div className={`text-lg font-bold ${textPrimary}`}>{usage.cache_entries}</div>
         </div>
         <div className={`p-3 rounded-lg ${isDarkMode ? "bg-slate-900/50" : "bg-slate-50"}`}>
-          <div className={`text-xs ${textSecondary}`}>缓存大小</div>
+          <div className={`text-xs ${textSecondary}`}>{t.cacheSizeLabel}</div>
           <div className={`text-lg font-bold ${textPrimary}`}>{formatBytes(usage.cache_size_bytes)}</div>
         </div>
       </div>
       {usage.active_model_id && (
         <div className="mt-3 flex items-center justify-between">
-          <span className={`text-xs ${textSecondary}`}>当前模型:</span>
+          <span className={`text-xs ${textSecondary}`}>{t.currentModelLabel}:</span>
           <span className="text-xs font-mono text-emerald-500">{usage.active_model_id}</span>
         </div>
       )}
@@ -252,7 +257,7 @@ export function ModelManagerPage({ onClose, isDarkMode }: ModelManagerPageProps)
               <h4 className={`font-semibold truncate ${textPrimary}`}>{model.name}</h4>
               {isActive && (
                 <span className="px-1.5 py-0.5 rounded text-xs bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300">
-                  运行中
+                  {t.runningStatus}
                 </span>
               )}
             </div>
@@ -272,7 +277,7 @@ export function ModelManagerPage({ onClose, isDarkMode }: ModelManagerPageProps)
                 disabled={actionLoading !== null}
                 className="px-3 py-1.5 rounded-lg text-xs font-medium bg-emerald-500 text-white hover:bg-emerald-600 disabled:opacity-50"
               >
-                {actionLoading === model.id ? "加载中..." : "加载"}
+                {actionLoading === model.id ? t.loadingModel : t.loadModel}
               </button>
             )}
             {isActive && (
@@ -281,7 +286,7 @@ export function ModelManagerPage({ onClose, isDarkMode }: ModelManagerPageProps)
                 disabled={actionLoading !== null}
                 className="px-3 py-1.5 rounded-lg text-xs font-medium border border-amber-500 text-amber-500 hover:bg-amber-50 dark:hover:bg-amber-900/20 disabled:opacity-50"
               >
-                {actionLoading === "unload" ? "卸载中..." : "卸载"}
+                {actionLoading === "unload" ? t.unloadingModel : t.unloadModel}
               </button>
             )}
             {!isActive && model.state !== "Downloading" && (
@@ -290,7 +295,7 @@ export function ModelManagerPage({ onClose, isDarkMode }: ModelManagerPageProps)
                 disabled={actionLoading !== null}
                 className="px-3 py-1.5 rounded-lg text-xs font-medium border border-red-500 text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 disabled:opacity-50"
               >
-                删除
+                {t.deleteModel}
               </button>
             )}
           </div>
@@ -300,7 +305,7 @@ export function ModelManagerPage({ onClose, isDarkMode }: ModelManagerPageProps)
 
         {/* 文件列表 */}
         <div className="mt-3 pt-3 border-t border-dashed border-slate-200 dark:border-slate-700">
-          <div className={`text-xs font-medium mb-2 ${textSecondary}`}>文件状态</div>
+          <div className={`text-xs font-medium mb-2 ${textSecondary}`}>{t.fileStatusLabel}</div>
           <div className="grid grid-cols-2 gap-1">
             {model.files.map((file) => (
               <div key={file.name} className="flex items-center gap-1.5 text-xs">
@@ -338,12 +343,12 @@ export function ModelManagerPage({ onClose, isDarkMode }: ModelManagerPageProps)
               <h4 className={`font-semibold truncate ${textPrimary}`}>{model.name}</h4>
               {model.is_recommended && (
                 <span className="px-1.5 py-0.5 rounded text-xs bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-300">
-                  推荐
+                  {t.recommended}
                 </span>
               )}
               {isLocal && (
                 <span className="px-1.5 py-0.5 rounded text-xs bg-slate-100 text-slate-600 dark:bg-slate-700 dark:text-slate-300">
-                  已下载
+                  {t.downloaded}
                 </span>
               )}
             </div>
@@ -351,9 +356,9 @@ export function ModelManagerPage({ onClose, isDarkMode }: ModelManagerPageProps)
             <p className={`text-xs mt-1 ${textSecondary}`}>{model.description}</p>
             <div className="flex items-center gap-3 mt-2">
               <span className={`text-xs ${textSecondary}`}>{formatBytes(model.size)}</span>
-              <span className={`text-xs ${textSecondary}`}>{model.downloads.toLocaleString()} 下载</span>
+              <span className={`text-xs ${textSecondary}`}>{model.downloads.toLocaleString()} {t.downloadsCount}</span>
               {model.supports_en_zh && (
-                <span className="text-xs text-emerald-500">支持中英</span>
+                <span className="text-xs text-emerald-500">{t.supportsEnZh}</span>
               )}
             </div>
           </div>
@@ -367,11 +372,11 @@ export function ModelManagerPage({ onClose, isDarkMode }: ModelManagerPageProps)
                   isDarkMode ? "bg-purple-600 hover:bg-purple-500" : "bg-blue-600 hover:bg-blue-500"
                 }`}
               >
-                下载
+                {t.downloadModel}
               </button>
             )}
             {isDownloading && (
-              <span className="px-3 py-1.5 text-xs text-blue-500">下载中...</span>
+              <span className="px-3 py-1.5 text-xs text-blue-500">{t.downloadingModel}</span>
             )}
           </div>
         </div>
@@ -386,9 +391,9 @@ export function ModelManagerPage({ onClose, isDarkMode }: ModelManagerPageProps)
       {/* 头部 */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className={`text-2xl font-bold ${textPrimary}`}>模型管理</h1>
+          <h1 className={`text-2xl font-bold ${textPrimary}`}>{t.modelManager}</h1>
           <p className={`text-sm mt-1 ${textSecondary}`}>
-            下载、加载和管理翻译模型，监控资源占用
+            {t.modelManagerDesc}
           </p>
         </div>
         <div className="flex gap-3">
@@ -397,7 +402,7 @@ export function ModelManagerPage({ onClose, isDarkMode }: ModelManagerPageProps)
             disabled={loading || loadingHf}
             className={`px-4 py-2 rounded-xl text-sm font-semibold transition-colors border ${borderClass} ${textSecondary} hover:bg-slate-50 dark:hover:bg-slate-800`}
           >
-            {loading || loadingHf ? "刷新中..." : "刷新"}
+            {loading || loadingHf ? t.refreshing : t.refresh}
           </button>
           <button
             onClick={onClose}
@@ -405,7 +410,7 @@ export function ModelManagerPage({ onClose, isDarkMode }: ModelManagerPageProps)
               isDarkMode ? "bg-transparent border-slate-600 text-slate-300 hover:bg-slate-800" : "bg-white border-slate-200 text-slate-600 hover:bg-slate-50"
             }`}
           >
-            返回设置
+            {t.backToSettings}
           </button>
         </div>
       </div>
@@ -418,7 +423,7 @@ export function ModelManagerPage({ onClose, isDarkMode }: ModelManagerPageProps)
       )}
 
       {loading && !status ? (
-        <div className={`p-8 text-center ${textSecondary}`}>加载中...</div>
+        <div className={`p-8 text-center ${textSecondary}`}>{t.loadingHint}</div>
       ) : status ? (
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {/* 左侧：资源监控 */}
@@ -427,13 +432,13 @@ export function ModelManagerPage({ onClose, isDarkMode }: ModelManagerPageProps)
 
             {/* 快速操作 */}
             <div className={`p-4 rounded-xl border ${cardClass}`}>
-              <h3 className={`text-sm font-semibold mb-3 ${textPrimary}`}>快速操作</h3>
+              <h3 className={`text-sm font-semibold mb-3 ${textPrimary}`}>{t.quickActions}</h3>
               <div className="space-y-2">
                 <button
                   onClick={() => invoke("clear_translation_cache")}
                   className={`w-full px-3 py-2 rounded-lg text-xs border ${borderClass} ${textSecondary} hover:bg-slate-50 dark:hover:bg-slate-700`}
                 >
-                  清空翻译缓存
+                  {t.clearTranslationCache}
                 </button>
                 {status.active_model_id && (
                   <button
@@ -441,7 +446,7 @@ export function ModelManagerPage({ onClose, isDarkMode }: ModelManagerPageProps)
                     disabled={actionLoading !== null}
                     className="w-full px-3 py-2 rounded-lg text-xs border border-amber-500 text-amber-500 hover:bg-amber-50 dark:hover:bg-amber-900/20 disabled:opacity-50"
                   >
-                    卸载当前模型
+                    {t.unloadCurrentModel}
                   </button>
                 )}
               </div>
@@ -453,7 +458,7 @@ export function ModelManagerPage({ onClose, isDarkMode }: ModelManagerPageProps)
             {/* 已下载的模型 */}
             <div>
               <h3 className={`text-lg font-semibold mb-4 ${textPrimary}`}>
-                本地模型 ({status.local_models.length})
+                {t.localModels} ({status.local_models.length})
               </h3>
               {status.local_models.length > 0 ? (
                 <div className="space-y-3">
@@ -461,7 +466,7 @@ export function ModelManagerPage({ onClose, isDarkMode }: ModelManagerPageProps)
                 </div>
               ) : (
                 <div className={`p-6 rounded-xl border ${borderClass} text-center ${textSecondary}`}>
-                  暂无本地模型，请从下方列表下载
+                  {t.noLocalModels}
                 </div>
               )}
             </div>
@@ -469,11 +474,11 @@ export function ModelManagerPage({ onClose, isDarkMode }: ModelManagerPageProps)
             {/* 可用模型 */}
             <div>
               <h3 className={`text-lg font-semibold mb-4 ${textPrimary}`}>
-                可用模型 {loadingHf ? "(加载中...)" : `(${status.available_models.length})`}
+                {t.availableModels} {loadingHf ? `(${t.loadingHint})` : `(${status.available_models.length})`}
               </h3>
               {loadingHf && status.available_models.length === 0 ? (
                 <div className={`p-6 rounded-xl border ${borderClass} text-center ${textSecondary}`}>
-                  正在从 HuggingFace 获取模型列表...
+                  {t.loadingModelsFromHf}
                 </div>
               ) : status.available_models.length > 0 ? (
                 <div className="space-y-3">
@@ -481,7 +486,7 @@ export function ModelManagerPage({ onClose, isDarkMode }: ModelManagerPageProps)
                 </div>
               ) : (
                 <div className={`p-6 rounded-xl border ${borderClass} text-center ${textSecondary}`}>
-                  无法获取模型列表，请检查网络连接
+                  {t.cannotFetchModels}
                 </div>
               )}
             </div>

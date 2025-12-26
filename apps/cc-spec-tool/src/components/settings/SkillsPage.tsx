@@ -9,6 +9,7 @@ import type {
   SkillMetadata,
   SkillBody,
 } from "../../types/skills";
+import type { translations } from "../../types/viewer";
 import { Icons } from "../icons/Icons";
 import { ProjectSkillsPanel } from "./ProjectSkillsPanel";
 import { renderMarkdown } from "../../utils/markdown";
@@ -17,6 +18,7 @@ interface SkillsPageProps {
   onClose: () => void;
   isDarkMode: boolean;
   currentProjectPath?: string | null;
+  t: typeof translations["zh"];
 }
 
 // Skill 类型标签颜色映射
@@ -36,7 +38,7 @@ const skillTypeLabels: Record<string, string> = {
   execution: "执行",
 };
 
-export function SkillsPage({ onClose, isDarkMode, currentProjectPath }: SkillsPageProps) {
+export function SkillsPage({ onClose, isDarkMode, currentProjectPath, t }: SkillsPageProps) {
   const [config, setConfig] = useState<ToolsConfig | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -481,6 +483,7 @@ export function SkillsPage({ onClose, isDarkMode, currentProjectPath }: SkillsPa
             <ProjectSkillsPanel
               projectPath={currentProjectPath || null}
               isDarkMode={isDarkMode}
+              t={t}
             />
           </div>
 

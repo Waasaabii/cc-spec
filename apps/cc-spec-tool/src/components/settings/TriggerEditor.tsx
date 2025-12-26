@@ -3,6 +3,7 @@
 import { useState, useCallback, useEffect } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import type { Skill, SkillTrigger, MatchResult, SkillMatch } from "../../types/skills";
+import type { translations } from "../../types/viewer";
 import { Icons } from "../icons/Icons";
 
 interface TriggerEditorProps {
@@ -10,9 +11,10 @@ interface TriggerEditorProps {
   isDarkMode: boolean;
   onSave: (skill: Skill) => Promise<void>;
   onClose: () => void;
+  t: typeof translations['zh']; // 翻译对象
 }
 
-export function TriggerEditor({ skill, isDarkMode, onSave, onClose }: TriggerEditorProps) {
+export function TriggerEditor({ skill, isDarkMode, onSave, onClose, t }: TriggerEditorProps) {
   const [keywords, setKeywords] = useState<string[]>(skill.triggers?.keywords || []);
   const [patterns, setPatterns] = useState<string[]>(skill.triggers?.patterns || []);
   const [newKeyword, setNewKeyword] = useState("");
@@ -44,7 +46,7 @@ export function TriggerEditor({ skill, isDarkMode, onSave, onClose }: TriggerEdi
     const trimmed = newKeyword.trim();
     if (!trimmed) return;
     if (keywords.includes(trimmed)) {
-      setError("关键词已存在");
+      setError(t.keywordExists);
       return;
     }
     setKeywords([...keywords, trimmed]);
@@ -72,11 +74,11 @@ export function TriggerEditor({ skill, isDarkMode, onSave, onClose }: TriggerEdi
     const trimmed = newPattern.trim();
     if (!trimmed) return;
     if (!validatePattern(trimmed)) {
-      setPatternError("无效的正则表达式");
+      setPatternError(t.invalidRegex);
       return;
     }
     if (patterns.includes(trimmed)) {
-      setPatternError("模式已存在");
+      setPatternError(t.patternExists);
       return;
     }
     setPatterns([...patterns, trimmed]);
@@ -205,7 +207,7 @@ export function TriggerEditor({ skill, isDarkMode, onSave, onClose }: TriggerEdi
                 value={newKeyword}
                 onChange={(e) => setNewKeyword(e.target.value)}
                 onKeyDown={(e) => e.key === "Enter" && handleAddKeyword()}
-                placeholder="输入关键词，按回车添加"
+                placeholder={t.enterKeyword}
                 className={inputClass}
               />
               <button

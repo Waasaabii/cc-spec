@@ -238,7 +238,7 @@ export function ProjectPage({
           </section>
         </div>
       ) : activeTab === "skills" ? (
-        <ProjectSkillsPanel projectPath={project.path} isDarkMode={isDark} />
+        <ProjectSkillsPanel projectPath={project.path} isDarkMode={isDark} t={t} />
       ) : activeTab === "codex" ? (
         <ProjectCodexPanel projectPath={project.path} isDarkMode={isDark} t={t} />
       ) : activeTab === "runs" ? (
