@@ -138,8 +138,7 @@ export function ProjectPage({
             </button>
             <button
               onClick={() => onLaunchClaudeTerminal()}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold transition-colors text-white hover:brightness-110"
-              style={{ backgroundColor: "#DA7756" }}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold transition-colors bg-[var(--accent)] text-white hover:brightness-110"
             >
               <Icons.Terminal />
               {t.openClaudeTerminal || "打开 Claude 终端"}

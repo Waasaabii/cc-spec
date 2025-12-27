@@ -26,6 +26,7 @@ export function RunCard({ run, lang, t, theme, sessions, isCompact = false }: Ru
     const [idCopied, setIdCopied] = useState(false);
     const [isStopping, setIsStopping] = useState(false);
     const [isLaunching, setIsLaunching] = useState(false);
+    const [terminalError, setTerminalError] = useState<string | null>(null);
     const [bgImage] = useState(() => {
         if (BG_IMAGES.length === 0) return "";
         const index = Math.floor(Math.random() * BG_IMAGES.length);
@@ -87,13 +88,23 @@ export function RunCard({ run, lang, t, theme, sessions, isCompact = false }: Ru
     const handleLaunchTerminal = async () => {
         if (!canLaunchTerminal || isLaunching) return;
         setIsLaunching(true);
+        setTerminalError(null);
         try {
+            const ready = await invoke<boolean>("check_index_exists", { projectPath: run.projectRoot });
+            if (!ready) {
+                setTerminalError(lang === "zh"
+                    ? "项目未初始化：请先在 tool 中完成 Bootstrap + KB 初始化（IndexPrompt）"
+                    : "Project not initialized: please complete Bootstrap + KB (IndexPrompt) in the tool first."
+                );
+                return;
+            }
             await invoke("launch_claude_terminal", {
                 projectPath: run.projectRoot,
                 sessionId: run.sessionId ?? null,
             });
         } catch (err) {
             console.error("launch_claude_terminal failed", err);
+            setTerminalError(String(err));
         } finally {
             setIsLaunching(false);
         }
@@ -187,6 +198,14 @@ export function RunCard({ run, lang, t, theme, sessions, isCompact = false }: Ru
                         {copied ? <Icons.Check /> : <Icons.Copy />}
                     </button>
                 </div>
+                {terminalError && (
+                    <div className={`mt-2 text-[11px] px-2 py-1.5 rounded-lg border break-words ${theme === "dark"
+                        ? "bg-rose-500/10 border-rose-500/20 text-rose-300"
+                        : "bg-rose-50 border-rose-200 text-rose-700"
+                        }`}>
+                        {terminalError}
+                    </div>
+                )}
             </div>
 
             {/* Terminal View with Background */}

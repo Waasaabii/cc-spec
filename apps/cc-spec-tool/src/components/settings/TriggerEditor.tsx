@@ -213,8 +213,8 @@ export function TriggerEditor({ skill, isDarkMode, onSave, onClose, t }: Trigger
               <button
                 onClick={handleAddKeyword}
                 className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${isDarkMode
-                    ? "bg-purple-600 text-white hover:bg-purple-500"
-                    : "bg-blue-600 text-white hover:bg-blue-500"
+                    ? "bg-[var(--accent)] text-white hover:brightness-110"
+                    : "bg-[var(--accent)] text-white hover:brightness-110"
                   }`}
               >
                 添加
@@ -265,8 +265,8 @@ export function TriggerEditor({ skill, isDarkMode, onSave, onClose, t }: Trigger
               <button
                 onClick={handleAddPattern}
                 className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${isDarkMode
-                    ? "bg-purple-600 text-white hover:bg-purple-500"
-                    : "bg-blue-600 text-white hover:bg-blue-500"
+                    ? "bg-[var(--accent)] text-white hover:brightness-110"
+                    : "bg-[var(--accent)] text-white hover:brightness-110"
                   }`}
               >
                 添加
@@ -398,9 +398,7 @@ export function TriggerEditor({ skill, isDarkMode, onSave, onClose, t }: Trigger
               disabled={saving}
               className={`px-4 py-2 rounded-xl text-sm font-semibold text-white shadow-md transition-all active:scale-95 ${saving
                   ? "bg-slate-500 cursor-wait"
-                  : isDarkMode
-                    ? "bg-purple-600 hover:bg-purple-500"
-                    : "bg-blue-600 hover:bg-blue-500"
+                  : "bg-[var(--accent)] hover:brightness-110"
                 }`}
             >
               {saving ? "保存中..." : "保存修改"}

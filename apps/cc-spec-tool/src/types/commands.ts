@@ -36,12 +36,12 @@ export interface CommandsInstallResult {
  * Commands 列表
  */
 export const COMMAND_NAMES = [
-    "cc-spec-specify",
-    "cc-spec-clarify",
-    "cc-spec-plan",
-    "cc-spec-apply",
-    "cc-spec-accept",
-    "cc-spec-archive",
+    "cc-spec:specify",
+    "cc-spec:clarify",
+    "cc-spec:plan",
+    "cc-spec:apply",
+    "cc-spec:accept",
+    "cc-spec:archive",
 ] as const;
 
 export type CommandName = typeof COMMAND_NAMES[number];
@@ -50,12 +50,12 @@ export type CommandName = typeof COMMAND_NAMES[number];
  * Command 阶段映射
  */
 export const COMMAND_STAGE_MAP: Record<CommandName, string> = {
-    "cc-spec-specify": "specify",
-    "cc-spec-clarify": "clarify",
-    "cc-spec-plan": "plan",
-    "cc-spec-apply": "apply",
-    "cc-spec-accept": "accept",
-    "cc-spec-archive": "archive",
+    "cc-spec:specify": "specify",
+    "cc-spec:clarify": "clarify",
+    "cc-spec:plan": "plan",
+    "cc-spec:apply": "apply",
+    "cc-spec:accept": "accept",
+    "cc-spec:archive": "archive",
 };
 
 /**
@@ -81,45 +81,45 @@ export function getCommandUsageInfo(lang: Language): CommandUsageInfo[] {
     const t = translations[lang];
     return [
         {
-            name: "cc-spec-specify",
+            name: "cc-spec:specify",
             stage: "specify",
             description: t.cmdSpecifyDesc,
-            example: "/cc-spec-specify 实现用户登录功能",
+            example: "/cc-spec:specify 实现用户登录功能",
             tips: [t.cmdSpecifyTip1, t.cmdSpecifyTip2, t.cmdSpecifyTip3],
         },
         {
-            name: "cc-spec-clarify",
+            name: "cc-spec:clarify",
             stage: "clarify",
             description: t.cmdClarifyDesc,
-            example: "/cc-spec-clarify",
+            example: "/cc-spec:clarify",
             tips: [t.cmdClarifyTip1, t.cmdClarifyTip2, t.cmdClarifyTip3],
         },
         {
-            name: "cc-spec-plan",
+            name: "cc-spec:plan",
             stage: "plan",
             description: t.cmdPlanDesc,
-            example: "/cc-spec-plan",
+            example: "/cc-spec:plan",
             tips: [t.cmdPlanTip1, t.cmdPlanTip2, t.cmdPlanTip3],
         },
         {
-            name: "cc-spec-apply",
+            name: "cc-spec:apply",
             stage: "apply",
             description: t.cmdApplyDesc,
-            example: "/cc-spec-apply W1-T1",
+            example: "/cc-spec:apply W1-T1",
             tips: [t.cmdApplyTip1, t.cmdApplyTip2, t.cmdApplyTip3],
         },
         {
-            name: "cc-spec-accept",
+            name: "cc-spec:accept",
             stage: "accept",
             description: t.cmdAcceptDesc,
-            example: "/cc-spec-accept",
+            example: "/cc-spec:accept",
             tips: [t.cmdAcceptTip1, t.cmdAcceptTip2, t.cmdAcceptTip3],
         },
         {
-            name: "cc-spec-archive",
+            name: "cc-spec:archive",
             stage: "archive",
             description: t.cmdArchiveDesc,
-            example: "/cc-spec-archive",
+            example: "/cc-spec:archive",
             tips: [t.cmdArchiveTip1, t.cmdArchiveTip2, t.cmdArchiveTip3],
         },
     ];

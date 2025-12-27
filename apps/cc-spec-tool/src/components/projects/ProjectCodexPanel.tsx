@@ -334,7 +334,7 @@ export function ProjectCodexPanel({
               <button
                 onClick={() => void sendPrompt()}
                 disabled={sending || !selectedSessionId || !prompt.trim()}
-                className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold transition-colors ${isDarkMode ? "bg-purple-600 text-white hover:bg-purple-500 disabled:opacity-60" : "bg-orange-500 text-white hover:bg-orange-600 disabled:opacity-60"}`}
+                className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold transition-colors ${isDarkMode ? "bg-[var(--accent)] text-white hover:brightness-110 disabled:opacity-60" : "bg-[var(--accent)] text-white hover:brightness-110 disabled:opacity-60"}`}
               >
                 <Icons.Send />
                 {sending ? (t.loading || "发送中") : (t.send || "发送")}

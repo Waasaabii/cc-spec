@@ -44,7 +44,7 @@ cc-spec apply $ARGUMENTS
 
 - 成功后执行验收：
   ```bash
-  cc-spec checklist $ARGUMENTS
+  cc-spec accept $ARGUMENTS
   ```
 """,
         ]
@@ -54,11 +54,10 @@ cc-spec apply $ARGUMENTS
             "tasks.yaml 中本次可执行任务已更新为 completed/failed",
             "失败时可用 `cc-spec apply --resume` 继续",
             "KB 已在 apply 过程中增量更新，并在成功后 compact",
-            "下一步已指向 checklist",
+            "下一步已指向 accept",
         ]
 
     def get_guidelines(self, ctx: CommandTemplateContext) -> str:
         return """- Claude 只编排：不要直接改代码/改 tasks.yaml
 - 任务执行的上下文来自 KB；不要在 prompt 里塞大段文件全文
 """.strip()
-

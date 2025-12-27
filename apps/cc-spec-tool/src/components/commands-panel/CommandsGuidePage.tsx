@@ -127,7 +127,7 @@ export function CommandsGuidePage({ onClose, isDarkMode }: CommandsGuidePageProp
                     <div>
                         <h3 className={`text-sm font-semibold mb-2 ${textPrimary}`}>如何开始使用？</h3>
                         <p className={`text-sm ${textSecondary}`}>
-                            首先确保已安装 Commands 到项目。在 Claude Code 中输入 <code className={`px-1.5 py-0.5 rounded ${isDarkMode ? "bg-slate-700" : "bg-slate-100"}`}>/cc-spec-specify</code> 开始描述需求，系统将引导您完成整个工作流。
+                            首先确保已完成项目初始化。在 Claude Code 中输入 <code className={`px-1.5 py-0.5 rounded ${isDarkMode ? "bg-slate-700" : "bg-slate-100"}`}>/cc-spec:specify</code> 开始描述需求，系统将引导您完成整个工作流。
                         </p>
                     </div>
                     <div>
@@ -139,7 +139,7 @@ export function CommandsGuidePage({ onClose, isDarkMode }: CommandsGuidePageProp
                     <div>
                         <h3 className={`text-sm font-semibold mb-2 ${textPrimary}`}>任务执行失败怎么办？</h3>
                         <p className={`text-sm ${textSecondary}`}>
-                            使用 <code className={`px-1.5 py-0.5 rounded ${isDarkMode ? "bg-slate-700" : "bg-slate-100"}`}>/cc-spec-clarify</code> 审查任务结果，可以标记返工项让系统重新执行。
+                            使用 <code className={`px-1.5 py-0.5 rounded ${isDarkMode ? "bg-slate-700" : "bg-slate-100"}`}>/cc-spec:clarify</code> 审查任务结果，可以标记返工项让系统重新执行。
                         </p>
                     </div>
                     <div>

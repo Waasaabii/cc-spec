@@ -235,7 +235,7 @@ export function BodyEditor({ skill, isDarkMode, onSave, onClose }: BodyEditorPro
               disabled={saving || !hasChanges}
               className={`px-4 py-2 rounded-xl text-sm font-semibold transition-colors ${saving || !hasChanges
                 ? "bg-slate-200 dark:bg-slate-700 text-slate-400 cursor-not-allowed"
-                : "bg-purple-500 text-white hover:bg-purple-600"
+                : "bg-[var(--accent)] text-white hover:brightness-110"
                 }`}
             >
               {saving ? "保存中..." : "保存"}

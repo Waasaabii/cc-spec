@@ -61,6 +61,7 @@
   - `kb context`：输出格式化上下文
 <!-- CC-SPEC:END -->
 
+
 # AGENTS 全局配置
 
 > 版本: 3.6

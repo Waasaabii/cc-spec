@@ -203,6 +203,11 @@ export default function App() {
         setProjectLoading(true);
         setProjectError(null);
         try {
+            const ready = await invoke<boolean>("check_index_exists", { projectPath: currentProject.path });
+            if (!ready) {
+                setShowIndexPrompt(true);
+                return;
+            }
             await invoke("launch_claude_terminal", { projectPath: currentProject.path });
         } catch (error) {
             setProjectError(error instanceof Error ? error.message : String(error));
@@ -305,17 +310,13 @@ export default function App() {
     useEffect(() => {
         let active = true;
         const checkIndexPrompt = async () => {
-            // 只在用户主动选择项目时才显示弹窗，启动时自动恢复的项目不弹窗
-            if (!currentProject?.path || !userSelectedProject) {
+            if (!currentProject?.path) {
                 if (active) setShowIndexPrompt(false);
                 return;
             }
             try {
-                const [exists, dismissed] = await Promise.all([
-                    invoke<boolean>("check_index_exists", { projectPath: currentProject.path }),
-                    invoke<boolean>("get_index_settings_prompt_dismissed", { projectPath: currentProject.path }),
-                ]);
-                if (active) setShowIndexPrompt(!exists && !dismissed);
+                const exists = await invoke<boolean>("check_index_exists", { projectPath: currentProject.path });
+                if (active) setShowIndexPrompt(!exists);
             } catch {
                 if (active) setShowIndexPrompt(false);
             }
@@ -324,7 +325,7 @@ export default function App() {
         return () => {
             active = false;
         };
-    }, [currentProject?.path, userSelectedProject]);
+    }, [currentProject?.path]);
 
     useEffect(() => { scheduleHistorySave(); }, [runs, scheduleHistorySave]);
     useEffect(() => () => { if (saveTimerRef.current) clearTimeout(saveTimerRef.current); }, []);
@@ -712,7 +713,6 @@ export default function App() {
                                     onEnter={handleEnterProject}
                                     onRemove={handleRemoveProject}
                                     onRefresh={loadProjects}
-                                    onLaunchClaudeTerminal={handleLaunchClaudeTerminal}
                                 />
                             </div>
                         ) : activeView === "project" ? (

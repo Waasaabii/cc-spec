@@ -16,7 +16,6 @@ type ProjectPanelTranslations = {
     enterProject: string;
     removeProject: string;
     noProjects: string;
-    openClaudeTerminal: string;
     loading: string;
 };
 
@@ -31,7 +30,6 @@ type ProjectPanelProps = {
     onEnter: (projectId: string) => Promise<void> | void;
     onRemove: (projectId: string) => Promise<void> | void;
     onRefresh: () => Promise<void> | void;
-    onLaunchClaudeTerminal: () => Promise<void> | void;
 };
 
 export function ProjectPanel({
@@ -45,7 +43,6 @@ export function ProjectPanel({
     onEnter,
     onRemove,
     onRefresh,
-    onLaunchClaudeTerminal,
 }: ProjectPanelProps) {
     const [isDragging, setIsDragging] = useState(false);
 
@@ -140,7 +137,7 @@ export function ProjectPanel({
                     <button
                         onClick={handleDirectImport}
                         disabled={loading}
-                        className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold transition-colors ${theme === "dark" ? "bg-purple-600 text-white hover:bg-purple-500 disabled:opacity-60" : "bg-orange-500 text-white hover:bg-orange-600 disabled:opacity-60"}`}
+                        className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold transition-colors ${theme === "dark" ? "bg-[var(--accent)] text-white hover:brightness-110 disabled:opacity-60" : "bg-[var(--accent)] text-white hover:brightness-110 disabled:opacity-60"}`}
                     >
                         <Icons.Plus />
                         {t.importProject}
@@ -254,12 +251,12 @@ export function ProjectPanel({
                             <div className={`mt-2 text-[10px] font-mono break-all ${theme === "dark" ? "text-slate-500" : "text-slate-400"}`}>{currentProject.path}</div>
                             <div className="mt-4">
                                 <button
-                                    onClick={() => onLaunchClaudeTerminal()}
+                                    onClick={() => onEnter(currentProject.id)}
                                     disabled={loading}
-                                    className={`inline-flex items-center gap-1.5 px-4 py-2.5 rounded-xl text-xs font-semibold transition-colors w-full justify-center ${theme === "dark" ? "bg-purple-600 text-white hover:bg-purple-500 disabled:opacity-60" : "bg-orange-500 text-white hover:bg-orange-600 disabled:opacity-60"}`}
+                                    className={`inline-flex items-center gap-1.5 px-4 py-2.5 rounded-xl text-xs font-semibold transition-colors w-full justify-center ${theme === "dark" ? "bg-[var(--accent)] text-white hover:brightness-110 disabled:opacity-60" : "bg-[var(--accent)] text-white hover:brightness-110 disabled:opacity-60"}`}
                                 >
-                                    <Icons.Terminal />
-                                    {t.openClaudeTerminal}
+                                    <Icons.ArrowRight />
+                                    {t.enterProject}
                                 </button>
                             </div>
                         </div>

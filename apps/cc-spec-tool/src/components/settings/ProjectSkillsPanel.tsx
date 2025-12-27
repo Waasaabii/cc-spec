@@ -160,8 +160,8 @@ export function ProjectSkillsPanel({ projectPath, isDarkMode, t }: ProjectSkills
               disabled={scanning}
               className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
                 isDarkMode
-                  ? "bg-purple-600 text-white hover:bg-purple-500"
-                  : "bg-blue-600 text-white hover:bg-blue-500"
+                  ? "bg-[var(--accent)] text-white hover:brightness-110"
+                  : "bg-[var(--accent)] text-white hover:brightness-110"
               } disabled:opacity-50`}
             >
               {scanning ? t.scanning : t.scanProjectDir}

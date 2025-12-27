@@ -369,7 +369,7 @@ export function ModelManagerPage({ onClose, isDarkMode, t }: ModelManagerPagePro
                 onClick={() => handleDownload(model.id)}
                 disabled={actionLoading !== null}
                 className={`px-3 py-1.5 rounded-lg text-xs font-medium text-white shadow-sm transition-colors disabled:opacity-50 ${
-                  isDarkMode ? "bg-purple-600 hover:bg-purple-500" : "bg-blue-600 hover:bg-blue-500"
+                  isDarkMode ? "bg-[var(--accent)] hover:brightness-110" : "bg-[var(--accent)] hover:brightness-110"
                 }`}
               >
                 {t.downloadModel}

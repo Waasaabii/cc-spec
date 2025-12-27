@@ -974,21 +974,49 @@ fn set_settings(settings: ViewerSettings) -> Result<ViewerSettings, String> {
 fn launch_claude_terminal(
     project_path: String,
     session_id: Option<String>,
+    app_handle: tauri::AppHandle,
     state: tauri::State<AppState>,
 ) -> Result<(), String> {
     if project_path.trim().is_empty() {
         return Err("project_path 为空".to_string());
     }
+
+    // 以 `.cc-spec/index/status.json` 作为“初始化已完成”的哨兵文件（与 index.rs 保持一致）。
+    let index_status = std::path::PathBuf::from(&project_path)
+        .join(".cc-spec")
+        .join("index")
+        .join("status.json");
+    if !index_status.exists() {
+        return Err("项目未初始化：请先在 tool 中完成 Bootstrap + KB 初始化（IndexPrompt）".to_string());
+    }
+    let raw = std::fs::read_to_string(&index_status)
+        .map_err(|_| "项目初始化状态不可读：请先在 tool 中完成 Bootstrap + KB 初始化（IndexPrompt）".to_string())?;
+    let value = serde_json::from_str::<serde_json::Value>(&raw)
+        .map_err(|_| "项目初始化状态损坏：请重新执行 Bootstrap + KB 初始化（IndexPrompt）".to_string())?;
+    if !value
+        .get("initialized")
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false)
+    {
+        return Err("项目未初始化完成：请先在 tool 中完成 Bootstrap + KB 初始化（IndexPrompt）".to_string());
+    }
+
     let port = state
         .settings
         .lock()
         .map(|s| s.port)
         .unwrap_or(DEFAULT_PORT);
+
+    // 尝试获取 codex 绝对路径，用于注入到系统终端（确保 Claude 的 Bash 能直接运行 codex）。
+    let settings = load_settings();
+    let codex_bin = get_effective_codex_path(&settings).ok();
     terminal::launch_claude_terminal(
         project_path,
         "127.0.0.1".to_string(),
         port,
         session_id,
+        &app_handle,
+        codex_bin,
     )
 }
 

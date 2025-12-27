@@ -66,7 +66,7 @@ export function CommandsPanel({
                     <button
                         onClick={() => onInstall()}
                         disabled={!canOperate}
-                        className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold transition-colors ${theme === "dark" ? "bg-slate-700 text-slate-100 hover:bg-slate-600 disabled:opacity-60" : "bg-slate-900 text-white hover:bg-slate-800 disabled:opacity-60"}`}
+                        className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold transition-colors ${theme === "dark" ? "bg-[var(--accent)] text-white hover:brightness-110 disabled:opacity-60" : "bg-[var(--accent)] text-white hover:brightness-110 disabled:opacity-60"}`}
                     >
                         <Icons.Plus />
                         {t.commandsInstall}

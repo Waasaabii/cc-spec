@@ -32,20 +32,6 @@ export function IndexPrompt({ projectPath, theme, t, onClose }: IndexPromptProps
         }
     };
 
-    const handleDismiss = async (dontAskAgain: boolean) => {
-        if (dontAskAgain) {
-            try {
-                await invoke("set_index_settings_prompt_dismissed", {
-                    projectPath: projectPath,
-                    dismissed: true,
-                });
-            } catch (err) {
-                console.error("Failed to save dismiss setting:", err);
-            }
-        }
-        onClose();
-    };
-
     const toggleLevel = (level: string) => {
         setSelectedLevels((prev) =>
             prev.includes(level) ? prev.filter((l) => l !== level) : [...prev, level]
@@ -136,34 +122,17 @@ export function IndexPrompt({ projectPath, theme, t, onClose }: IndexPromptProps
                 </div>
 
                 {/* Footer */}
-                <div className={`px-6 py-4 border-t flex items-center justify-between ${theme === "dark" ? "border-slate-700" : "border-slate-200"}`}>
+                <div className={`px-6 py-4 border-t flex items-center justify-end ${theme === "dark" ? "border-slate-700" : "border-slate-200"}`}>
                     <button
-                        onClick={() => handleDismiss(true)}
-                        className={`text-sm ${theme === "dark" ? "text-slate-400 hover:text-slate-300" : "text-slate-500 hover:text-slate-700"}`}
+                        onClick={handleInit}
+                        disabled={isInitializing || selectedLevels.length === 0}
+                        className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${isInitializing || selectedLevels.length === 0
+                            ? "bg-[rgba(218,119,86,0.5)] text-white/70 cursor-not-allowed"
+                            : "bg-[var(--accent)] text-white hover:brightness-110"
+                            }`}
                     >
-                        {t.indexDontAskAgain}
+                        {isInitializing ? t.indexInitializing : t.indexInitialize}
                     </button>
-                    <div className="flex items-center gap-3">
-                        <button
-                            onClick={() => handleDismiss(false)}
-                            className={`px-4 py-2 rounded-lg text-sm font-medium ${theme === "dark"
-                                ? "text-slate-300 hover:bg-slate-700"
-                                : "text-slate-600 hover:bg-slate-100"
-                                }`}
-                        >
-                            {t.indexSkip}
-                        </button>
-                        <button
-                            onClick={handleInit}
-                            disabled={isInitializing || selectedLevels.length === 0}
-                            className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${isInitializing || selectedLevels.length === 0
-                                ? "bg-blue-500/50 text-white/70 cursor-not-allowed"
-                                : "bg-blue-500 text-white hover:bg-blue-600"
-                                }`}
-                        >
-                            {isInitializing ? t.indexInitializing : t.indexInitialize}
-                        </button>
-                    </div>
                 </div>
             </div>
         </div>

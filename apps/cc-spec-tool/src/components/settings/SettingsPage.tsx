@@ -206,7 +206,7 @@ export function SettingsPage({ onClose, isDarkMode, onOpenModelManager, t }: Set
           <button
             onClick={handleSave}
             disabled={saving}
-            className={`px-4 py-2 rounded-xl text-sm font-semibold text-white shadow-md transition-all active:scale-95 ${saving ? "bg-slate-500 cursor-wait" : isDarkMode ? "bg-purple-600 hover:bg-purple-500" : "bg-blue-600 hover:bg-blue-500"}`}
+            className={`px-4 py-2 rounded-xl text-sm font-semibold text-white shadow-md transition-all active:scale-95 ${saving ? "bg-slate-500 cursor-wait" : "bg-[var(--accent)] hover:brightness-110"}`}
           >
             {saving ? t.savingSettings : t.saveSettings}
           </button>
@@ -396,9 +396,7 @@ export function SettingsPage({ onClose, isDarkMode, onOpenModelManager, t }: Set
 
               <button
                 onClick={onOpenModelManager}
-                className={`w-full px-4 py-3 rounded-xl text-sm font-semibold text-white shadow-md transition-all hover:scale-[1.02] active:scale-[0.98] ${
-                  isDarkMode ? "bg-gradient-to-r from-purple-600 to-indigo-600" : "bg-gradient-to-r from-blue-600 to-indigo-600"
-                }`}
+                className="w-full px-4 py-3 rounded-xl text-sm font-semibold text-white shadow-md transition-all hover:scale-[1.02] active:scale-[0.98] bg-[var(--accent)] hover:brightness-110"
               >
                 <div className="flex items-center justify-center gap-2">
                   <Icons.Download />

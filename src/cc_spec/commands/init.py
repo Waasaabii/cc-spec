@@ -12,6 +12,7 @@ from cc_spec.core.command_generator import CC_SPEC_COMMANDS, get_generator
 from cc_spec.core.config import Config, save_config
 from cc_spec.core.standards_renderer import (
     render_agents_md,
+    render_claude_skill_frontmatter,
     render_skill_md,
     write_managed_file,
 )
@@ -175,9 +176,10 @@ def init_command(
 
         agents_md_content = render_agents_md()
         skill_md_content = render_skill_md()
+        skill_frontmatter = render_claude_skill_frontmatter()
 
         write_managed_file(agents_md_path, agents_md_content)
-        write_managed_file(skill_md_path, skill_md_content)
+        write_managed_file(skill_md_path, skill_md_content, preamble=skill_frontmatter)
 
         console.print("[green]?[/green] 已生成/更新 AGENTS.md 与 SKILL.md")
     except Exception as e:

@@ -36,7 +36,7 @@ CC_SPEC_COMMANDS = [
     ("clarify", "审查任务并标记返工"),
     ("plan", "根据提案生成执行计划"),
     ("apply", "使用 SubAgent 执行任务"),
-    ("checklist", "验收并验证任务完成情况"),
+    ("accept", "端到端验收：执行自动化检查，验证功能可用"),
     ("archive", "归档已完成的变更"),
     ("quick-delta", "快速记录简单变更"),
     ("list", "列出变更、任务、规格或归档"),
@@ -51,7 +51,6 @@ COMMAND_TEMPLATES: dict[str, type[CommandTemplate]] = {
     "clarify": ClarifyTemplate,
     "plan": PlanTemplate,
     "apply": ApplyTemplate,
-    "checklist": ChecklistTemplate,
     "quick-delta": QuickDeltaTemplate,
 }
 
