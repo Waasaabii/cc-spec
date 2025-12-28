@@ -11,6 +11,7 @@ from cc_spec.commands import archive as archive_cmd
 from cc_spec.commands import chat as chat_cmd
 from cc_spec.commands import clarify as clarify_cmd
 from cc_spec.commands import context as context_cmd
+from cc_spec.commands import cx as cx_cmd
 from cc_spec.commands import goto as goto_cmd
 from cc_spec.commands import init as init_cmd
 from cc_spec.commands import index as index_cmd
@@ -80,6 +81,9 @@ app.command(name="goto", help="导航到特定变更或任务")(goto_cmd.goto_co
 app.command(name="update", help="更新配置、命令或模板")(update_cmd.update_command)
 app.command(name="chat", help="与Codex进行多轮交互式对话")(chat_cmd.chat_command)
 app.command(name="context", help="输出当前阶段上下文信息")(context_cmd.context_command)
+
+# cx 命令：通过 tool 调用 Codex（子命令组）
+app.add_typer(cx_cmd.app, name="cx", help="通过cc-spec-tool调用Codex")
 
 
 def main() -> None:

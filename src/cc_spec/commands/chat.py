@@ -1,4 +1,8 @@
-"""cc-spec chat: 与 Codex 进行多轮交互式对话。"""
+"""cc-spec chat: 与 Codex 进行多轮交互式对话。
+
+重要：所有 Codex 调用必须通过 cc-spec-tool 进行。
+如果 tool 未运行，命令会直接报错退出。
+"""
 
 from __future__ import annotations
 
@@ -13,8 +17,7 @@ from rich.console import Console
 from rich.panel import Panel
 from rich.prompt import Prompt
 
-from cc_spec.codex.client import CodexClient
-from cc_spec.codex.streaming import get_sse_client
+from cc_spec.codex import ToolClient, get_tool_client
 from cc_spec.utils.files import find_project_root
 
 console = Console()
@@ -129,23 +132,17 @@ def chat_command(
     # 加载上下文
     context = "" if no_context else _load_project_context(project_root)
 
-    client = CodexClient()
-    viewer = get_sse_client(project_root)
+    # 强制使用 ToolClient，如果 tool 未运行则直接报错退出
+    try:
+        client = get_tool_client()
+    except SystemExit as e:
+        console.print(f"[red]{e}[/red]")
+        raise typer.Exit(1)
+
     session_id: str | None = resume if resume else None
     is_first = not resume  # 如果是继续会话，则不是第一轮
 
     interactive = _is_interactive()
-
-    def _send_user_input(text: str) -> None:
-        """发送用户输入到 Viewer。"""
-        if viewer is None:
-            return
-        viewer.publish_event({
-            "type": "codex.user_input",
-            "ts": datetime.now(timezone.utc).isoformat(timespec="seconds"),
-            "session_id": session_id,
-            "text": text,
-        })
 
     def _process_message(user_input: str) -> bool:
         """处理单条消息，返回是否继续。"""
@@ -158,13 +155,10 @@ def chat_command(
                 console.print("[dim]再见！[/dim]")
             return False
 
-        # 发送用户输入到 Viewer
-        _send_user_input(user_input)
-
         # 构建提示
         prompt = _build_prompt(user_input, context, is_first)
 
-        # 调用 Codex
+        # 调用 Codex（通过 ToolClient）
         if interactive:
             console.print("[bold blue]Codex[/bold blue]: ", end="")
         else:
@@ -173,15 +167,26 @@ def chat_command(
         started = time.time()
         result = None
         try:
-            if session_id:
-                result = client.resume(session_id, prompt, project_root)
-            else:
-                result = client.execute(prompt, project_root)
+            # 使用 ToolClient.run_codex，统一处理 execute 和 resume
+            result = client.run_codex(
+                project_path=project_root,
+                prompt=prompt,
+                session_id=session_id,
+            )
 
             # 更新 session_id
             if result.session_id:
                 session_id = result.session_id
 
+        except SystemExit as e:
+            # tool 不可用
+            elapsed = int(time.time() - started)
+            if interactive:
+                console.print(f"\n[red]{e}[/red]")
+            else:
+                print(f"[STATUS] state=error elapsed={elapsed}s session={session_id or 'none'}", flush=True)
+                print(f"[Error] {e}", flush=True)
+            return False  # 退出循环
         except Exception as e:
             elapsed = int(time.time() - started)
             if interactive:

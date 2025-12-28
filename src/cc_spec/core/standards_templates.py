@@ -34,6 +34,8 @@ SKILL_MD_TEMPLATE = """# cc-spec Standards (for Claude)
 ## 工作流程
 {claude.workflow.phases}
 
+{claude.cx_collaboration}
+
 ## 项目编码规范
 {project.coding_rules}
 """
@@ -73,7 +75,7 @@ CLAUDE_ROLE_RULES = [
     "负责在 proposal/tasks 等文档中沉淀需求与约束，供 Codex 执行",
     "不直接编写业务代码，代码实现由 CX (Codex) 完成",
     "负责审核 Codex 的执行结果，处理异常情况",
-    "CX (Codex) 是你的顾问，负责调研和批量执行，通过 `cc-spec chat` 协作",
+    "CX (Codex) 是你的执行伙伴，通过 cc-spec-tool 的 Codex 终端协作",
 ]
 
 CLAUDE_OUTPUTS = [
@@ -119,6 +121,69 @@ CLAUDE_WORKFLOW_PHASES = [
         ],
     },
 ]
+
+
+# ---------------------------------------------------------------------------
+# CX 协作指南（CC 如何调用 CX）
+# ---------------------------------------------------------------------------
+
+CLAUDE_CX_COLLABORATION = """## CX (Codex) 协作
+
+### 何时使用 CX
+
+以下场景应委托给 CX 执行：
+
+| 场景 | 说明 |
+|------|------|
+| **批量代码生成** | 多个文件的功能实现、重复性代码 |
+| **复杂多步骤任务** | 需要长时间运行的实现任务 |
+| **测试编写** | 单元测试、集成测试的批量生成 |
+| **重构任务** | 大范围的代码重构、迁移 |
+
+### 如何调用 CX
+
+**方式 1：通过 cc-spec apply（推荐）**
+
+```bash
+cc-spec apply --change "<变更名称>"
+```
+
+SubAgent 自动：
+- 读取 tasks.yaml 中的任务
+- 注入项目索引和相关文件上下文
+- 并行/串行执行任务
+- 返回执行结果
+
+**方式 2：通过 cc-spec-tool 终端**
+
+1. 打开 cc-spec-tool 桌面应用
+2. 进入项目的 **Codex** tab
+3. 点击 **新建会话** 启动 Codex 终端
+4. 在输入框发送任务提示
+5. Codex 在独立终端窗口中执行
+
+### 结果获取
+
+- **cc-spec apply**：结果自动写入 tasks.yaml，CC 检查任务状态
+- **终端模式**：订阅 `codex.managed.turn_complete` 事件，或查看会话的 `message` 字段
+
+### CC 与 CX 分工
+
+```
+CC (Claude Code)          CX (Codex)
+├─ 理解需求               ├─ 调研分析
+├─ 拍板方案               ├─ 批量代码生成
+├─ 编写文档               ├─ 测试编写
+├─ 质量把控               ├─ 重复性实现
+└─ 快速修复               └─ 大范围重构
+```
+
+### 注意事项
+
+- **不要直接编写业务代码**：CC 负责决策和文档，代码实现交给 CX
+- **审核 CX 结果**：CX 完成后，CC 需验证功能端到端可用
+- **处理失败**：CX 执行失败时，CC 分析原因并决定重试或调整方案
+"""
 
 
 CODEX_ROLE_RULES = [

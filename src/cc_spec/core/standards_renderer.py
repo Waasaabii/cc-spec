@@ -7,6 +7,7 @@ from typing import Iterable
 
 from .standards_templates import (
     AGENTS_MD_TEMPLATE,
+    CLAUDE_CX_COLLABORATION,
     CLAUDE_FORBIDDEN,
     CLAUDE_OUTPUTS,
     CLAUDE_ROLE_RULES,
@@ -43,6 +44,7 @@ def render_skill_md(*, project_coding_rules: Iterable[str] | None = None) -> str
         "claude.outputs.artifacts": format_artifacts(CLAUDE_OUTPUTS),
         "claude.outputs.forbidden": format_rules(CLAUDE_FORBIDDEN),
         "claude.workflow.phases": format_workflow(CLAUDE_WORKFLOW_PHASES),
+        "claude.cx_collaboration": CLAUDE_CX_COLLABORATION.strip(),
         "project.coding_rules": _render_project_rules(project_coding_rules),
     }
     return _apply_template(SKILL_MD_TEMPLATE, mapping).strip() + "\n"

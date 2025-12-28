@@ -236,6 +236,49 @@ def init_command(
             f"[yellow]⚠[/yellow] 警告: 复制模板失败: {e}"
         )
 
+    console.print()
+
+    # 步骤3.5: 复制 bundled command skills 到 .claude/commands/
+    # 注意：这些是命令关联的 skill（如 cc-spec-accept/SKILL.md），不是独立的 skills
+    console.print("[cyan]正在复制命令 Skills 文件...[/cyan]")
+
+    try:
+        import shutil
+
+        bundled_templates_dir = Path(__file__).parent.parent / "templates"
+        bundled_skills_dir = bundled_templates_dir / "skills"
+
+        if bundled_skills_dir.exists():
+            # 命令关联的 skills 放在 .claude/commands/ 下
+            dest_commands_dir = project_root / ".claude" / "commands"
+            dest_commands_dir.mkdir(parents=True, exist_ok=True)
+
+            skills_count = 0
+            for skill_src_dir in bundled_skills_dir.iterdir():
+                if skill_src_dir.is_dir():
+                    dest_skill_dir = dest_commands_dir / skill_src_dir.name
+                    dest_skill_dir.mkdir(exist_ok=True)
+
+                    # 复制 SKILL.md
+                    skill_md = skill_src_dir / "SKILL.md"
+                    if skill_md.exists():
+                        dest_skill_md = dest_skill_dir / "SKILL.md"
+                        shutil.copy2(skill_md, dest_skill_md)
+                        skills_count += 1
+
+                    # 复制其他文件（如有）
+                    for extra_file in skill_src_dir.glob("*"):
+                        if extra_file.is_file() and extra_file.name != "SKILL.md":
+                            shutil.copy2(extra_file, dest_skill_dir / extra_file.name)
+
+            console.print(f"[green]✓[/green] 已复制 {skills_count} 个命令 Skills 到 .claude/commands/")
+        else:
+            console.print("[dim]未找到 bundled command skills，跳过[/dim]")
+    except Exception as e:
+        console.print(f"[yellow]⚠[/yellow] 警告: 复制命令 Skills 失败: {e}")
+
+    console.print()
+
     # 步骤4: 生成 config.yaml
     console.print("[cyan]正在生成 config.yaml...[/cyan]")
 

@@ -14,7 +14,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-from cc_spec.codex.client import CodexClient
+from cc_spec.codex import ToolClient, get_tool_client
 from cc_spec.codex.models import CodexResult
 from cc_spec.core.config import Config, SubAgentProfile
 from cc_spec.core.lock import LockManager
@@ -274,10 +274,10 @@ class SubAgentExecutor:
         timeout_ms: int = 300000,  # 5 分钟
         config: Config | None = None,
         project_root: Path | None = None,
-        codex: CodexClient | None = None,
-        lock_manager: LockManager | None = None,  
-        cc_spec_root: Path | None = None,  
-        change_summary: ChangeSummary | None = None,  
+        codex: ToolClient | None = None,
+        lock_manager: LockManager | None = None,
+        cc_spec_root: Path | None = None,
+        change_summary: ChangeSummary | None = None,
     ):
         """初始化执行器。
 
@@ -302,7 +302,7 @@ class SubAgentExecutor:
         self.timeout_ms = timeout_ms
         self.config = config
         self.project_root = project_root or _infer_project_root(tasks_md_path)
-        self.codex = codex or CodexClient()
+        self.codex = codex or get_tool_client()
 
         self.change_summary = change_summary
 
@@ -450,15 +450,17 @@ class SubAgentExecutor:
         }
 
     def _run_codex_for_task(self, task: Task, prompt: str, timeout_ms: int) -> CodexResult:
-        """在当前项目根目录下调用 Codex（支持 resume）。"""
-        workdir = self.project_root
+        """在当前项目根目录下调用 Codex（通过 ToolClient）。"""
         session_id = None
         if task.execution_log and task.execution_log.session_id:
             session_id = task.execution_log.session_id
 
-        if session_id:
-            return self.codex.resume(session_id, prompt, workdir, timeout_ms=timeout_ms)
-        return self.codex.execute(prompt, workdir, timeout_ms=timeout_ms)
+        return self.codex.run_codex(
+            project_path=self.project_root,
+            prompt=prompt,
+            session_id=session_id,
+            timeout_ms=timeout_ms,
+        )
 
     def _get_smart_context_for_task(self, task: Task) -> tuple[str | None, int, list[str]]:
         """v0.1.6: 为任务构建智能上下文（失败则降级为 None）。"""
@@ -510,8 +512,8 @@ class SubAgentExecutor:
         
 
         执行策略：
-        - 默认使用 CodexClient.execute()
-        - 若 tasks.yaml 中已记录 session_id，则优先使用 CodexClient.resume()
+        - 使用 ToolClient.run_codex() 通过 cc-spec-tool HTTP API 调用 Codex
+        - 若 tasks.yaml 中已记录 session_id，则传递给 ToolClient 用于会话恢复
         - 由执行器负责更新 tasks.yaml 状态；Codex 只负责代码/文档产出
 
         参数：
