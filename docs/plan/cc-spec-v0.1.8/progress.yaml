@@ -1,0 +1,106 @@
+tasks:
+- id: T01
+  status: completed
+  agent_id: codex
+  started_at: '2025-12-21T01:53:07'
+  completed_at: '2025-12-21T01:53:07'
+  retry_count: 0
+  changed_files:
+  - docs/plan/cc-spec-v0.1.8/base-template.yaml
+  - README.md
+  notes: Clarified docs/plan scope, template_mapping guidance, and SKILL/AGENTS outputs.
+- id: T02
+  status: completed
+  agent_id: codex
+  started_at: '2025-12-21T02:00:52'
+  completed_at: '2025-12-21T02:00:52'
+  retry_count: 0
+  changed_files:
+  - src/cc_spec/commands/init.py
+  notes: Updated init quick-start guidance to show full 8-step workflow including KB/checklist/archive.
+- id: T02B
+  status: completed
+  started_at: '2025-12-20T19:19:55.575446'
+  completed_at: '2025-12-20T19:19:55.575446'
+- id: T02C
+  status: completed
+  started_at: '2025-12-20T19:19:55.575446'
+  completed_at: '2025-12-20T19:19:55.575446'
+- id: T03
+  status: completed
+  started_at: '2025-12-20T23:49:01'
+  completed_at: '2025-12-20T23:49:01'
+- id: T04
+  status: completed
+  started_at: '2025-12-20T23:49:01'
+  completed_at: '2025-12-20T23:49:01'
+- id: T05
+  status: completed
+  agent_id: codex
+  started_at: '2025-12-21T01:01:42'
+  completed_at: '2025-12-21T01:01:42'
+  retry_count: 0
+  changed_files:
+  - src/cc_spec/commands/kb.py
+  - src/cc_spec/rag/pipeline.py
+  notes: Wired kb init/update to config chunking/retrieval + CLI override and output summary.
+- id: T05B
+  status: completed
+  agent_id: codex
+  started_at: '2025-12-21T01:14:03'
+  completed_at: '2025-12-21T01:14:03'
+  retry_count: 0
+  changed_files:
+  - src/cc_spec/commands/apply.py
+  - src/cc_spec/commands/archive.py
+  - src/cc_spec/rag/workflow.py
+  notes: Applied post_task_sync config to apply/archive with smart/full/skip logic.
+- id: T05C
+  status: completed
+  agent_id: codex
+  started_at: '2025-12-21T01:24:51'
+  completed_at: '2025-12-21T01:24:51'
+  retry_count: 0
+  changed_files:
+  - src/cc_spec/commands/apply.py
+  - src/cc_spec/subagent/result_collector.py
+  - src/cc_spec/subagent/task_parser.py
+  notes: Added progress.yaml updates per task with non-blocking writes and v1.3 schema fields.
+- id: T06
+  status: completed
+  agent_id: codex
+  started_at: '2025-12-20T23:49:01'
+  completed_at: '2025-12-21T01:29:00'
+  retry_count: 0
+  changed_files:
+  - src/cc_spec/rag/ast_chunker.py
+  - src/cc_spec/rag/smart_chunker.py
+  - src/cc_spec/rag/chunker.py
+  - pyproject.toml
+  notes: Hardened SmartChunker/AST fallback behavior and added tree-sitter-language-pack dependency.
+- id: T07
+  status: completed
+  agent_id: codex
+  started_at: '2025-12-21T01:45:12'
+  completed_at: '2025-12-21T01:45:12'
+  retry_count: 0
+  changed_files:
+  - src/cc_spec/rag/pipeline.py
+  - src/cc_spec/rag/knowledge_base.py
+  - src/cc_spec/rag/smart_chunker.py
+  - src/cc_spec/commands/kb.py
+  notes: Wired SmartChunker selection, per-strategy stats, and manifest chunking metadata.
+- id: T08
+  status: completed
+  agent_id: codex
+  started_at: '2025-12-21T01:49:58'
+  completed_at: '2025-12-21T01:49:58'
+  retry_count: 0
+  changed_files:
+  - tests/rag/test_smart_chunking.py
+  - tests/core/test_config.py
+  - tests/test_config.py
+  - tests/test_cmd_init.py
+  - tests/test_cmd_goto.py
+  - README.md
+  notes: Added SmartChunker/config tests and updated README to 8-step flow and Smart Chunking.

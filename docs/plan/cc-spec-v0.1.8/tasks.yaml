@@ -1,0 +1,171 @@
+# cc-spec v0.1.8 执行计划（tasks.yaml）
+# 说明：docs/plan 为“人类文档”，base-template.yaml 为本版本的功能更新说明。
+
+version: "1.6"
+change: "cc-spec-v0.1.8"
+
+context:
+  discussion_points:
+    - docs/plan/ 是人类阅读的规划文档目录，不参与运行时决策
+    - SKILL.md / AGENTS.md 是 CLI/Agent 的规范指令产物
+    - 向量库（KB）完全由项目代码与配置驱动，不依赖需求文档内容
+    - 用户只需掌握 8 步流程（kb + 7 步主流程）
+    - base-template.yaml 增补了 Smart Chunking 的参考与复用指引（astchunk + tree-sitter-language-pack）
+    - references.copy_files 仅作为实现指导，避免运行时依赖文档
+    - 需要补齐 Claude / Codex 的产出物定义（outputs/forbidden）到规范产物
+    - chunking.strategy 默认 ast-only，可切换 smart / codex-only
+    - template_mapping 为 SKILL/AGENTS 生成规则，需内置实现而非运行时读取 docs/plan
+    - 每完成一步需更新 progress.yaml（对照 tasks.yaml）
+    - progress.yaml 结构对齐 cc-spec 标准产出物（status.yaml v1.3 风格）
+
+tasks:
+  T01:
+    wave: 0
+    name: DOCS-SCOPE
+    docs:
+      - docs/plan/cc-spec-v0.1.8/base-template.yaml
+      - README.md
+    checklist:
+      - 明确 docs/plan 是人类文档，不作为运行时配置来源
+      - 明确 template_mapping 仅用于实现指引，运行时使用内置模板
+      - 明确 SKILL.md / AGENTS.md 是 CLI/Agent 指令产物
+      - 在 README 中写清 8 步流程（含 kb init/update）
+
+  T02:
+    wave: 0
+    name: AGENTS-GUIDE
+    code:
+      - src/cc_spec/commands/init.py
+    checklist:
+      - 生成的 AGENTS.md 明确 CLI/Agent 指令定位
+      - Codex outputs/forbidden 列表写入 AGENTS.md（与 base-template 对齐）
+      - AGENTS.md 基于 template_mapping 渲染（非硬编码块）
+      - 初始指引体现 8 步流程（kb + 7 步）
+      - 不影响现有生成逻辑与受控区块
+
+  T02B:
+    wave: 0
+    name: CLAUDE-SKILL-OUTPUTS
+    code:
+      - src/cc_spec/commands/init.py
+      - src/cc_spec/core/command_generator.py
+    checklist:
+      - Claude outputs/forbidden 规则写入对应规范产物（SKILL.md 或等效位置）
+      - SKILL.md 输出路径为 .claude/skills/cc-spec-standards/SKILL.md
+      - 不要求文档参与运行时决策，仅用于 CLI/Agent 指令
+
+  T02C:
+    wave: 0
+    name: STANDARDS-TEMPLATE-MAPPING
+    code:
+      - src/cc_spec/core/standards_renderer.py
+      - src/cc_spec/core/standards_templates.py
+      - src/cc_spec/commands/init.py
+    checklist:
+      - 内置 skill_md_template / agents_md_template 与 base-template 对齐
+      - 支持 outputs.artifacts / outputs.forbidden 列表渲染
+      - 不在运行时读取 docs/plan 内容
+
+  T03:
+    wave: 1
+    name: VERSION-CONSTANTS
+    code:
+      - src/cc_spec/version.py
+      - src/cc_spec/__init__.py
+    checklist:
+      - 增加 TEMPLATE_VERSION 常量并对齐 v1.0.8
+      - --version 输出包含 template/config/kb schema 版本
+
+  T04:
+    wave: 1
+    name: CONFIG-KB
+    code:
+      - src/cc_spec/core/config.py
+      - src/cc_spec/commands/init.py
+    checklist:
+      - config 默认版本与结构对齐 1.4
+      - kb.chunking/update/retrieval 可被 load/save 保留
+      - 支持 ast.supported_extensions 与 llm.priority_files 的配置透传
+      - chunking.strategy 默认 ast-only
+      - 默认值与 v0.1.8 功能更新说明一致
+
+  T05:
+    wave: 2
+    name: KB-CONFIG-WIRING
+    code:
+      - src/cc_spec/commands/kb.py
+      - src/cc_spec/rag/pipeline.py
+    checklist:
+      - kb init/update 从 config 读取 chunking/retrieval 相关参数
+      - strategy 默认 ast-only，支持 smart / codex-only
+      - 运行时参数可通过命令行覆盖配置
+      - 输出包含当前策略与关键配置摘要
+
+  T05B:
+    wave: 2
+    name: WORKFLOW-KB-SYNC
+    code:
+      - src/cc_spec/commands/apply.py
+      - src/cc_spec/commands/archive.py
+      - src/cc_spec/rag/workflow.py
+      - src/cc_spec/core/config.py
+    checklist:
+      - 读取 kb.update.post_task_sync（enabled/strategy）
+      - smart: 有变更时增量 update；skip: 不同步；full: 走 init_kb
+      - apply/ archive 的 KB 同步行为与配置一致
+
+  T05C:
+    wave: 2
+    name: PROGRESS-REPORTING
+    code:
+      - src/cc_spec/commands/apply.py
+      - src/cc_spec/subagent/result_collector.py
+      - src/cc_spec/subagent/task_parser.py
+    checklist:
+      - 在 docs/plan/cc-spec-v0.1.8/progress.yaml 记录任务进展
+      - schema 对齐 status.yaml v1.3（tasks 列表，含 id/status/agent_id/started_at/completed_at/retry_count）
+      - 可选字段：changed_files、notes（如可用）
+      - 进度写入失败不阻断主流程
+
+  T06:
+    wave: 2
+    name: SMART-CHUNKER
+    docs:
+      - docs/features/CC-SPEC-V0.1.6-SMART-CHUNKING.md
+      - docs/plan/cc-spec-v0.1.8/base-template.yaml
+    code:
+      - src/cc_spec/rag/ast_utils.py
+      - src/cc_spec/rag/ast_chunker.py
+      - src/cc_spec/rag/smart_chunker.py
+      - src/cc_spec/rag/chunker.py
+      - pyproject.toml
+    checklist:
+      - AST/Line/LLM 三策略可选（smart/ast-only/codex-only）
+      - 入口文件优先 LLM，其余按扩展名策略分配
+      - AST 算法复用 astchunk 思路，并用 tree-sitter-language-pack 动态加载语言
+      - 按 references.copy_files 拆出 ast_utils 并适配日志/错误处理
+      - chunker.py 保留现有 CodexChunker，同时接入 SmartChunker
+      - 依赖 tree-sitter-language-pack 并有降级策略
+
+  T07:
+    wave: 3
+    name: PIPELINE-SELECTOR
+    code:
+      - src/cc_spec/rag/pipeline.py
+      - src/cc_spec/rag/models.py
+    checklist:
+      - init/update 支持智能切片策略切换
+      - 统计区分 ast/line/llm 结果
+      - manifest 记录策略与版本
+
+  T08:
+    wave: 3
+    name: TESTS-DOCS
+    code:
+      - tests/rag/test_smart_chunking.py
+      - tests/core/test_config.py
+      - README.md
+    checklist:
+      - Smart Chunking 选择逻辑有单测
+      - kb config 的 load/save 有单测
+      - README 更新 v0.1.8 新特性、8 步流程与 Smart Chunking 参考来源

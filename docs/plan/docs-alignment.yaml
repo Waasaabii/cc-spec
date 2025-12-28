@@ -1,0 +1,567 @@
+version: "1.0"
+title: "cc-spec 文档对齐计划（按差异逐项修正）"
+date: "2025-12-21"
+
+scope:
+  goal: "将对外文档描述与当前实现/版本/测试结构对齐"
+  non_goals:
+    - "不引入新的流程或功能"
+  source_of_truth:
+    - "8 步流程包含 KB：init → kb init/update → specify → clarify → plan → apply → checklist → archive"
+    - "8 步是人类组合指令；系统层需将每步转换为 KB 写入/更新/审阅动作"
+    - "任务载体使用 tasks.yaml"
+    - "clarify = 任务返工 + 可选歧义检测（--detect），不做交互式问答回写"
+    - "checklist 权重由 config.yaml 决定（默认 30/25/25/20）"
+    - "checklist 报告默认写入 KB，需 --write-report 才生成 checklist-result.md"
+    - "小改动也必须写入 KB（快速需求通道），避免 KB 丢失现状分析"
+    - "checklist 为强 gate：未通过必须更新未完成点并回到 apply/clarify"
+    - "跳过/强制快速必须来自用户明确表达（支持中文自然语句）"
+    - "影响文件数 >5 时，强制标准流程（禁止快速）"
+
+tasks:
+  - id: DOC-01
+    discrepancy: "7 步流程 vs 8 步流程（缺 KB 步骤）"
+    target_alignment: "所有对外说明统一为 8 步流程，并明确 KB 可选但推荐"
+    docs_to_update:
+      - path: "docs/cc-spec/README.md"
+        locations:
+          - "项目结构示意图"
+          - "基本工作流/命令概览"
+      - path: "docs/cc-spec/workflow.md"
+        locations:
+          - "工作流概览图"
+          - "阶段详解：Init 前后的流程说明"
+      - path: "docs/cc-spec/commands.md"
+        locations:
+          - "整体命令概览段落"
+      - path: "docs/plan/cc-spec/README.md"
+        locations:
+          - "工作流代码块"
+      - path: "docs/README.en.md"
+        locations:
+          - "Key Features"
+          - "Quick Start"
+          - "Workflow (Detailed)"
+    changes:
+      - "将所有 7 步流程图/列表改为 8 步"
+      - "在 KB 步骤注明：推荐，但可在不需要时跳过"
+    acceptance:
+      - "所有流程图与步骤列表均包含 kb init/update"
+      - "任何出现 7-step/7 步字样的文档段落已清理或改为 8 步"
+
+  - id: DOC-02
+    discrepancy: "tasks.md 与 tasks.yaml 描述混用"
+    target_alignment: "所有对外说明统一为 tasks.yaml；若提及 tasks.md，改为历史/兼容说明或移除"
+    docs_to_update:
+      - path: "docs/cc-spec/README.md"
+        locations:
+          - "项目结构示意图"
+      - path: "docs/cc-spec/workflow.md"
+        locations:
+          - "Plan 阶段产出清单"
+          - "Apply/Checklist 阶段说明"
+          - "示例 tasks 格式"
+      - path: "docs/cc-spec/commands.md"
+        locations:
+          - "plan 命令说明"
+          - "checklist 命令说明"
+      - path: "docs/scoring-usage.md"
+        locations:
+          - "读取 tasks.md 示例"
+          - "extract_checklists 示例"
+      - path: "docs/archive-command-guide.md"
+        locations:
+          - "归档前后目录结构示例"
+          - "示例工作流步骤"
+      - path: "docs/README.en.md"
+        locations:
+          - "Workflow (Detailed) 表格与说明"
+    changes:
+      - "所有出现 tasks.md 的地方改为 tasks.yaml"
+      - "示例代码/路径中的 tasks.md 改为 tasks.yaml"
+      - "若有 design.md 产出描述，改为不再默认生成（如不存在则移除）"
+    acceptance:
+      - "docs/ 中不再出现“plan 生成 tasks.md”的描述"
+      - "所有示例路径/目录结构与 tasks.yaml 一致"
+
+  - id: DOC-03
+    discrepancy: "clarify 的职责描述与实际行为不一致"
+    target_alignment: "clarify 描述为：任务返工标记 + 可选歧义检测（--detect），不包含交互式问答回写"
+    docs_to_update:
+      - path: "docs/cc-spec/workflow.md"
+        locations:
+          - "Clarify 阶段说明"
+          - "返工模式章节"
+      - path: "docs/cc-spec/commands.md"
+        locations:
+          - "clarify 命令用法/示例"
+      - path: "docs/README.en.md"
+        locations:
+          - "Workflow (Detailed) Step Notes"
+    changes:
+      - "clarify 命令说明加入 --detect 选项"
+      - "删除/替换“澄清问答并回写 proposal”的描述"
+      - "明确：无参数显示任务列表；有 task-id 则标记返工"
+    acceptance:
+      - "clarify 文档描述与 CLI 行为一致（返工 + detect）"
+
+  - id: DOC-04
+    discrepancy: "checklist 权重均等 25% vs 配置默认 30/25/25/20"
+    target_alignment: "文档说明以配置为准，强调权重可配置"
+    docs_to_update:
+      - path: "docs/cc-spec/commands.md"
+        locations:
+          - "checklist 命令说明"
+      - path: "docs/scoring-usage.md"
+        locations:
+          - "Scoring Rules / 四维度说明"
+      - path: "docs/cc-spec/workflow.md"
+        locations:
+          - "Checklist 阶段说明"
+    changes:
+      - "将“均等 25%”改为“默认 30/25/25/20，按 config.yaml 可配置”"
+      - "示例中若出现 25% 公式，改为“以配置权重计算”"
+    acceptance:
+      - "文档不再强制 25% 均等权重"
+      - "所有权重描述引用 config.yaml 可配置原则"
+
+  - id: DOC-05
+    discrepancy: "checklist 报告命名与默认输出行为不一致"
+    target_alignment: "默认写入 KB 记录；仅在 --write-report 时生成 checklist-result.md"
+    docs_to_update:
+      - path: "docs/cc-spec/commands.md"
+        locations:
+          - "checklist 命令说明"
+          - "示例输出/报告说明"
+      - path: "docs/scoring-usage.md"
+        locations:
+          - "生成报告示例"
+      - path: "docs/archive-command-guide.md"
+        locations:
+          - "归档前置条件相关说明（如有）"
+      - path: "docs/README.en.md"
+        locations:
+          - "Workflow (Detailed) Step Notes"
+    changes:
+      - "统一报告文件名为 checklist-result.md"
+      - "补充：默认不落盘，需 --write-report"
+    acceptance:
+      - "文档中不存在 checklist-report.md 的默认生成描述"
+      - "所有报告行为说明与 CLI 选项一致"
+
+  - id: DOC-06
+    discrepancy: "部分文档仍引用旧任务结构或旧命令参数"
+    target_alignment: "清理过期片段，保留当前有效命令与产物"
+    docs_to_update:
+      - path: "docs/cc-spec/workflow.md"
+        locations:
+          - "tasks 格式示例"
+      - path: "docs/cc-spec/README.md"
+        locations:
+          - "项目结构示意图"
+      - path: "docs/cc-spec/commands.md"
+        locations:
+          - "plan/apply/checklist 的参数示例"
+    changes:
+      - "替换旧 tasks.md 示例为 tasks.yaml 最小示例"
+      - "移除或标注已废弃的旧参数（如有）"
+    acceptance:
+      - "示例结构与当前 tasks.yaml 结构一致"
+      - "参数示例与现行 CLI 匹配"
+
+  - id: CODE-01
+    discrepancy: "版本号分散/硬编码与比较方式存在风险"
+    target_alignment: "所有版本号以 cc_spec.version 常量为单一来源；配置版本比较采用语义化比较"
+    code_to_update:
+      - path: "src/cc_spec/commands/plan.py"
+        locations:
+          - "_create_basic_tasks_yaml: version 字段硬编码为 \"1.6\""
+      - path: "src/cc_spec/commands/update.py"
+        locations:
+          - "_update_subagent_config: data[\"version\"] 默认写死 \"1.3\""
+          - "文件头注释仍标注 v0.1.5"
+      - path: "src/cc_spec/core/config.py"
+        locations:
+          - "Config.get_pass_threshold 等版本判断使用字符串比较 (>= \"1.3\")"
+      - path: "src/cc_spec/version.py"
+        locations:
+          - "TASKS_YAML_VERSION / CONFIG_VERSION / TEMPLATE_VERSION / KB_SCHEMA_VERSION 定义"
+    changes:
+      - "plan.py 生成 tasks.yaml 时使用 TASKS_YAML_VERSION 常量"
+      - "update.py 使用 CONFIG_VERSION 作为默认版本"
+      - "引入语义化版本比较函数（如 _version_tuple 或 packaging.version）替代字符串比较"
+      - "更新 update.py 文件头版本说明，改为与 PACKAGE_VERSION 一致或移除版本号描述"
+    acceptance:
+      - "生成的 tasks.yaml 版本来自 TASKS_YAML_VERSION"
+      - "update 命令不会将 config 版本降级"
+      - "配置版本比较在 1.10/1.4 等场景下结果正确"
+
+  - id: CODE-02
+    discrepancy: "pytest 目录结构不够清晰，单测/集成测试混杂"
+    target_alignment: "测试按层级与领域分组，支持稳定的分层运行与标记"
+    code_to_update:
+      - path: "pyproject.toml"
+        locations:
+          - "[tool.pytest.ini_options] 添加 markers 与分组建议"
+          - "addopts 如需保留覆盖率参数"
+      - path: "tests/"
+        locations:
+          - "根目录 test_*.py 与子目录并存"
+          - "tests/__init__.py 使 tests 成为包"
+      - path: "tests/conftest.py"
+        locations:
+          - "建立共享 fixture，避免每个测试文件重复造轮子"
+    changes:
+      - "建立统一目录：tests/unit/, tests/cli/, tests/rag/, tests/codex/, tests/integration/"
+      - "将根目录 test_*.py 迁移到对应目录（见 move_plan）"
+      - "删除 tests/__init__.py 与 tests/core/__init__.py（若不需要包导入）"
+      - "在 pyproject.toml 声明 markers：unit, cli, rag, codex, integration, slow"
+      - "为集成测试增加 @pytest.mark.integration，并在文档/README 中说明分层运行方式"
+      - "统一改用 pytest fixture（tmp_path/monkeypatch/cli_runner）替代手写 setup_method/teardown_method"
+      - "统一用共享工厂 fixture 生成项目结构、proposal.md、tasks.yaml、status.yaml"
+      - "对 CLI 测试使用同一 invoke 助手，避免重复 chdir/runner 初始化"
+      - "将重复断言改为参数化（pytest.mark.parametrize）"
+    fixture_plan:
+      - name: "cli_runner"
+        purpose: "统一 Typer CliRunner 实例"
+        used_by:
+          - "tests/cli/*"
+      - name: "invoke"
+        purpose: "统一执行 CLI，封装 cwd 切换"
+        used_by:
+          - "tests/cli/*"
+      - name: "project"
+        purpose: "创建最小 cc-spec 项目结构（.cc-spec/changes/specs/archive）"
+        used_by:
+          - "tests/cli/*"
+          - "tests/unit/*"
+      - name: "change_dir"
+        purpose: "基于 project 创建变更目录"
+        used_by:
+          - "tests/cli/*"
+      - name: "proposal_file"
+        purpose: "创建 proposal.md（可传入自定义内容）"
+        used_by:
+          - "tests/cli/test_cmd_plan.py"
+          - "tests/cli/test_cmd_specify.py"
+      - name: "tasks_yaml"
+        purpose: "创建 tasks.yaml（可传入自定义内容）"
+        used_by:
+          - "tests/cli/test_cmd_apply.py"
+          - "tests/cli/test_cmd_checklist.py"
+      - name: "status_yaml"
+        purpose: "创建 status.yaml（可指定阶段与任务）"
+        used_by:
+          - "tests/cli/test_cmd_plan.py"
+          - "tests/cli/test_cmd_apply.py"
+          - "tests/cli/test_cmd_checklist.py"
+    refactor_guidelines:
+      - "每个测试文件不再自建 tempfile/手动 mkdir，统一使用 project fixture"
+      - "不再手动保存/恢复 cwd，统一使用 invoke fixture"
+      - "重复创建文件内容时，用 fixture + 参数覆盖"
+      - "断言中文/英文输出时使用 helper 函数（例如 assert_contains_any）"
+    move_plan:
+      - from: "tests/test_cmd_apply.py"
+        to: "tests/cli/test_cmd_apply.py"
+      - from: "tests/test_cmd_archive.py"
+        to: "tests/cli/test_cmd_archive.py"
+      - from: "tests/test_cmd_checklist.py"
+        to: "tests/cli/test_cmd_checklist.py"
+      - from: "tests/test_cmd_clarify.py"
+        to: "tests/cli/test_cmd_clarify.py"
+      - from: "tests/test_cmd_goto.py"
+        to: "tests/cli/test_cmd_goto.py"
+      - from: "tests/test_cmd_init.py"
+        to: "tests/cli/test_cmd_init.py"
+      - from: "tests/test_cmd_plan.py"
+        to: "tests/cli/test_cmd_plan.py"
+      - from: "tests/test_cmd_quick_delta.py"
+        to: "tests/cli/test_cmd_quick_delta.py"
+      - from: "tests/test_cmd_specify.py"
+        to: "tests/cli/test_cmd_specify.py"
+      - from: "tests/test_cmd_update.py"
+        to: "tests/cli/test_cmd_update.py"
+      - from: "tests/test_quick_delta_v13.py"
+        to: "tests/cli/test_quick_delta_v13.py"
+      - from: "tests/test_command_generator.py"
+        to: "tests/unit/test_command_generator.py"
+      - from: "tests/test_config.py"
+        to: "tests/unit/test_config.py"
+      - from: "tests/test_delta.py"
+        to: "tests/unit/test_delta.py"
+      - from: "tests/test_id_manager.py"
+        to: "tests/unit/test_id_manager.py"
+      - from: "tests/test_lock.py"
+        to: "tests/unit/test_lock.py"
+      - from: "tests/test_scoring.py"
+        to: "tests/unit/test_scoring.py"
+      - from: "tests/test_scoring_v13.py"
+        to: "tests/unit/test_scoring_v13.py"
+      - from: "tests/test_state.py"
+        to: "tests/unit/test_state.py"
+      - from: "tests/test_subagent_executor.py"
+        to: "tests/unit/test_subagent_executor.py"
+      - from: "tests/test_task_parser.py"
+        to: "tests/unit/test_task_parser.py"
+      - from: "tests/test_templates.py"
+        to: "tests/unit/test_templates.py"
+      - from: "tests/test_ui.py"
+        to: "tests/unit/test_ui.py"
+      - from: "tests/test_kb_verbose.py"
+        to: "tests/rag/test_kb_verbose.py"
+      - from: "tests/codex/test_jsonl_parser.py"
+        to: "tests/codex/test_jsonl_parser.py"
+      - from: "tests/core/test_ambiguity.py"
+        to: "tests/unit/test_ambiguity.py"
+      - from: "tests/core/test_config.py"
+        to: "tests/unit/test_config_core.py"
+      - from: "tests/core/test_command_templates.py"
+        to: "tests/unit/test_command_templates.py"
+      - from: "tests/core/test_plan_template.py"
+        to: "tests/unit/test_plan_template.py"
+      - from: "tests/core/test_tech_check.py"
+        to: "tests/unit/test_tech_check.py"
+      - from: "tests/integration/test_full_workflow.py"
+        to: "tests/integration/test_full_workflow.py"
+      - from: "tests/integration/test_subagent.py"
+        to: "tests/integration/test_subagent.py"
+      - from: "tests/integration/test_v11_workflow.py"
+        to: "tests/integration/test_v11_workflow.py"
+      - from: "tests/integration/test_v12_workflow.py"
+        to: "tests/integration/test_v12_workflow.py"
+      - from: "tests/rag/test_chunker_fallback.py"
+        to: "tests/rag/test_chunker_fallback.py"
+      - from: "tests/rag/test_chunker_retry.py"
+        to: "tests/rag/test_chunker_retry.py"
+      - from: "tests/rag/test_kb_attribution.py"
+        to: "tests/rag/test_kb_attribution.py"
+      - from: "tests/rag/test_kb_compact.py"
+        to: "tests/rag/test_kb_compact.py"
+      - from: "tests/rag/test_scan_and_ignore.py"
+        to: "tests/rag/test_scan_and_ignore.py"
+      - from: "tests/rag/test_smart_chunking.py"
+        to: "tests/rag/test_smart_chunking.py"
+    acceptance:
+      - "pytest -m unit / -m integration 可稳定分层运行"
+      - "tests/ 根目录不再混放大量 test_*.py"
+      - "重复主题测试归入统一目录（如 config、scoring）"
+      - "常见 CLI 测试不再重复 setup/teardown 逻辑"
+      - "共享 fixture 覆盖 >80% CLI 测试的环境构建"
+
+  - id: CODE-03
+    discrepancy: "残留 tasks.md 兼容逻辑导致任务来源不统一"
+    target_alignment: "所有命令与工具统一从 tasks.yaml 读取任务数据"
+    code_to_update:
+      - path: "src/cc_spec/commands/clarify.py"
+        locations:
+          - "显示执行历史时读取 tasks.md"
+      - path: "src/cc_spec/commands/list.py"
+        locations:
+          - "从 tasks.md 解析任务列表"
+      - path: "src/cc_spec/commands/goto.py"
+        locations:
+          - "查看任务详情时读取 tasks.md"
+      - path: "src/cc_spec/templates/checklist-template.md"
+        locations:
+          - "提示 tasks.md 作为检查清单来源"
+      - path: "src/cc_spec/templates/plan-template.md"
+        locations:
+          - "示例结构仍引用 tasks.md"
+      - path: "src/cc_spec/core/command_templates/checklist_template.py"
+        locations:
+          - "说明文本仍使用 tasks.md"
+    changes:
+      - "将 clarifiy/list/goto 中 tasks.md 读取替换为 tasks.yaml"
+      - "模板与命令说明统一为 tasks.yaml"
+      - "移除与 tasks.md 兼容的提示/路径"
+    acceptance:
+      - "命令层不再读取 tasks.md"
+      - "模板与 CLI 说明仅提及 tasks.yaml"
+
+  - id: TEST-03
+    discrepancy: "缺少 pytest 分层运行规范"
+    target_alignment: "默认只跑 unit/cli/rag；integration 需显式 -m"
+    docs_to_update:
+      - path: "README.md"
+        locations:
+          - "开发命令或测试命令示例"
+      - path: "docs/README.en.md"
+        locations:
+          - "Testing section (add if missing)"
+    changes:
+      - "新增 pytest 分层示例：-m unit / -m cli / -m rag / -m integration"
+      - "说明 integration 默认不跑"
+    acceptance:
+      - "README 中包含分层 pytest 命令"
+
+  - id: TEST-04
+    discrepancy: "测试断言/读写逻辑重复"
+    target_alignment: "集中通用断言与 IO 工具，减少重复"
+    code_to_update:
+      - path: "tests/helpers.py"
+        locations:
+          - "新增 helper 函数：assert_contains_any/read_yaml/write_yaml"
+    changes:
+      - "将常见输出断言替换为 assert_contains_any"
+      - "统一 YAML 读写辅助函数"
+    acceptance:
+      - "主要 CLI 测试不再重复字符串判断"
+      - "YAML 读写使用统一 helper"
+
+  - id: HYGIENE-01
+    discrepancy: "tests 目录存在 __pycache__/pyc 产物"
+    target_alignment: "测试缓存不进仓库，保持 clean tree"
+    files_to_update:
+      - path: ".gitignore"
+        locations:
+          - "添加 tests/**/__pycache__/ 与 tests/**/*.pyc"
+    changes:
+      - "忽略 tests 目录下缓存与 pyc 文件"
+    acceptance:
+      - "git status 不再显示 tests/**/__pycache__"
+
+  - id: DOC-07
+    discrepancy: "文档缺少测试分层说明"
+    target_alignment: "文档明确 unit/cli/rag/integration 的用途与运行方式"
+    docs_to_update:
+      - path: "docs/cc-spec/README.md"
+        locations:
+          - "新增 Testing/Tests 段落"
+      - path: "docs/cc-spec/commands.md"
+        locations:
+          - "可选：补充测试命令示例"
+    changes:
+      - "新增测试分层说明与示例命令"
+    acceptance:
+      - "docs/cc-spec/README.md 有完整测试段落"
+
+  - id: DOC-08
+    discrepancy: "8 步流程（人类指令）与系统 KB 流程未明确区分"
+    target_alignment: "文档明确：人类 8 步只是组合指令，系统层必须执行 KB 记录与审阅"
+    docs_to_update:
+      - path: "README.md"
+        locations:
+          - "工作流（细化）"
+      - path: "docs/cc-spec/workflow.md"
+        locations:
+          - "工作流概览"
+          - "阶段详解（每一步）"
+      - path: "docs/cc-spec/commands.md"
+        locations:
+          - "specify/plan/apply/checklist 命令说明"
+      - path: "docs/README.en.md"
+        locations:
+          - "Workflow (Detailed)"
+    changes:
+      - "新增“人类流程 vs 系统流程”对照表"
+      - "明确 KB 是评审主线，proposal/tasks 为人类阅读"
+      - "对每一步列出对应 KB 动作（record/update/query/compact）"
+    mapping_reference:
+      human_to_system:
+        - step: "specify"
+          kb_actions:
+            - "kb record: 需求摘要/范围/验收标准"
+        - step: "clarify"
+          kb_actions:
+            - "kb record: 返工原因/歧义检测结果/需求补充摘要"
+        - step: "plan"
+          kb_actions:
+            - "kb record: 任务拆解摘要/依赖/验收点"
+        - step: "apply"
+          kb_actions:
+            - "kb record: 任务执行上下文/变更摘要"
+            - "kb update: 变更文件入库"
+        - step: "checklist"
+          kb_actions:
+            - "kb record: 得分/未完成项/改进建议"
+        - step: "archive"
+          kb_actions:
+            - "kb update/compact: 保证归档前 KB 最新"
+    acceptance:
+      - "文档中明确说明：系统评审优先以 KB 记录为准"
+      - "每步都能看到对应 KB 行为说明"
+
+  - id: DOC-09
+    discrepancy: "快速需求（小改动）未被明确纳入 KB 主线"
+    target_alignment: "快速需求 = 简化文档，但系统流程完整并写入 KB"
+    docs_to_update:
+      - path: "README.md"
+        locations:
+          - "超简单模式"
+          - "工作流（细化）"
+      - path: "docs/cc-spec/workflow.md"
+        locations:
+          - "快速修复工作流"
+      - path: "docs/README.en.md"
+        locations:
+          - "Quick Mode"
+    changes:
+      - "明确 quick-delta 是快速需求通道，但必须写入 KB record"
+      - "说明快速需求的最小信息集（Why/What/Impact/Success Criteria）"
+    acceptance:
+      - "quick-delta 说明里包含“写入 KB”与“最小需求集”"
+
+  - id: DOC-10
+    discrepancy: "checklist 强 gate 规则未在文档中清晰强调"
+    target_alignment: "明确 checklist 未通过必须回到 apply/clarify 并补齐需求"
+    docs_to_update:
+      - path: "README.md"
+        locations:
+          - "工作流（细化）"
+      - path: "docs/cc-spec/workflow.md"
+        locations:
+          - "Checklist 阶段说明"
+          - "状态转换图"
+      - path: "docs/cc-spec/commands.md"
+        locations:
+          - "checklist 命令说明"
+    changes:
+      - "强调 checklist 为强 gate（未通过不得 archive）"
+      - "明确失败后流程：补齐需求/任务 → apply/clarify"
+    acceptance:
+      - "文档清楚描述 checklist 失败回路"
+
+  - id: CODE-04
+    discrepancy: "快速/标准模式判定与跳过步骤缺少清晰规则"
+    target_alignment: "模型基于 KB 评估影响面，文件改动数 >5 强制标准；跳过必须由用户明确表达（支持中文）"
+    code_to_update:
+      - path: "src/cc_spec/core/command_templates/*.py"
+        locations:
+          - "用户输入解析与执行步骤"
+      - path: "src/cc_spec/commands/*"
+        locations:
+          - "涉及快速流程/跳过步骤的提示与记录"
+      - path: "src/cc_spec/rag/workflow.py"
+        locations:
+          - "kb record 写入（记录模式判定与跳过原因）"
+    changes:
+      - "增加模式判定：基于 KB 调研+影响文件数阈值（>5 强制标准）"
+      - "记录 mode_decision 到 KB（quick/standard + 理由 + 影响文件数）"
+      - "支持用户中文自然语句触发 skip/force（例如：'跳过xxx'、'不做xxx'、'直接跳到xxx'）"
+      - "所有跳过动作必须写入 KB record，包含原始用户语句"
+    skip_intent_examples:
+      - "跳过 KB / 不用 KB / 不要入库"
+      - "跳过 clarify / 不澄清 / 直接进入 plan"
+      - "跳过 checklist / 不验收 / 直接归档（需要二次确认）"
+      - "强制快速 / 强行 quick / 走快速模式"
+    acceptance:
+      - "快速/标准模式判定有明确阈值（>5 文件强制标准）"
+      - "跳过指令支持中文自然语句且有 KB 记录"
+
+validation:
+  checklist:
+    - "docs/ 目录中不再出现 'tasks.md 作为主产物' 的描述"
+    - "所有流程图/步骤一致指向 8 步流程"
+    - "clarify 的描述与实际行为一致"
+    - "checklist 权重与报告行为与 config/CLI 对齐"
+    - "版本号单一来源且无硬编码降级风险"
+    - "pytest 结构可分层执行并按目录归类"
+    - "tests 缓存不进入版本控制"
+    - "测试分层说明已写入 README/docs"
+    - "人类 8 步与系统 KB 流程对照已写入文档"
+    - "quick-delta 明确写入 KB 且包含最小需求集"
+    - "checklist 强 gate 规则已在文档中强调"
+    - "快速/标准模式判定规则与跳过意图识别在文档/模板中明确"
+  quick_scan:
+    - "关键术语一致：tasks.yaml / checklist-result.md / kb init/update"
+    - "中英文 README 的流程与产物一致"

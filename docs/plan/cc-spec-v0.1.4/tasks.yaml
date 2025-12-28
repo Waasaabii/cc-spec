@@ -1,0 +1,285 @@
+# cc-spec v0.1.4 任务定义
+# 结构化任务文件，替代原 tasks.md（体积 -80%）
+
+meta:
+  change_id: cc-spec-v0.1.4
+  change_name: 四源融合 + 单一真相源
+  max_concurrent: 10
+  total_tasks: 17
+  estimated_lines: ~3765
+
+waves:
+  # Gate-0: 基础设施（串行）
+  - id: 0
+    type: gate
+    tasks:
+      - id: T01
+        name: TEMPLATE-BASE
+        desc: 创建命令模板基础设施
+        files:
+          - src/cc_spec/core/command_templates/__init__.py
+          - src/cc_spec/core/command_templates/base.py
+        refs:
+          - reference/test-project/speckitProject/.codex/prompts/speckit.specify.md
+          - src/cc_spec/core/command_generator.py:160-182
+        estimate: ~80
+        checklist:
+          - CommandTemplateContext 包含 command_name, namespace, config_sources
+          - CommandTemplate 定义 get_outline(), get_execution_steps(), get_validation_checklist()
+          - render() 支持 markdown 和 toml 格式
+
+      - id: T02
+        name: AMBIGUITY-BASE
+        desc: 创建歧义检测基础设施
+        files:
+          - src/cc_spec/core/ambiguity/__init__.py
+          - src/cc_spec/core/ambiguity/detector.py
+        refs:
+          - src/cc_spec/commands/clarify.py:182-278
+        estimate: ~120
+        checklist:
+          - AmbiguityType 包含 9 种分类
+          - AMBIGUITY_KEYWORDS 每种类型至少 5 个关键词
+          - 数据类测试通过
+
+  # Wave-1: 核心模板（并行）
+  - id: 1
+    type: wave
+    tasks:
+      - id: T03
+        name: SPECIFY-TEMPLATE
+        desc: 实现 specify 命令完整模板
+        deps: [T01]
+        files:
+          - src/cc_spec/core/command_templates/specify_template.py
+        refs:
+          - reference/test-project/speckitProject/.codex/prompts/speckit.specify.md
+          - src/cc_spec/commands/specify.py:68-109
+        estimate: ~250
+        checklist:
+          - 包含 7 个完整执行步骤
+          - Git 分支检查逻辑正确
+          - 验证检查清单包含所有必要项
+
+      - id: T04
+        name: CLARIFY-TEMPLATE
+        desc: 实现 clarify 命令完整模板
+        deps: [T01]
+        files:
+          - src/cc_spec/core/command_templates/clarify_template.py
+        refs:
+          - src/cc_spec/commands/clarify.py
+        estimate: ~200
+        checklist:
+          - 包含歧义检测调用步骤
+          - 9 大分类均有说明和示例
+          - 问题生成格式符合表格规范
+
+      - id: T05
+        name: PLAN-TEMPLATE
+        desc: 实现 plan 命令完整模板
+        deps: [T01]
+        files:
+          - src/cc_spec/core/command_templates/plan_template.py
+        refs:
+          - reference/DOCUMENTATION-GUIDELINES.md
+          - src/cc_spec/commands/plan.py:31-211
+        estimate: ~280
+        checklist:
+          - 九段大纲完整
+          - Gate/Wave 规划格式正确
+          - 技术硬要求说明清晰
+
+  # Wave-2: 检测器和续模板（并行）
+  - id: 2
+    type: wave
+    tasks:
+      - id: T06
+        name: AMBIGUITY-DETECTOR
+        desc: 实现歧义检测器核心逻辑
+        deps: [T02]
+        files:
+          - src/cc_spec/core/ambiguity/detector.py
+        estimate: ~200
+        checklist:
+          - detect() 正确扫描内容
+          - 关键词匹配支持中英文
+          - 上下文包含前后各 2 行
+          - 含误报过滤逻辑
+
+      - id: T07
+        name: APPLY-TEMPLATE
+        desc: 实现 apply 命令完整模板
+        deps: [T01]
+        files:
+          - src/cc_spec/core/command_templates/apply_template.py
+        refs:
+          - src/cc_spec/commands/apply.py
+          - src/cc_spec/subagent/executor.py:272-381
+        estimate: ~220
+        checklist:
+          - SubAgent 执行流程清晰
+          - 锁机制使用说明完整
+          - 技术检查步骤正确
+
+      - id: T08
+        name: CHECKLIST-TEMPLATE
+        desc: 实现 checklist 命令完整模板
+        deps: [T01]
+        files:
+          - src/cc_spec/core/command_templates/checklist_template.py
+        refs:
+          - src/cc_spec/core/scoring.py:443-513
+        estimate: ~180
+        checklist:
+          - 四维度说明完整
+          - 权重计算公式正确
+          - 改进建议格式规范
+
+  # Wave-3: 技术检查和重构（并行）
+  - id: 3
+    type: wave
+    tasks:
+      - id: T09
+        name: TECH-CHECK
+        desc: 实现技术检查模块
+        files:
+          - src/cc_spec/core/tech_check/__init__.py
+          - src/cc_spec/core/tech_check/reader.py
+          - src/cc_spec/core/tech_check/detector.py
+          - src/cc_spec/core/tech_check/runner.py
+        refs:
+          - src/cc_spec/core/config.py:203-208
+        estimate: ~250
+        checklist:
+          - 正确解析 CLAUDE.md 中的命令
+          - 技术栈检测支持 Python/Node/Go
+          - lint/type-check 警告继续，test 失败阻断
+
+      - id: T10
+        name: GENERATOR-REFACTOR
+        desc: 重构 command_generator.py 使用模板
+        deps: [T03, T04, T05, T07, T08]
+        files:
+          - src/cc_spec/core/command_generator.py
+        estimate: ~100
+        checklist:
+          - 所有主要命令使用模板
+          - 简单命令保持原有行为
+          - 生成内容长度 150-300 行
+
+  # Wave-4: 命令集成（并行）
+  - id: 4
+    type: wave
+    tasks:
+      - id: T11
+        name: CLARIFY-INTEGRATION
+        desc: 集成歧义检测到 clarify 命令
+        deps: [T06]
+        files:
+          - src/cc_spec/commands/clarify.py
+        estimate: ~80
+        checklist:
+          - --detect 选项可用
+          - 歧义报告格式正确
+          - 与现有功能兼容
+
+      - id: T12
+        name: APPLY-TECH-CHECK
+        desc: 集成技术检查到 apply 命令
+        deps: [T09]
+        files:
+          - src/cc_spec/commands/apply.py
+        estimate: ~60
+        checklist:
+          - 主 Agent 执行检查（非 SubAgent）
+          - 从 CLAUDE.md 读取或自动检测
+          - 检查结果正确显示
+
+      - id: T13
+        name: INIT-PROMPT
+        desc: init 命令完成后添加中文配置提示
+        files:
+          - src/cc_spec/commands/init.py
+        estimate: ~50
+        checklist:
+          - 显示目录结构
+          - 提示配置 subagent.max_concurrent
+          - 提示配置 agents.enabled
+          - 所有提示使用中文
+
+  # Wave-5: 新架构实现（并行）
+  - id: 5
+    type: wave
+    tasks:
+      - id: T14
+        name: SINGLE-SOURCE
+        desc: 实现单一真相源（合并 proposal.md + design.md）
+        files:
+          - src/cc_spec/commands/specify.py
+          - src/cc_spec/commands/plan.py
+          - src/cc_spec/templates/proposal-template.md
+        estimate: ~120
+        checklist:
+          - proposal.md 包含 4 个章节
+          - plan 命令不再生成 design.md
+          - 现有变更可正常迁移
+
+      - id: T15
+        name: TASKS-YAML
+        desc: 实现结构化任务定义（tasks.md → tasks.yaml）
+        deps: [T14]
+        files:
+          - src/cc_spec/commands/plan.py
+          - src/cc_spec/subagent/task_parser.py
+        estimate: ~150
+        checklist:
+          - plan 命令生成 tasks.yaml
+          - tasks.yaml 体积 ≤ 原 tasks.md 的 20%
+          - 支持 $templates/ 引用
+
+      - id: T16
+        name: CONTEXT-OPTIMIZE
+        desc: 实现 SubAgent 上下文优化
+        deps: [T15]
+        files:
+          - src/cc_spec/commands/apply.py
+          - src/cc_spec/subagent/executor.py
+        estimate: ~130
+        checklist:
+          - 主 Agent 预处理生成变更摘要
+          - SubAgent 只接收精简上下文
+          - 上下文从 ~5K 降到 ~500 tokens
+
+      - id: T17
+        name: TEMPLATE-REF
+        desc: 实现公共模板引用机制
+        files:
+          - src/cc_spec/core/templates.py
+          - src/cc_spec/commands/init.py
+        estimate: ~100
+        checklist:
+          - init 创建 templates/ 目录
+          - 默认模板包含 3 个检查清单
+          - $templates/xxx 引用正确解析
+
+# 测试文件（独立于任务）
+tests:
+  - tests/core/test_command_templates.py: ~200
+  - tests/core/test_ambiguity.py: ~150
+  - tests/core/test_tech_check.py: ~120
+  - tests/core/test_single_source.py: ~80
+  - tests/core/test_tasks_yaml.py: ~100
+  - tests/integration/test_specify_workflow.py: ~100
+  - tests/integration/test_clarify_detection.py: ~80
+  - tests/integration/test_apply_tech_check.py: ~80
+  - tests/integration/test_context_optimize.py: ~100
+
+# 执行顺序
+execution_order:
+  - "Gate-0: T01, T02 (串行)"
+  - "Wave-1: T03, T04, T05 (并行)"
+  - "Wave-2: T06, T07, T08 (并行)"
+  - "Wave-3: T09, T10 (并行)"
+  - "Wave-4: T11, T12, T13 (并行)"
+  - "Wave-5: T14, T15, T16, T17 (并行)"
