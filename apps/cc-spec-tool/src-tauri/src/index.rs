@@ -1,8 +1,182 @@
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
+use std::process::Stdio;
 use tauri::Emitter;
+use tokio::io::{AsyncBufReadExt, BufReader};
+use tokio::process::Command;
+use uuid::Uuid;
 
-use crate::sidecar::run_ccspec_command;
+use crate::sidecar::{prepare_ccspec_command, SidecarResult};
+
+async fn run_ccspec_stage(
+    args: Vec<String>,
+    working_dir: Option<String>,
+    run_id: &str,
+    stage: &str,
+    app_handle: &tauri::AppHandle,
+) -> Result<SidecarResult, String> {
+    let prepared = prepare_ccspec_command(args, working_dir, app_handle)?;
+    let stage_name = stage.to_string();
+    let run_id = run_id.to_string();
+    let command_display = format!("{} {}", prepared.program, prepared.args.join(" "));
+
+    let _ = app_handle.emit(
+        "index:init:stage",
+        serde_json::json!({
+            "run_id": &run_id,
+            "stage": &stage_name,
+            "state": "started",
+            "command": command_display,
+        }),
+    );
+
+    let mut command = Command::new(&prepared.program);
+    command.args(&prepared.args);
+
+    // 统一 Python 输出编码：避免 Windows GBK 控制台下 Rich 输出 unicode 触发 UnicodeEncodeError
+    command.env("PYTHONIOENCODING", "utf-8");
+    command.env("PYTHONUTF8", "1");
+
+    command.stdout(Stdio::piped());
+    command.stderr(Stdio::piped());
+
+    if let Some(dir) = prepared.cwd {
+        command.current_dir(dir);
+    }
+
+    let mut child = match command.spawn() {
+        Ok(child) => child,
+        Err(e) => {
+            let _ = app_handle.emit(
+                "index:init:log",
+                serde_json::json!({
+                    "run_id": &run_id,
+                    "stage": &stage_name,
+                    "stream": "system",
+                    "line": format!("Failed to start command: {}", e),
+                }),
+            );
+            let _ = app_handle.emit(
+                "index:init:stage",
+                serde_json::json!({
+                    "run_id": &run_id,
+                    "stage": &stage_name,
+                    "state": "failed",
+                    "error": format!("{}", e),
+                }),
+            );
+            return Err(format!("Failed to start cc-spec command: {}", e));
+        }
+    };
+
+    let stdout_task = if let Some(stdout) = child.stdout.take() {
+        let handle = app_handle.clone();
+        let stage = stage_name.clone();
+        let run_id = run_id.clone();
+        Some(tokio::spawn(async move {
+            let reader = BufReader::new(stdout);
+            let mut lines = reader.lines();
+            let mut collected: Vec<String> = Vec::new();
+            while let Ok(Some(line)) = lines.next_line().await {
+                collected.push(line.clone());
+                let _ = handle.emit(
+                    "index:init:log",
+                    serde_json::json!({
+                        "run_id": &run_id,
+                        "stage": &stage,
+                        "stream": "stdout",
+                        "line": line,
+                    }),
+                );
+            }
+            collected
+        }))
+    } else {
+        None
+    };
+
+    let stderr_task = if let Some(stderr) = child.stderr.take() {
+        let handle = app_handle.clone();
+        let stage = stage_name.clone();
+        let run_id = run_id.clone();
+        Some(tokio::spawn(async move {
+            let reader = BufReader::new(stderr);
+            let mut lines = reader.lines();
+            let mut collected: Vec<String> = Vec::new();
+            while let Ok(Some(line)) = lines.next_line().await {
+                collected.push(line.clone());
+                let _ = handle.emit(
+                    "index:init:log",
+                    serde_json::json!({
+                        "run_id": &run_id,
+                        "stage": &stage,
+                        "stream": "stderr",
+                        "line": line,
+                    }),
+                );
+            }
+            collected
+        }))
+    } else {
+        None
+    };
+
+    let status = match child.wait().await {
+        Ok(status) => status,
+        Err(e) => {
+            let _ = app_handle.emit(
+                "index:init:log",
+                serde_json::json!({
+                    "run_id": &run_id,
+                    "stage": &stage_name,
+                    "stream": "system",
+                    "line": format!("Failed to wait for command: {}", e),
+                }),
+            );
+            let _ = app_handle.emit(
+                "index:init:stage",
+                serde_json::json!({
+                    "run_id": &run_id,
+                    "stage": &stage_name,
+                    "state": "failed",
+                    "error": format!("{}", e),
+                }),
+            );
+            return Err(format!("Failed to wait for cc-spec command: {}", e));
+        }
+    };
+
+    let stdout_lines = match stdout_task {
+        Some(task) => task.await.unwrap_or_default(),
+        None => Vec::new(),
+    };
+    let stderr_lines = match stderr_task {
+        Some(task) => task.await.unwrap_or_default(),
+        None => Vec::new(),
+    };
+
+    let stdout = stdout_lines.join("\n");
+    let stderr = stderr_lines.join("\n");
+    let success = status.success();
+    let exit_code = status.code();
+
+    let _ = app_handle.emit(
+        "index:init:stage",
+        serde_json::json!({
+            "run_id": &run_id,
+            "stage": &stage_name,
+            "state": if success { "completed" } else { "failed" },
+            "exit_code": exit_code,
+        }),
+    );
+
+    Ok(SidecarResult {
+        success,
+        stdout,
+        stderr,
+        exit_code,
+    })
+}
 
 #[derive(Clone, Debug, Serialize, Deserialize, Default)]
 pub struct IndexStatus {
@@ -67,18 +241,26 @@ pub async fn init_index(
     levels: Vec<String>,
     app_handle: tauri::AppHandle,
 ) -> Result<(), String> {
+    let run_id = format!("idx_{}_{}", chrono::Utc::now().timestamp_millis(), Uuid::new_v4());
+
     // 通知前端索引初始化开始
-    let _ = app_handle.emit("index.init.started", serde_json::json!({
-        "project_path": &project_path,
-        "levels": &levels,
-    }));
+    let _ = app_handle.emit(
+        "index:init:started",
+        serde_json::json!({
+            "run_id": &run_id,
+            "project_path": &project_path,
+            "levels": &levels,
+        }),
+    );
 
     // 0) 先确保 stage1 bootstrap（生成 standards/commands/config）
     // 使用 --force 实现增量更新，确保获取最新的模板和配置
-    let bootstrap = run_ccspec_command(
+    let bootstrap = run_ccspec_stage(
         vec!["init".into(), "--force".into()],
         Some(project_path.clone()),
-        app_handle.clone(),
+        &run_id,
+        "bootstrap",
+        &app_handle,
     )
     .await?;
 
@@ -90,12 +272,17 @@ pub async fn init_index(
         } else {
             format!("exit code: {:?}", bootstrap.exit_code)
         };
-        let _ = app_handle.emit("index.init.completed", serde_json::json!({
-            "project_path": &project_path,
-            "success": false,
-            "stdout": &bootstrap.stdout,
-            "stderr": &bootstrap.stderr,
-        }));
+        let _ = app_handle.emit(
+            "index:init:completed",
+            serde_json::json!({
+                "run_id": &run_id,
+                "project_path": &project_path,
+                "success": false,
+                "stage": "bootstrap",
+                "stdout": &bootstrap.stdout,
+                "stderr": &bootstrap.stderr,
+            }),
+        );
         return Err(format!("Index init failed (bootstrap): {}", error_msg));
     }
 
@@ -108,71 +295,62 @@ pub async fn init_index(
     let _ = std::fs::create_dir_all(&commands_dir);
     let _ = std::fs::write(commands_dir.join("VERSION"), "0.2.2\n");
 
-    // 1) KB 为必选：根据当前状态决定 init vs update
-    let kb_status = run_ccspec_command(
-        vec!["kb".into(), "status".into(), "--json".into()],
-        Some(project_path.clone()),
-        app_handle.clone(),
-    )
-    .await?;
-
-    let mut has_manifest = false;
-    if kb_status.success {
-        if let Ok(value) = serde_json::from_str::<serde_json::Value>(&kb_status.stdout) {
-            if let Some(items) = value.get("条目").and_then(|v| v.as_array()) {
-                for item in items {
-                    let key = item.get("键").and_then(|v| v.as_str()).unwrap_or_default();
-                    let exists = item.get("存在").and_then(|v| v.as_bool()).unwrap_or(false);
-                    if key == "manifest" && exists {
-                        has_manifest = true;
-                        break;
-                    }
-                }
-            }
-        }
+    // 1) 多级索引为必选：生成 PROJECT_INDEX / FOLDER_INDEX（默认推荐 L1+L2）
+    let mut index_args: Vec<String> = vec!["init-index".into()];
+    for lvl in &levels {
+        index_args.push("--level".into());
+        index_args.push(lvl.clone());
     }
 
-    // 2) levels -> KB 参数（当前策略：L3 视为“更重/更全”）
-    let has_l3 = levels.iter().any(|x| x == "l3");
-    let reference_mode = if has_l3 { "full" } else { "index" };
-    let chunking_strategy = if has_l3 { "smart" } else { "ast-only" };
-
-    let mut kb_args: Vec<String> = vec!["kb".into()];
-    kb_args.push(if has_manifest { "update".into() } else { "init".into() });
-    kb_args.push("--reference-mode".into());
-    kb_args.push(reference_mode.into());
-    kb_args.push("--chunking-strategy".into());
-    kb_args.push(chunking_strategy.into());
-
-    let kb = run_ccspec_command(kb_args, Some(project_path.clone()), app_handle.clone()).await?;
-    if !kb.success {
-        let error_msg = if !kb.stderr.is_empty() {
-            kb.stderr.clone()
-        } else if !kb.stdout.is_empty() {
-            kb.stdout.clone()
+    let index_res = run_ccspec_stage(
+        index_args,
+        Some(project_path.clone()),
+        &run_id,
+        "index",
+        &app_handle,
+    )
+    .await?;
+    if !index_res.success {
+        let error_msg = if !index_res.stderr.is_empty() {
+            index_res.stderr.clone()
+        } else if !index_res.stdout.is_empty() {
+            index_res.stdout.clone()
         } else {
-            format!("exit code: {:?}", kb.exit_code)
+            format!("exit code: {:?}", index_res.exit_code)
         };
-        let _ = app_handle.emit("index.init.completed", serde_json::json!({
-            "project_path": &project_path,
-            "success": false,
-            "stdout": &kb.stdout,
-            "stderr": &kb.stderr,
-        }));
-        return Err(format!("Index init failed (kb): {}", error_msg));
+        let _ = app_handle.emit(
+            "index:init:completed",
+            serde_json::json!({
+                "run_id": &run_id,
+                "project_path": &project_path,
+                "success": false,
+                "stage": "index",
+                "stdout": &index_res.stdout,
+                "stderr": &index_res.stderr,
+            }),
+        );
+        return Err(format!("Index init failed (index): {}", error_msg));
     }
 
     // 3) 写入 `.cc-spec/index/status.json` 哨兵文件（供 UI 判定“已完成”）
+    let _ = app_handle.emit(
+        "index:init:stage",
+        serde_json::json!({
+            "run_id": &run_id,
+            "stage": "finalize",
+            "state": "started",
+        }),
+    );
     let cc_spec_dir = PathBuf::from(&project_path).join(".cc-spec");
     let index_dir = cc_spec_dir.join("index");
     std::fs::create_dir_all(&index_dir)
         .map_err(|e| format!("Failed to create index dir: {}", e))?;
 
-    let manifest_path = cc_spec_dir.join("kb.manifest.json");
+    let manifest_path = index_dir.join("manifest.json");
     let file_count = std::fs::read_to_string(&manifest_path)
         .ok()
         .and_then(|raw| serde_json::from_str::<serde_json::Value>(&raw).ok())
-        .and_then(|v| v.get("files").and_then(|f| f.as_object()).map(|o| o.len() as u32))
+        .and_then(|v| v.get("files").and_then(|f| f.as_array()).map(|a| a.len() as u32))
         .unwrap_or(0);
 
     let status = IndexStatus {
@@ -192,12 +370,25 @@ pub async fn init_index(
         .map_err(|e| format!("Failed to write index status: {}", e))?;
 
     // 通知前端索引初始化完成
-    let _ = app_handle.emit("index.init.completed", serde_json::json!({
-        "project_path": &project_path,
-        "success": true,
-        "stdout": format!("{}\n{}", bootstrap.stdout, kb.stdout),
-        "stderr": format!("{}\n{}", bootstrap.stderr, kb.stderr),
-    }));
+    let _ = app_handle.emit(
+        "index:init:stage",
+        serde_json::json!({
+            "run_id": &run_id,
+            "stage": "finalize",
+            "state": "completed",
+        }),
+    );
+
+    let _ = app_handle.emit(
+        "index:init:completed",
+        serde_json::json!({
+            "run_id": &run_id,
+            "project_path": &project_path,
+            "success": true,
+            "stdout": format!("{}\n{}", bootstrap.stdout, index_res.stdout),
+            "stderr": format!("{}\n{}", bootstrap.stderr, index_res.stderr),
+        }),
+    );
 
     Ok(())
 }
@@ -211,7 +402,7 @@ pub async fn update_index(
         "project_path": &project_path,
     }));
 
-    // 当前 update 语义：复用 init_index 的最新逻辑（bootstrap + KB）
+    // 当前 update 语义：复用 init_index 的最新逻辑（bootstrap + multi-level index）
     // 备注：levels 暂时使用默认推荐值（l1/l2）
     let _ = init_index(project_path.clone(), vec!["l1".into(), "l2".into()], app_handle.clone()).await?;
 

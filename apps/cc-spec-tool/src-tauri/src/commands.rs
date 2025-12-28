@@ -17,6 +17,9 @@ const COMMANDS_VERSION: &str = "0.2.2";
 /// `/cc-spec:<cmd>` 列表（与 `src/cc_spec/core/command_generator.py` 的 CC_SPEC_COMMANDS 对齐）
 const COMMANDS: &[&str] = &[
     "init",
+    "init-index",
+    "update-index",
+    "check-index",
     "specify",
     "clarify",
     "plan",
@@ -173,4 +176,3 @@ pub async fn check_commands_update_needed(project_path: String) -> Result<bool, 
 
     Ok(false)
 }
-

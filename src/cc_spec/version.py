@@ -5,14 +5,12 @@ from __future__ import annotations
 from functools import lru_cache
 import re
 
-__version__ = "0.1.8"
+__version__ = "0.2.2"
 PACKAGE_VERSION = __version__
 TASKS_YAML_VERSION = "1.6"
 CONFIG_VERSION = "1.4"
-KB_SCHEMA_VERSION = "0.1.8"
 TEMPLATE_VERSION = "1.0.8"
 
-EMBEDDING_SERVER_VERSION = f"cc-spec-embedding/{PACKAGE_VERSION}"
 UI_VERSION_INFO = f"v{PACKAGE_VERSION}"
 
 _VERSION_PART_RE = re.compile(r"\d+")

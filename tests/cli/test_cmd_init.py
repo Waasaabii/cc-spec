@@ -168,7 +168,7 @@ def test_init_creates_agent_folder(tmp_path, monkeypatch):
 
 
 def test_init_creates_cc_specignore(tmp_path, monkeypatch):
-    """Test that init creates .cc-specignore for KB scanning rules."""
+    """Test that init creates .cc-specignore for scanning ignore rules."""
     monkeypatch.chdir(tmp_path)
 
     result = runner.invoke(app, ["init", "test-project"])
@@ -177,7 +177,7 @@ def test_init_creates_cc_specignore(tmp_path, monkeypatch):
     ignore_file = tmp_path / ".cc-specignore"
     assert ignore_file.exists()
     content = ignore_file.read_text(encoding="utf-8")
-    assert "KB scanning ignore rules" in content
+    assert "cc-spec scanning ignore rules" in content
 
 
 def test_init_creates_claude_commands(tmp_path, monkeypatch):

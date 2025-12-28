@@ -38,9 +38,13 @@ def mock_cc_spec_project(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Pat
                 "status": "completed",
                 "completed_at": "2024-01-15T10:05:00Z",
             },
-            "clarify": {
+            "detail": {
                 "status": "completed",
                 "completed_at": "2024-01-15T10:10:00Z",
+            },
+            "review": {
+                "status": "completed",
+                "completed_at": "2024-01-15T10:15:00Z",
             },
             "plan": {
                 "status": "completed",
@@ -50,7 +54,7 @@ def mock_cc_spec_project(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Pat
                 "status": "in_progress",
                 "started_at": "2024-01-15T10:25:00Z",
             },
-            "checklist": {
+            "accept": {
                 "status": "pending",
             },
             "archive": {

@@ -6,7 +6,6 @@
 定位（v0.1.5 兼容）：
 - Claude Code：只负责编排（Bash/Read/Glob/Grep/AskUserQuestion/TodoWrite），不直接写文件。
 - Codex：产出/修改文件（主要是 tasks.yaml，必要时补充最小文档）。
-- KB：作为上下文与追溯来源（records/chunks），避免在 prompt 里塞大段全文。
 """
 
 from .base import CommandTemplate, CommandTemplateContext
@@ -143,10 +142,6 @@ EOF
   - Gate/Wave 分组是否符合 deps
   - deps 是否存在、是否循环
   - 关键任务是否覆盖了技术硬要求
-- （可选）写入追溯 record：
-  ```bash
-  cc-spec kb record --step plan --change "<change>" --notes "tasks.yaml generated"
-  ```
 """,
         ]
 
@@ -235,7 +230,7 @@ tasks.yaml 必须“可读 + 可执行 + 可追溯”，建议包含：
 
 ### 常见陷阱（避免/错误/陷阱）
 
-- **陷阱：** 把大段文档塞进 tasks.yaml → 应把上下文放到 KB，tasks.yaml 只保留索引与验收点。
+- **陷阱：** 把大段文档塞进 tasks.yaml → 应把上下文放到 related_files / 相关文档引用中，tasks.yaml 只保留索引与验收点。
 - **错误：** Gate-0 放了太多实现细节 → Gate-0 只做阻断项，其余放 Wave。
 - **错误：** deps 写“想当然”导致循环 → 生成后必须 `cc-spec apply --dry-run` 校验。
 - **避免：** 只写“完成 XXX”这种空 checklist → 改为可验证的命令/行为验收。

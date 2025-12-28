@@ -93,8 +93,8 @@ export function RunCard({ run, lang, t, theme, sessions, isCompact = false }: Ru
             const ready = await invoke<boolean>("check_index_exists", { projectPath: run.projectRoot });
             if (!ready) {
                 setTerminalError(lang === "zh"
-                    ? "项目未初始化：请先在 tool 中完成 Bootstrap + KB 初始化（IndexPrompt）"
-                    : "Project not initialized: please complete Bootstrap + KB (IndexPrompt) in the tool first."
+                    ? "项目未初始化：请先在 tool 中完成 Bootstrap + 索引初始化（IndexPrompt）"
+                    : "Project not initialized: please complete Bootstrap + Index initialization (IndexPrompt) in the tool first."
                 );
                 return;
             }

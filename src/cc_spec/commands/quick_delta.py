@@ -17,7 +17,6 @@ from rich.table import Table
 
 from cc_spec.core.delta import DeltaOperation
 from cc_spec.rag.incremental import detect_git_changes
-from cc_spec.rag.workflow import try_write_mode_decision
 from cc_spec.ui.banner import show_banner
 from cc_spec.utils.files import ensure_dir, get_changes_dir
 
@@ -85,7 +84,7 @@ def _count_changed_files(project_root: Path) -> int | None:
 
 
 def _build_quick_requirements(message: str) -> dict[str, object]:
-    """构建 quick-delta 的最小需求集结构（写入 KB 记录）。"""
+    """构建 quick-delta 的最小需求集结构（用于自动补齐缺失字段）。"""
     text = (message or "").strip()
     return {
         "why": "",
@@ -283,14 +282,6 @@ def quick_delta_command(
     # quick-delta 预检：文件数阈值 > 5 强制标准流程
     file_count = _count_changed_files(project_root)
     if file_count is not None and file_count > MAX_QUICK_DELTA_FILES:
-        try_write_mode_decision(
-            project_root,
-            change_name=change_name,
-            mode="standard",
-            reason=f"file_count>{MAX_QUICK_DELTA_FILES}",
-            file_count=file_count,
-            user_phrase=message,
-        )
         console.print(
             f"[red]检测到 {file_count} 个文件变更，超过 quick-delta 阈值 "
             f"{MAX_QUICK_DELTA_FILES}。请改用标准流程（cc-spec specify）。[/red]"
@@ -321,28 +312,6 @@ def quick_delta_command(
         _display_file_changes_table(diff_stats)
     else:
         console.print("[dim]文件变更：[/dim] 未检测到暂存区变更")
-
-    # 记录 quick-delta 模式判定与最小需求集（尽力写入 KB）
-    extra_outputs: dict[str, object] = {}
-    if git_info:
-        extra_outputs["git"] = git_info
-    if diff_stats:
-        extra_outputs["diff"] = {
-            "files": len(diff_stats.changes),
-            "additions": diff_stats.total_additions,
-            "deletions": diff_stats.total_deletions,
-        }
-    try_write_mode_decision(
-        project_root,
-        change_name=change_name,
-        mode="quick",
-        reason="quick-delta invoked",
-        file_count=file_count,
-        user_phrase=message,
-        skipped_steps=QUICK_DELTA_SKIPPED_STEPS,
-        requirements=_build_quick_requirements(message),
-        extra_outputs=extra_outputs or None,
-    )
 
     # 3. 创建归档目录结构
     changes_dir = get_changes_dir(project_root)

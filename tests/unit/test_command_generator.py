@@ -16,14 +16,17 @@ from cc_spec.core.command_generator import (
 
 class TestConstants:
     def test_cc_spec_commands_count(self) -> None:
-        assert len(CC_SPEC_COMMANDS) == 11
+        assert len(CC_SPEC_COMMANDS) == 14
         command_names = [name for name, _ in CC_SPEC_COMMANDS]
         assert "init" in command_names
+        assert "init-index" in command_names
+        assert "update-index" in command_names
+        assert "check-index" in command_names
         assert "specify" in command_names
         assert "clarify" in command_names
         assert "plan" in command_names
         assert "apply" in command_names
-        assert "checklist" in command_names
+        assert "accept" in command_names
         assert "archive" in command_names
         assert "quick-delta" in command_names
         assert "list" in command_names
@@ -85,7 +88,7 @@ class TestClaudeCommandGenerator:
         with tempfile.TemporaryDirectory() as tmpdir:
             project_root = Path(tmpdir)
             paths = generator.generate_all(project_root)
-            assert len(paths) == 11
+            assert len(paths) == 14
 
             cmd_dir = generator.get_command_dir(project_root)
             for cmd_name, _ in CC_SPEC_COMMANDS:

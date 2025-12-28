@@ -25,8 +25,6 @@ from cc_spec.core.state import (
     load_state,
     update_state,
 )
-from cc_spec.rag.models import WorkflowStep
-from cc_spec.rag.workflow import try_write_record
 from cc_spec.ui.banner import show_banner
 from cc_spec.utils.files import find_project_root, get_cc_spec_dir
 
@@ -248,21 +246,6 @@ def accept_command(
         report_path = change_dir / "acceptance-report.md"
         report_path.write_text(report_content, encoding="utf-8")
         console.print(f"\n[green]√[/green] 已生成：{report_path.relative_to(Path.cwd())}")
-
-    # 写入 KB records
-    try_write_record(
-        project_root,
-        step=WorkflowStep.ACCEPT,
-        change_name=change,
-        outputs={
-            "all_passed": all_passed,
-            "check_results": [
-                {"name": r["name"], "passed": r["passed"]}
-                for r in check_results
-            ],
-        },
-        notes="accept.checked",
-    )
 
     # 处理通过/不通过
     if all_passed:

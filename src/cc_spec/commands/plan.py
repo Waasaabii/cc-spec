@@ -23,8 +23,6 @@ from cc_spec.core.state import (
     load_state,
     update_state,
 )
-from cc_spec.rag.models import WorkflowStep
-from cc_spec.rag.workflow import try_write_record
 from cc_spec.ui.banner import show_banner
 from cc_spec.ui.display import show_task_table
 from cc_spec.utils.files import find_project_root, get_cc_spec_dir
@@ -188,20 +186,6 @@ def plan_command(
     except ValueError:
         rel_path = tasks_yaml_path
     console.print(f"\n[dim]已生成文件：[/dim]\n  - {rel_path}")
-
-    # v0.1.5：写入 workflow record（尽力而为）
-    try_write_record(
-        project_root,
-        step=WorkflowStep.PLAN,
-        change_name=change,
-        inputs={"proposal_chars": len(proposal_content)},
-        outputs={
-            "tasks_yaml": str(tasks_yaml_path.relative_to(project_root)),
-            "dependency_validation": validation_result,
-        },
-        notes="plan.generated",
-    )
-
 
 def _create_basic_tasks_yaml(tasks_yaml_path: Path, change_name: str) -> None:
     """创建基础 tasks.yaml 结构。"""

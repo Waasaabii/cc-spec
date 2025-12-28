@@ -184,7 +184,7 @@ class TestConfig:
         assert ".claude/CLAUDE.md" in config.tech_requirements_sources
         assert isinstance(config.subagent, SubAgentConfig)
         assert isinstance(config.checklist, ChecklistConfig)
-        assert config.kb.chunking.strategy == "ast-only"
+        assert config.acceptance.commands == ["lint", "test", "build", "type-check"]
 
     def test_custom_values(self) -> None:
         """Test Config with custom values."""

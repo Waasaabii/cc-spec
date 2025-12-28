@@ -30,8 +30,6 @@ from cc_spec.core.state import (
     load_state,
     update_state,
 )
-from cc_spec.rag.models import WorkflowStep
-from cc_spec.rag.workflow import try_write_record
 from cc_spec.ui.banner import show_banner
 from cc_spec.ui.display import show_status_panel, show_task_table
 from cc_spec.ui.prompts import confirm_action
@@ -322,21 +320,6 @@ def rework_task(
         "[cyan]cc-spec apply[/cyan][/dim]"
     )
 
-    # v0.1.5：写入 workflow record（尽力而为）
-    try:
-        project_root = change_dir.parent.parent.parent
-    except Exception:
-        project_root = Path.cwd()
-    try_write_record(
-        project_root,
-        step=WorkflowStep.CLARIFY,
-        change_name=state.change_name,
-        task_id=task_id,
-        outputs={"action": "rework", "new_status": TaskStatus.PENDING.value},
-        notes="clarify.rework",
-    )
-
-
 @app.command()
 def clarify(
     id_or_task: str = typer.Argument(
@@ -473,19 +456,6 @@ def clarify(
         content = proposal_path.read_text(encoding="utf-8")
         matches = detect(content)
         show_ambiguity_report(matches, proposal_path)
-
-        # v0.1.5：写入 workflow record（尽力而为）
-        try_write_record(
-            project_root,
-            step=WorkflowStep.CLARIFY,
-            change_name=state.change_name,
-            inputs={"mode": "detect_ambiguity"},
-            outputs={
-                "proposal": str(proposal_path.relative_to(project_root)),
-                "matches": len(matches),
-            },
-            notes="clarify.detect",
-        )
         return
 
     # detail 模式：CC↔CX 自动讨论
@@ -571,16 +541,6 @@ def _handle_detail_mode(
     except Exception as e:
         console.print(f"[yellow]警告：[/yellow] 无法更新状态：{e}")
 
-    # 写入 workflow record
-    try_write_record(
-        project_root,
-        step=WorkflowStep.CLARIFY,
-        change_name=state.change_name,
-        inputs={"mode": "detail"},
-        outputs={"detail_path": str(detail_path.relative_to(project_root))},
-        notes="clarify.detail.start",
-    )
-
     # 显示下一步指引
     console.print("\n[bold]下一步：[/bold]")
     console.print("1. 与 CX 讨论改动点（运行 [cyan]cc-spec chat[/cyan]）")
@@ -665,16 +625,6 @@ def _handle_review_mode(
         console.print("[green]√[/green] 状态已更新为 review 阶段")
     except Exception as e:
         console.print(f"[yellow]警告：[/yellow] 无法更新状态：{e}")
-
-    # 写入 workflow record
-    try_write_record(
-        project_root,
-        step=WorkflowStep.CLARIFY,
-        change_name=state.change_name,
-        inputs={"mode": "review"},
-        outputs={"review_path": str(review_path.relative_to(project_root))},
-        notes="clarify.review.start",
-    )
 
     # 显示下一步指引
     console.print("\n[bold]下一步：[/bold]")

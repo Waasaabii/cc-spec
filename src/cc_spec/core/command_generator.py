@@ -31,7 +31,10 @@ MANAGED_END = "<!-- CC-SPEC:END -->"
 
 # 所有 cc-spec 命令（与 CLI 子命令对齐）
 CC_SPEC_COMMANDS = [
-    ("init", "初始化/更新知识库（RAG）"),
+    ("init", "初始化项目（生成 Commands/Standards/模板）"),
+    ("init-index", "初始化项目多级索引（PROJECT_INDEX/FOLDER_INDEX）"),
+    ("update-index", "增量更新项目多级索引"),
+    ("check-index", "检查项目多级索引一致性"),
     ("specify", "创建或编辑变更规格"),
     ("clarify", "审查任务并标记返工"),
     ("plan", "根据提案生成执行计划"),

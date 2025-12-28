@@ -205,21 +205,20 @@ uv run mypy src/cc_spec/
 - **`commands/`** - CLI 命令实现
 - **`core/`** - 核心业务逻辑（config, state, delta, scoring）
 - **`subagent/`** - SubAgent 并行执行系统
-- **`rag/`** - RAG 知识库（ChromaDB + fastembed）
-- **`embedding/`** - Embedding 服务管理
+- **`rag/`** - 智能上下文与增量变更检测（索引/文件片段）
 - **`codex/`** - Codex CLI 客户端
 
-### RAG 知识库
+### 项目多级索引（v0.2.x）
 
 ```bash
-# 语义搜索
-uv run cc-spec kb query "搜索关键词"
+# 初始化索引（推荐 L1+L2）
+uv run cc-spec init-index --level l1 --level l2
 
-# 查看统计
-uv run cc-spec kb stats
+# 更新索引
+uv run cc-spec update-index --level l1 --level l2
 
-# 重建知识库
-uv run cc-spec kb init
+# 检查索引是否齐全
+uv run cc-spec check-index
 ```
 
 ---

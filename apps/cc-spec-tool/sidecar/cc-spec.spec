@@ -43,8 +43,6 @@ a = Analysis(
     runtime_hooks=[],
     excludes=[
         # 排除重量级依赖
-        "chromadb",
-        "fastembed",
         "onnxruntime",
         "torch",
         "tensorflow",

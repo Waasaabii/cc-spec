@@ -208,7 +208,7 @@ for items in checklists.values():
 
 result = calculate_score(all_items, threshold=80)
 
-# 4. Save results (CLI default writes to KB; file output is optional)
+# 4. Save results (optional: write report to file)
 if result.passed:
     print("✓ All tasks completed successfully!")
     print(format_result(result))
@@ -250,7 +250,7 @@ This module is used in the `checklist` stage (tasks.yaml source):
    - Move to `archive` stage
    - Mark change as completed
 4. If score < threshold:
-   - Write failure record to KB (default behavior)
+   - Optionally generate `checklist-result.md` for failed items
    - Optionally generate `checklist-result.md` with `--write-report`
    - Stay in `checklist` stage
    - User can run `clarify` or `apply` to rework tasks

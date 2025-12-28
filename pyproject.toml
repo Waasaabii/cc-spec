@@ -26,9 +26,6 @@ dependencies = [
     "httpx>=0.25.0",
     "readchar>=4.0.0",
     "pyyaml>=6.0",
-    "chromadb>=0.4.0",
-    "fastembed>=0.3.0",
-    "tree-sitter-language-pack>=0.7.0",
 ]
 
 [project.optional-dependencies]
@@ -78,7 +75,6 @@ addopts = "-v --cov=cc_spec --cov-report=term-missing"
 markers = [
     "unit: unit tests",
     "cli: CLI command tests",
-    "rag: KB/RAG tests",
     "codex: Codex integration/unit tests",
     "integration: full workflow/integration tests",
     "slow: slow tests",

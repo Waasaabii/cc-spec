@@ -57,7 +57,8 @@ class TestRegisteredCommands:
 
         commands = [cmd.name for cmd in app.registered_commands]
         groups = [g.name for g in app.registered_groups]
-        assert "kb" in groups
         assert "init" in commands
         assert "apply" in commands
-        assert len(commands) == 11
+        assert "accept" in commands
+        assert groups == []
+        assert len(commands) >= 16

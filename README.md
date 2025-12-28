@@ -21,10 +21,9 @@ cc-spec 是一个整合了 [OpenSpec](https://github.com/hannesrudolph/openspec)
 
 ### 核心特性
 
-- **8 步标准工作流**: `init → kb init/update → specify → clarify → plan → apply → checklist → archive`
+- **8 步标准工作流**: `init → init-index/update-index → specify → clarify → plan → apply → accept → archive`
 - **Claude 编排 / Codex 执行（v0.1.6）**: Claude 只负责编排，Codex CLI 负责产出代码/文件
-- **智能上下文 + RAG 知识库（v0.1.6）**: ChromaDB 向量库 + fastembed embeddings + workflow records
-- **Smart Chunking（v0.1.8）**: AST / Line / LLM 三层切片策略，速度提升、token 成本降低
+- **多级索引 + 智能上下文（v0.2.x）**: PROJECT_INDEX / FOLDER_INDEX + related_files 手动引用
 - **Delta 变更追踪**: ADDED / MODIFIED / REMOVED / RENAMED 格式
 - **打分验收机制**: checklist 打分 ≥80 通过，否则打回 apply
 - **超简单模式**: `quick-delta` 一步生成变更记录
@@ -110,10 +109,9 @@ uv tool install cc-spec --force --from git+https://github.com/Waasaabii/cc-spec.
 # 1. 初始化项目（生成 Claude Code 的 /cc-spec:* 命令）
 cc-spec init
 
-# 2. （推荐）构建/更新知识库（任选其一）
-cc-spec kb init
-# 或在 Claude Code 中执行：
-# /cc-spec:init
+# 2. （推荐）初始化/更新多级索引（PROJECT_INDEX/FOLDER_INDEX）
+cc-spec init-index --level l1 --level l2
+# 或在 Claude Code 中执行：/cc-spec:init
 
 # 3. 创建变更规格
 cc-spec specify add-user-auth
@@ -127,8 +125,8 @@ cc-spec plan
 # 6. 执行任务（SubAgent 并发）
 cc-spec apply
 
-# 7. 验收打分
-cc-spec checklist
+# 7. 端到端验收（lint/test/build/type-check）
+cc-spec accept
 
 # 8. 归档变更
 cc-spec archive
@@ -138,43 +136,28 @@ cc-spec archive
 
 ## 工作流（细化）
 
-> 核心原则：**Claude 负责编排与审核，Codex 负责落地代码**；KB 作为上下文桥梁。
+> 核心原则：**Claude 负责编排与审核，Codex 负责落地代码**；上下文以多级索引与相关文件引用为准。
 
 | 步骤 | 目的 | 主要命令 | 关键产物 |
 |------|------|----------|----------|
 | 1. init | 初始化项目结构与配置 | `cc-spec init` | `.cc-spec/`、`config.yaml` |
-| 2. kb init/update | 构建/更新知识库（推荐） | `cc-spec kb init` / `cc-spec kb update` | `.cc-spec/vectordb/`、workflow records |
+| 2. init-index/update-index | 生成/更新项目多级索引（推荐） | `cc-spec init-index` / `cc-spec update-index` | `PROJECT_INDEX.md`、`FOLDER_INDEX.md`、`.cc-spec/index/status.json` |
 | 3. specify | 需求规格与范围 | `cc-spec specify <change>` | `.cc-spec/changes/<change>/proposal.md` |
 | 4. clarify | 澄清需求或标记返工 | `cc-spec clarify [task-id]` | proposal 澄清记录 / 任务返工标记 |
 | 5. plan | 生成可执行计划 | `cc-spec plan` | `.cc-spec/changes/<change>/tasks.yaml` |
 | 6. apply | 并发执行任务 | `cc-spec apply` | 任务状态更新、执行记录 |
-| 7. checklist | 验收打分（默认 ≥80 通过） | `cc-spec checklist` | checklist 报告 |
+| 7. accept | 端到端验收（lint/test/build/type-check） | `cc-spec accept` | `acceptance-report.md`（可选） |
 | 8. archive | 归档并合并 Delta specs | `cc-spec archive` | `.cc-spec/changes/archive/...` |
-
-### 人类流程 vs 系统 KB 动作
-
-| 人类步骤 | 系统 KB 动作（必须执行） |
-|---|---|
-| init | 建立项目结构；若 KB 未建，标记待入库 |
-| kb init/update | 生成/更新 code chunks 与 workflow records |
-| specify | `kb record`：Why/What/Impact/Success Criteria |
-| clarify | `kb record`：返工原因/歧义检测结果/需求补充摘要 |
-| plan | `kb record`：任务拆解摘要、依赖、验收点 |
-| apply | `kb record`：任务执行上下文与变更摘要；`kb update` 入库变更 |
-| checklist | `kb record`：评分、未完成项、改进建议 |
-| archive | `kb update/compact`：归档前确保 KB 最新 |
-
-> 评审主线以 **KB records** 为准，proposal/tasks 仅供人类阅读。
 
 ### 每步要点
 
 - **init**：只负责本地结构与配置，不入库。
-- **kb init/update**：生成/更新 KB；推荐先 `kb preview` 再入库。
+- **init-index/update-index**：生成/更新多级索引（PROJECT_INDEX/FOLDER_INDEX）。
 - **specify**：写清 Why / What Changes / Impact / Success Criteria，避免实现细节。
 - **clarify**：对高影响歧义提问并写回 proposal；或对任务标记返工。
 - **plan**：输出 `tasks.yaml`（Gate-0 + Wave 并发结构、依赖、checklist）。
 - **apply**：按 Wave 并发执行；失败用 `--resume` 继续。
-- **checklist**：强 Gate；未通过不得归档，必须补齐后回到 apply/clarify。
+- **accept**：端到端验收；未通过不得归档，必须补齐后回到 apply/clarify。
 - **archive**：合并 Delta specs 到主 specs 并归档变更目录。
 
 ### 超简单模式
@@ -185,8 +168,7 @@ cc-spec quick-delta "修复登录页面样式问题"
 ```
 
 说明：
-- quick-delta 仅简化文档，系统仍会写入 KB record
-- 最小需求集：Why / What / Impact / Success Criteria
+- quick-delta 会生成 mini-proposal.md 并直接归档
 
 ---
 
@@ -213,8 +195,8 @@ pytest -m integration
 
 cc-spec init 会生成 Claude Code 的命令文件到 `.claude/commands/cc-spec/`，在 Claude Code 中可直接调用：
 
-- `/cc-spec:init`（构建/更新 KB：先 scan，再入库，默认使用 Smart Chunking）
-- `/cc-spec:specify` / `/cc-spec:clarify` / `/cc-spec:plan` / `/cc-spec:apply` / `/cc-spec:checklist` / `/cc-spec:archive`
+- `/cc-spec:init`（初始化/更新项目索引：生成 PROJECT_INDEX/FOLDER_INDEX）
+- `/cc-spec:specify` / `/cc-spec:clarify` / `/cc-spec:plan` / `/cc-spec:apply` / `/cc-spec:accept` / `/cc-spec:archive`
 
 ---
 
@@ -447,13 +429,13 @@ cc-spec 使用的模板基于 OpenSpec 和 Spec-Kit 的模板设计：
 ### v0.1.8 (2025-01)
 
 - **Smart Chunking**: AST-based 代码切片（0 token，100x 速度提升）
-- **KB 配置优化**: 三层策略调度（AST → Line → LLM）
+- **配置优化**: 三层策略调度（AST → Line → LLM）
 - **规范模板更新**: base-template.yaml v1.0.8
 
 ### v0.1.6 (2025-01)
 
 - **智能上下文**: ContextProvider 自动注入相关代码
-- **增量更新**: KB 支持 git diff 检测变更文件
+- **增量更新**: 支持 git diff 检测变更文件
 
 ### v0.1.4 (2025-01)
 

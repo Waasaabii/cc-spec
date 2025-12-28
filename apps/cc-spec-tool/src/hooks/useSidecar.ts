@@ -153,22 +153,6 @@ export function useSidecar() {
         [runCommand]
     );
 
-    // 便捷方法：知识库查询
-    const kbQuery = useCallback(
-        async (projectPath: string, query: string, topK = 5) => {
-            return runCommand([
-                "kb",
-                "query",
-                query,
-                "--top-k",
-                topK.toString(),
-                "--project",
-                projectPath,
-            ]);
-        },
-        [runCommand]
-    );
-
     return {
         // 状态
         loading,
@@ -183,6 +167,5 @@ export function useSidecar() {
         init,
         listChanges,
         gotoChange,
-        kbQuery,
     };
 }

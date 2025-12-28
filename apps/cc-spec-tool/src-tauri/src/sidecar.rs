@@ -18,6 +18,11 @@ fn dev_project_root() -> Result<PathBuf, String> {
         .ok_or_else(|| "Failed to resolve cc-spec repo root from CARGO_MANIFEST_DIR".to_string())
 }
 
+#[cfg(not(debug_assertions))]
+fn dev_project_root() -> Result<PathBuf, String> {
+    Err("dev_mode".to_string())
+}
+
 /// Sidecar 命令执行结果
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct SidecarResult {
@@ -25,6 +30,14 @@ pub struct SidecarResult {
     pub stdout: String,
     pub stderr: String,
     pub exit_code: Option<i32>,
+}
+
+/// 预处理后的 cc-spec 命令（可用于 streaming / 自定义读取 stdout/stderr）
+#[derive(Clone, Debug)]
+pub struct PreparedCcspecCommand {
+    pub program: String,
+    pub args: Vec<String>,
+    pub cwd: Option<String>,
 }
 
 /// 获取 sidecar 可执行文件路径
@@ -58,19 +71,18 @@ fn get_sidecar_path(_app_handle: &tauri::AppHandle) -> Result<PathBuf, String> {
     }
 }
 
-/// 执行 cc-spec 命令（同步）
-#[tauri::command]
-pub async fn run_ccspec_command(
+/// 解析 cc-spec 调用方式（dev: `uv run -m cc_spec`；release: sidecar 可执行），并返回可直接 spawn 的 program/args/cwd。
+pub fn prepare_ccspec_command(
     args: Vec<String>,
     working_dir: Option<String>,
-    app_handle: tauri::AppHandle,
-) -> Result<SidecarResult, String> {
-    let (program, cmd_args, command_cwd) = match get_sidecar_path(&app_handle) {
-        Ok(path) => (
-            path.to_string_lossy().to_string(),
+    app_handle: &tauri::AppHandle,
+) -> Result<PreparedCcspecCommand, String> {
+    match get_sidecar_path(app_handle) {
+        Ok(path) => Ok(PreparedCcspecCommand {
+            program: path.to_string_lossy().to_string(),
             args,
-            working_dir.clone(),
-        ),
+            cwd: working_dir,
+        }),
         Err(e) if e == "dev_mode" => {
             // 开发模式：uv run 需要显式指定 cc-spec 项目目录，否则在目标项目目录会变成“直接 spawn cc-spec”
             // 目标：让 uv 使用 cc-spec 仓库作为 project，同时让 cc-spec 在 working_dir 下运行。
@@ -88,10 +100,28 @@ pub async fn run_ccspec_command(
             all_args.push("-m".to_string());
             all_args.push("cc_spec".to_string());
             all_args.extend(args);
-            ("uv".to_string(), all_args, Some(project_root.to_string_lossy().to_string()))
+
+            Ok(PreparedCcspecCommand {
+                program: "uv".to_string(),
+                args: all_args,
+                cwd: Some(project_root.to_string_lossy().to_string()),
+            })
         }
-        Err(e) => return Err(e),
-    };
+        Err(e) => Err(e),
+    }
+}
+
+/// 执行 cc-spec 命令（同步）
+#[tauri::command]
+pub async fn run_ccspec_command(
+    args: Vec<String>,
+    working_dir: Option<String>,
+    app_handle: tauri::AppHandle,
+) -> Result<SidecarResult, String> {
+    let prepared = prepare_ccspec_command(args, working_dir, &app_handle)?;
+    let program = prepared.program;
+    let cmd_args = prepared.args;
+    let command_cwd = prepared.cwd;
 
     let mut command = Command::new(&program);
     command.args(&cmd_args);

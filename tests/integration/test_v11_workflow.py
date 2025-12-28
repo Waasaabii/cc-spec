@@ -186,8 +186,8 @@ class TestCommandGeneratorWorkflow:
 
         paths = generator.generate_all(temp_project)
 
-        # Should generate 11 commands
-        assert len(paths) == 11
+        # Should generate all cc-spec commands
+        assert len(paths) == 14
 
         # Check some specific commands exist
         cmd_names = [p.stem for p in paths]
@@ -257,7 +257,7 @@ class TestV11Features:
         assert data["version"] == "1.1"
 
     def test_eleven_commands_available(self) -> None:
-        """Test CLI commands are registered (now includes kb group)."""
+        """Test CLI commands are registered."""
         from cc_spec import app
 
         commands = [cmd.name for cmd in app.registered_commands]
@@ -265,16 +265,21 @@ class TestV11Features:
 
         # Core workflow commands
         assert "init" in commands
+        assert "init-index" in commands
+        assert "update-index" in commands
+        assert "check-index" in commands
         assert "specify" in commands
         assert "clarify" in commands
         assert "plan" in commands
         assert "apply" in commands
-        assert "checklist" in commands
+        assert "accept" in commands
         assert "archive" in commands
         assert "quick-delta" in commands
         assert "list" in commands
         assert "goto" in commands
         assert "update" in commands
-        assert "kb" in groups
+        assert "chat" in commands
+        assert "context" in commands
+        assert groups == []
 
-        assert len(commands) == 11
+        assert len(commands) >= 16

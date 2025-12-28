@@ -1,19 +1,19 @@
 # 命令参考
 
-> 说明：8 步流程是人类组合指令；系统层会将每步转换为 KB 记录/更新动作。
+> 说明：cc-spec 的“人类流程”是组合指令；系统会生成/维护**项目索引**与**工作流状态**（如 `status.yaml`），用于保证后续步骤可重复、可追踪。
 
-**人类步骤 vs 系统 KB 动作**
+**人类步骤 vs 系统产物**
 
-| 人类步骤 | 系统 KB 动作（必须执行） |
+| 人类步骤 | 系统动作/关键产物 |
 |---|---|
-| init | 建立项目结构；若 KB 未建，标记待入库 |
-| kb init/update | 生成/更新 code chunks 与 workflow records |
-| specify | `kb record`：Why/What/Impact/Success Criteria |
-| clarify | `kb record`：返工原因/歧义检测结果/需求补充摘要 |
-| plan | `kb record`：任务拆解摘要、依赖、验收点 |
-| apply | `kb record`：任务执行上下文与变更摘要；`kb update` 入库变更 |
-| checklist | `kb record`：评分、未完成项、改进建议 |
-| archive | `kb update/compact`：归档前确保 KB 最新 |
+| init | 初始化 `.cc-spec/` 目录结构与默认配置；生成各 AI 工具的命令文件（如 `.claude/commands/cc-spec/*.md`） |
+| init-index / update-index | 生成/更新 `PROJECT_INDEX.md`、`FOLDER_INDEX.md`；写入 `.cc-spec/index/manifest.json`、`.cc-spec/index/status.json` |
+| specify | 生成 `proposal.md` 并创建变更目录 |
+| clarify | 标记返工/补充信息（更新 `status.yaml`） |
+| plan | 基于 `proposal.md` 生成 `tasks.yaml` |
+| apply | 按 Wave 并发执行 `tasks.yaml`，更新任务状态与执行记录 |
+| accept | 生成/维护 `acceptance.md`；运行自动化检查并输出 `acceptance-report.md` |
+| archive | 归档变更产物到 `.cc-spec/archive/` |
 
 ## 全局选项
 
@@ -26,35 +26,31 @@ cc-spec --help       # 显示帮助信息
 
 ## init
 
-初始化 cc-spec 项目结构。
+初始化 cc-spec 项目结构与默认配置。
 
 ```bash
 cc-spec init [OPTIONS]
 ```
 
 常用选项：
-- `--force`, `-f`：强制覆盖已存在配置
-
-说明：
-- 创建 `.cc-spec/` 目录结构
-- 生成默认 `config.yaml`
+- `--force`, `-f`：强制覆盖已存在的 `.cc-spec/` 目录
 
 ---
 
-## kb
+## init-index / update-index / check-index
 
-构建/更新知识库（推荐）。
+初始化/更新/检查项目多级索引（用于上下文注入与结构概览）。
 
 ```bash
-cc-spec kb init
-cc-spec kb update
-cc-spec kb status
-cc-spec kb query "关键词"
+cc-spec init-index [--path <DIR>] [--level l1|l2|l3 ...]
+cc-spec update-index [--path <DIR>] [--level l1|l2|l3 ...]
+cc-spec check-index [--path <DIR>]
 ```
 
 说明：
-- KB 是评审主线，包含 code chunks 与 workflow records
-- 未建 KB 会影响后续评审质量
+- L1：`PROJECT_INDEX.md`（项目根索引）
+- L2：`FOLDER_INDEX.md`（每个文件夹的文件清单）
+- L3：预留（默认不修改源码，仅记录到 manifest/status）
 
 ---
 
@@ -65,10 +61,6 @@ cc-spec kb query "关键词"
 ```bash
 cc-spec specify <CHANGE_NAME>
 ```
-
-说明：
-- 生成 `proposal.md`
-- 写入 KB record（Why/What/Impact/Success Criteria）
 
 ---
 
@@ -83,24 +75,23 @@ cc-spec clarify --detect
 ```
 
 说明：
-- 无参数：显示当前变更任务列表
-- 指定任务：标记返工并写入 KB
-- `--detect`：检测 proposal.md 歧义并写入 KB
+- 无参数：显示当前变更的任务列表
+- 指定任务：标记返工并更新 `status.yaml`
+- `--detect`：对 `proposal.md` 做轻量歧义检测并写回提示信息（不做交互式问答回写）
 
 ---
 
 ## plan
 
-生成执行计划（tasks.yaml）。
+生成执行计划（`tasks.yaml`）。
 
 ```bash
-cc-spec plan <CHANGE_NAME>
+cc-spec plan [CHANGE_NAME]
 ```
 
 说明：
 - 读取 `proposal.md`
-- 生成 `tasks.yaml`（Gate/Wave + deps + checklist）
-- 不再默认生成 `design.md`
+- 生成 `tasks.yaml`（Wave + deps + checklist）
 
 ---
 
@@ -117,30 +108,20 @@ cc-spec apply [CHANGE_NAME] [OPTIONS]
 - `--resume`, `-r`
 - `--dry-run`
 
-说明：
-- 按 Wave 顺序执行；Wave 内并发
-- 每个任务会写入 KB record
-- 任务完成后执行 KB update
-
 ---
 
-## checklist
+## accept
 
-验收评分（强 Gate）。
+端到端验收：执行自动化检查并生成报告。
 
 ```bash
-cc-spec checklist <CHANGE_NAME> [OPTIONS]
+cc-spec accept [CHANGE_NAME|CHANGE_ID] [--skip-checks] [--write-report/--no-write-report]
 ```
 
-常用选项：
-- `--threshold`：通过阈值（默认 80）
-- `--write-report`：生成 `checklist-result.md`
-
 说明：
-- 解析 `tasks.yaml` 中 checklist
-- 权重以 `config.yaml` 为准（默认 30/25/25/20）
-- 未通过：不得归档；写入 KB record 并回到 apply/clarify
-- 默认不落盘报告；需 `--write-report`
+- 生成/维护 `acceptance.md`
+- 运行配置的检查命令（默认 `lint/test/build/type-check`）
+- 输出 `acceptance-report.md`（默认开启）
 
 ---
 
@@ -149,56 +130,32 @@ cc-spec checklist <CHANGE_NAME> [OPTIONS]
 归档已完成变更。
 
 ```bash
-cc-spec archive <CHANGE_NAME> [OPTIONS]
+cc-spec archive <CHANGE_NAME>
 ```
-
-说明：
-- checklist 未通过不可归档
-- 归档前确保 KB 已更新/compact
 
 ---
 
 ## quick-delta
 
-快速变更通道（简化文档，但系统流程完整）。
+快速变更通道（用于小改动/热修复）。
 
 ```bash
-cc-spec quick-delta "Fix typo in README"
+cc-spec quick-delta "<描述>"
 ```
 
 说明：
-- 必须写入 KB record（最小需求集）
-- 模式由模型基于 KB 评估决定；影响文件数 >5 强制标准流程
-- 用户可中文明确表达跳过/强制快速
+- 自动解析 `git diff` 生成最小化的变更描述（仍建议走 `accept` 验证）
 
 ---
 
-## list
-
-列出变更、任务、规范或归档。
+## list / goto / update / chat / context
 
 ```bash
-cc-spec list changes|tasks|specs|archive
-```
-
----
-
-## goto
-
-导航到变更或任务。
-
-```bash
+cc-spec list changes|tasks|specs|archives
 cc-spec goto <ID>
-```
-
----
-
-## update
-
-更新配置、命令或模板。
-
-```bash
-cc-spec update [commands|subagent|all] [OPTIONS]
+cc-spec update [config|commands|templates]
+cc-spec chat
+cc-spec context
 ```
 
 ---

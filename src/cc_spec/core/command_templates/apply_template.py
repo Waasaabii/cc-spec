@@ -1,7 +1,7 @@
 """apply 命令模板（v0.1.5）。
 
 目标：执行 tasks.yaml 中任务（Wave 并行），由 cc-spec 负责调度并调用 Codex。
-原则：Claude 只编排，不直接 Write/Edit；上下文通过 KB/RAG。
+原则：Claude 只编排，不直接 Write/Edit；上下文通过多级索引与相关文件引用。
 """
 
 from .base import CommandTemplate, CommandTemplateContext
@@ -13,7 +13,6 @@ class ApplyTemplate(CommandTemplate):
 
 **执行层**：
 - `cc-spec apply` 会并发调度任务，并在每个任务中调用 Codex CLI
-- 每个 Wave 结束后会增量更新 KB；全部成功后会 compact（events → snapshot）
 """.strip()
 
     def get_execution_steps(self, ctx: CommandTemplateContext) -> list[str]:
@@ -21,7 +20,7 @@ class ApplyTemplate(CommandTemplate):
             """**前置检查**
 
 - 确认 tasks.yaml 存在
-- 若 KB 未初始化：先运行 `/cc-spec init`（阶段 2 建库/更新库）
+- 确认项目多级索引已初始化（`cc-spec check-index`），必要时运行 `/cc-spec init` 或 `cc-spec init-index`
 """,
             """**执行 apply**
 
@@ -53,11 +52,10 @@ cc-spec apply $ARGUMENTS
         return [
             "tasks.yaml 中本次可执行任务已更新为 completed/failed",
             "失败时可用 `cc-spec apply --resume` 继续",
-            "KB 已在 apply 过程中增量更新，并在成功后 compact",
             "下一步已指向 accept",
         ]
 
     def get_guidelines(self, ctx: CommandTemplateContext) -> str:
         return """- Claude 只编排：不要直接改代码/改 tasks.yaml
-- 任务执行的上下文来自 KB；不要在 prompt 里塞大段文件全文
+- 任务执行上下文以多级索引与 tasks.yaml 的 context.related_files 为准
 """.strip()

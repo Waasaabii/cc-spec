@@ -22,8 +22,6 @@ from cc_spec.core.state import (
     load_state,
     update_state,
 )
-from cc_spec.rag.pipeline import KBUpdateSummary
-from cc_spec.rag.scanner import ScanReport
 from cc_spec.subagent.executor import ExecutionResult
 from cc_spec.subagent.task_parser import (
     Task,
@@ -107,14 +105,15 @@ tasks:
                     started_at=datetime.now().isoformat(),
                     completed_at=datetime.now().isoformat(),
                 ),
-                Stage.CLARIFY: StageInfo(status=TaskStatus.COMPLETED),
+                Stage.DETAIL: StageInfo(status=TaskStatus.COMPLETED),
+                Stage.REVIEW: StageInfo(status=TaskStatus.COMPLETED),
                 Stage.PLAN: StageInfo(
                     status=TaskStatus.COMPLETED,
                     started_at=datetime.now().isoformat(),
                     completed_at=datetime.now().isoformat(),
                 ),
                 Stage.APPLY: StageInfo(status=TaskStatus.PENDING),
-                Stage.CHECKLIST: StageInfo(status=TaskStatus.PENDING),
+                Stage.ACCEPT: StageInfo(status=TaskStatus.PENDING),
                 Stage.ARCHIVE: StageInfo(status=TaskStatus.PENDING),
             },
         )
@@ -263,10 +262,11 @@ tasks:
             current_stage=Stage.PLAN,
             stages={
                 Stage.SPECIFY: StageInfo(status=TaskStatus.COMPLETED),
-                Stage.CLARIFY: StageInfo(status=TaskStatus.COMPLETED),
+                Stage.DETAIL: StageInfo(status=TaskStatus.COMPLETED),
+                Stage.REVIEW: StageInfo(status=TaskStatus.COMPLETED),
                 Stage.PLAN: StageInfo(status=TaskStatus.COMPLETED),
                 Stage.APPLY: StageInfo(status=TaskStatus.PENDING),
-                Stage.CHECKLIST: StageInfo(status=TaskStatus.PENDING),
+                Stage.ACCEPT: StageInfo(status=TaskStatus.PENDING),
                 Stage.ARCHIVE: StageInfo(status=TaskStatus.PENDING),
             },
         )
@@ -328,99 +328,6 @@ tasks:
 
         assert result.exit_code == 0
         assert_contains_any(result.stdout.lower(), ["completed successfully", "01-setup"])
-
-    @patch("cc_spec.commands.apply.update_kb")
-    @patch("cc_spec.commands.apply.SubAgentExecutor")
-    def test_apply_kb_strict_runs_task_level_kb_updates(
-        self,
-        mock_executor_class,
-        mock_update_kb,
-    ) -> None:
-        """Test apply --kb-strict triggers baseline + per-task + final KB updates."""
-        self._create_tasks_yaml()
-        self._create_status()
-
-        mock_update_kb.return_value = (
-            KBUpdateSummary(
-                scanned=1,
-                added=0,
-                changed=0,
-                removed=0,
-                chunks_written=0,
-                reference_mode="index",
-            ),
-            ScanReport(
-                included=1,
-                excluded=0,
-                excluded_reasons={},
-                sample_included=[],
-                sample_excluded=[],
-                excluded_paths=[],
-            ),
-        )
-
-        # Mock executor
-        mock_executor = MagicMock()
-        mock_executor_class.return_value = mock_executor
-
-        mock_task = Task(
-            task_id="01-SETUP",
-            name="Project Setup",
-            wave=0,
-            status=ParserTaskStatus.IDLE,
-            dependencies=[],
-        )
-        mock_wave = Wave(wave_number=0, tasks=[mock_task])
-        mock_doc = TasksDocument(
-            change_name="add-feature",
-            waves=[mock_wave],
-            all_tasks={"01-SETUP": mock_task},
-        )
-        mock_executor.doc = mock_doc
-
-        mock_result = ExecutionResult(
-            task_id="01-SETUP",
-            success=True,
-            output="Task completed successfully",
-            duration_seconds=1.5,
-            started_at=datetime.now(),
-            completed_at=datetime.now(),
-        )
-
-        async def mock_execute_wave_strict(
-            wave_num,
-            use_lock=True,
-            skip_locked=False,
-            resume=False,
-            on_task_complete=None,
-        ):
-            if on_task_complete is not None:
-                await on_task_complete(mock_result)
-            return [mock_result]
-
-        mock_executor.execute_wave_strict = mock_execute_wave_strict
-        mock_executor.execute_wave = AsyncMock()
-
-        os.chdir(str(self.project_root))
-        result = runner.invoke(app, ["apply", self.change_name, "--kb-strict", "--no-tech-check"])
-
-        assert result.exit_code == 0
-
-        # baseline + task-level + final sync
-        assert mock_update_kb.call_count >= 3
-
-        calls = list(mock_update_kb.call_args_list)
-        attributions = [(kwargs.get("attribution") or {}) for _, kwargs in calls]
-
-        # baseline should not touch list fields
-        assert any(
-            (kwargs.get("skip_list_fields") is True)
-            and (attributions[i].get("step") == "apply.baseline")
-            for i, (_, kwargs) in enumerate(calls)
-        )
-
-        # Ensure at least one call carries task attribution
-        assert any(a.get("task_id") == "01-SETUP" for a in attributions)
 
     @patch("cc_spec.commands.apply.SubAgentExecutor")
     def test_apply_failed_execution(self, mock_executor_class) -> None:

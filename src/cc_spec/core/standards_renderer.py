@@ -8,7 +8,6 @@ from typing import Iterable
 from .standards_templates import (
     AGENTS_MD_TEMPLATE,
     CLAUDE_FORBIDDEN,
-    CLAUDE_KB_WRITE_RULES,
     CLAUDE_OUTPUTS,
     CLAUDE_ROLE_RULES,
     CLAUDE_WORKFLOW_PHASES,
@@ -45,7 +44,6 @@ def render_skill_md(*, project_coding_rules: Iterable[str] | None = None) -> str
         "claude.outputs.forbidden": format_rules(CLAUDE_FORBIDDEN),
         "claude.workflow.phases": format_workflow(CLAUDE_WORKFLOW_PHASES),
         "project.coding_rules": _render_project_rules(project_coding_rules),
-        "claude.kb_write_rules.rules": format_rules(CLAUDE_KB_WRITE_RULES),
     }
     return _apply_template(SKILL_MD_TEMPLATE, mapping).strip() + "\n"
 

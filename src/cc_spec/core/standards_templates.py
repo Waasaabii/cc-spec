@@ -36,10 +36,6 @@ SKILL_MD_TEMPLATE = """# cc-spec Standards (for Claude)
 
 ## 项目编码规范
 {project.coding_rules}
-
-## KB 规则
-### 写入规则
-{claude.kb_write_rules.rules}
 """
 
 
@@ -74,7 +70,7 @@ CLAUDE_ROLE_RULES = [
     "与用户沟通，理解需求；做最终决策，拍板方案",
     "编写文档（proposal、review、acceptance 等）",
     "快速修复 CX 产生的 bug；质量把控，确保功能端到端可用",
-    "负责将需求/上下文写入 KB，供 Codex 读取",
+    "负责在 proposal/tasks 等文档中沉淀需求与约束，供 Codex 执行",
     "不直接编写业务代码，代码实现由 CX (Codex) 完成",
     "负责审核 Codex 的执行结果，处理异常情况",
     "CX (Codex) 是你的顾问，负责调研和批量执行，通过 `cc-spec chat` 协作",
@@ -83,9 +79,8 @@ CLAUDE_ROLE_RULES = [
 CLAUDE_OUTPUTS = [
     Artifact("proposal.md", "变更提案（需求描述、影响范围、技术方案）"),
     Artifact("tasks.yaml", "任务拆分（Wave/Task 结构、依赖关系、检查清单）"),
-    Artifact("config.yaml", "项目配置（工具选项、打分阈值、KB 策略）"),
+    Artifact("config.yaml", "项目配置（工具选项、打分阈值等）"),
     Artifact("base-template.yaml", "规范模板（编码规范、架构约束、安全规则）"),
-    Artifact("KB records", "工作流记录（需求摘要、任务上下文、执行结果）"),
 ]
 
 CLAUDE_FORBIDDEN = [
@@ -97,12 +92,12 @@ CLAUDE_FORBIDDEN = [
 CLAUDE_WORKFLOW_PHASES = [
     {
         "phase": 1,
-        "name": "需求分析与 KB 写入",
+        "name": "需求分析与上下文准备",
         "actor": "Claude",
         "actions": [
             "阅读 proposal.md 和 tasks.yaml，理解任务目标",
-            "将任务摘要/需求要点写入 KB",
-            "cc-spec kb record --step apply --change \"{change_name}\" --task-id \"{task_id}\" --notes \"{task_summary}\"",
+            "确认项目已初始化多级索引（PROJECT_INDEX / FOLDER_INDEX），必要时运行 `cc-spec init-index`",
+            "明确关键约束与验收点，避免后续返工",
         ],
     },
     {
@@ -111,7 +106,7 @@ CLAUDE_WORKFLOW_PHASES = [
         "actor": "Claude → Codex",
         "actions": [
             "cc-spec apply --change \"{change_name}\"",
-            "SubAgentExecutor 自动检索 KB 并注入上下文",
+            "SubAgentExecutor 自动注入索引与相关文件上下文",
         ],
     },
     {
@@ -121,16 +116,8 @@ CLAUDE_WORKFLOW_PHASES = [
         "actions": [
             "检查 tasks.yaml 中的任务状态",
             "失败任务分析原因并决定是否重试",
-            "必要时补充 KB 并重新执行",
         ],
     },
-]
-
-CLAUDE_KB_WRITE_RULES = [
-    "需求分析完成后，必须将任务摘要写入 KB",
-    "使用 cc-spec kb record 记录工作流步骤",
-    "复杂需求拆解为多个 KB 条目，便于 Codex 检索",
-    "写入内容包括：任务目标、技术要点、约束条件、参考文件",
 ]
 
 
@@ -140,7 +127,7 @@ CODEX_ROLE_RULES = [
     "执行测试和验证；大范围重复性任务",
     "CC (Claude Code) 是决策者，你可以充分表达观点，但最终决策权归 CC",
     "不要限制自己的能力，充分分析和表达",
-    "从 KB 获取上下文（需求 + 代码），理解任务目标",
+    "从项目索引与需求文档获取上下文，理解任务目标",
     "直接执行任务，修改代码文件",
     "遵循项目规范，输出高质量代码",
 ]
@@ -154,19 +141,22 @@ CODEX_OUTPUTS = [
 
 CODEX_FORBIDDEN = [
     "cc-spec 规范文件（proposal.md, tasks.yaml, base-template.yaml）",
-    "KB 记录（由 Claude 通过 cc-spec kb record 写入）",
     "工作流状态文件（status.yaml）",
 ]
 
 CODEX_EXECUTION_RULES = [
     "严格按照 prompt 中的任务要求执行",
-    "遵循项目编码规范（从 KB 上下文获取）",
+    "遵循项目编码规范（从索引与需求文档获取）",
     "最小作用域，只改需求范围内的代码",
     "不擅自扩展需求范围",
 ]
 
 
 CODEX_COMMANDS = [
+    {"name": "init", "description": "初始化工作流目录结构", "usage": "cc-spec init"},
+    {"name": "init-index", "description": "初始化项目多级索引（PROJECT_INDEX/FOLDER_INDEX）", "usage": "cc-spec init-index"},
+    {"name": "update-index", "description": "增量更新项目多级索引", "usage": "cc-spec update-index"},
+    {"name": "check-index", "description": "检查项目多级索引一致性", "usage": "cc-spec check-index"},
     {"name": "specify", "description": "创建新的变更规格说明", "usage": "cc-spec specify <变更名称>"},
     {"name": "clarify", "description": "审查任务/进入 detail/review 模式", "usage": "cc-spec clarify [--detail|--review]"},
     {"name": "plan", "description": "从提案生成执行计划", "usage": "cc-spec plan"},
@@ -178,16 +168,6 @@ CODEX_COMMANDS = [
     {"name": "list", "description": "列出变更、任务、规格或归档", "usage": "cc-spec list [changes|tasks|specs|archives]"},
     {"name": "goto", "description": "导航到特定变更或任务", "usage": "cc-spec goto <变更名称>"},
     {"name": "update", "description": "更新配置、命令或模板", "usage": "cc-spec update [config|commands|templates]"},
-    {
-        "name": "kb",
-        "description": "KB（向量库）相关命令",
-        "subcommands": [
-            {"name": "kb init", "description": "全量构建 KB"},
-            {"name": "kb update", "description": "增量更新 KB"},
-            {"name": "kb query", "description": "向量检索"},
-            {"name": "kb context", "description": "输出格式化上下文"},
-        ],
-    },
 ]
 
 

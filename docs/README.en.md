@@ -4,13 +4,13 @@
 
 English | [中文](../README.md)
 
-[![Version](https://img.shields.io/badge/version-0.2.1-blue.svg)](https://github.com/Waasaabii/cc-spec)
+[![Version](https://img.shields.io/badge/version-0.2.2-blue.svg)](https://github.com/Waasaabii/cc-spec)
 
 ---
 
 ## Introduction
 
-cc-spec is a spec-driven development tool that combines the best of [OpenSpec](https://github.com/hannesrudolph/openspec) and [Spec-Kit](https://github.com/github/spec-kit), designed for **Claude Code orchestration + Codex execution** workflow.
+cc-spec is a spec-driven development tool designed for a **Claude Code orchestration + Codex execution** workflow.
 
 The project consists of two main modules:
 
@@ -21,50 +21,26 @@ The project consists of two main modules:
 
 ### Key Features
 
-- **8-Step Standard Workflow**: `init → kb init/update → specify → clarify → plan → apply → checklist → archive`
+- **8-Step Workflow**: `init → init-index/update-index → specify → clarify → plan → apply → accept → archive`
 - **SubAgent Concurrent Execution**: Up to 10 SubAgents in parallel during apply phase (Claude Code only)
 - **Multi-AI Tool Support**: Command integration for 17+ AI tools (Claude, Cursor, Gemini, Copilot, etc.)
 - **Delta Change Tracking**: ADDED / MODIFIED / REMOVED / RENAMED format
-- **Scoring Acceptance**: Checklist score ≥80 to pass, otherwise returns to apply
-- **Quick Mode**: `quick-delta` for one-step change recording
+- **End-to-End Acceptance**: `accept` stage runs lint/test/build/type-check and generates a report
+- **Quick Mode**: `quick-delta` for one-step small changes
 
 ---
 
 ## Desktop App (cc-spec-tool)
 
-`apps/cc-spec-tool/` is a desktop GUI application built with Tauri 2.0, providing visual interface for managing Codex/Claude sessions.
+`apps/cc-spec-tool/` is a desktop GUI application built with Tauri, providing a visual interface for managing Codex/Claude sessions.
 
 ### Features
 
 - **Project Management**: Import, switch, and remove projects
-- **Codex Session Management**: Terminal/ConPTY relay mode with session monitoring and auto-retry
+- **Codex Session Management**: Terminal relay mode with session monitoring and auto-retry
 - **Claude Integration**: Start and manage Claude CLI sessions
 - **Task Scheduling**: Concurrency control and queue management
 - **Real-time Status**: SSE event stream + sessions.json dual-track synchronization
-
-### Architecture
-
-```
-apps/cc-spec-tool/
-├── src/                    # React Frontend
-│   ├── App.tsx             # Main app entry
-│   ├── components/         # UI components
-│   │   ├── projects/       # Project management
-│   │   └── icons/          # Icon components
-│   ├── hooks/              # React Hooks
-│   └── types/              # TypeScript types
-├── src-tauri/              # Rust Backend
-│   ├── src/
-│   │   ├── main.rs         # Tauri entry, registers all commands
-│   │   ├── codex_sessions.rs   # Codex session management (core)
-│   │   ├── codex_runner.rs     # Codex CLI executor
-│   │   ├── claude.rs           # Claude session management
-│   │   ├── projects.rs         # Project management
-│   │   └── concurrency.rs      # Concurrency control
-│   └── tauri.conf.json     # Tauri config
-├── sidecar/                # Python Sidecar (cc-spec CLI packaged)
-└── scripts/                # Build scripts
-```
 
 ### Development
 
@@ -106,11 +82,11 @@ uv tool install cc-spec --force --from git+https://github.com/Waasaabii/cc-spec.
 ## Quick Start
 
 ```bash
-# 1. Initialize project (select AI tools to support)
-cc-spec init --ai claude,cursor
+# 1. Initialize project
+cc-spec init
 
-# 2. (Recommended) build/update KB
-cc-spec kb init
+# 2. (Recommended) initialize project index (L1 + L2)
+cc-spec init-index --level l1 --level l2
 # or in Claude Code:
 # /cc-spec:init
 
@@ -126,8 +102,8 @@ cc-spec plan
 # 6. Execute tasks (SubAgent concurrent, Claude Code only)
 cc-spec apply
 
-# 7. Acceptance scoring
-cc-spec checklist
+# 7. End-to-end acceptance
+cc-spec accept
 
 # 8. Archive changes
 cc-spec archive
@@ -141,51 +117,26 @@ cc-spec quick-delta "Fix login page styling issue"
 ```
 
 Notes:
-- quick-delta only simplifies docs; the system still writes KB records
-- Minimum info set: Why / What / Impact / Success Criteria
+- quick-delta simplifies docs, but you should still run `cc-spec accept` for basic validation.
 
 ---
 
 ## Workflow (Detailed)
 
-> Core principle: **Claude orchestrates/reviews, Codex implements**; KB bridges context.
+> Core principle: **Claude orchestrates/reviews, Codex implements**.
 
 | Step | Purpose | Command | Key Output |
 |------|---------|---------|-----------|
-| 1. init | Project setup & config | `cc-spec init` | `.cc-spec/`, `config.yaml` |
-| 2. kb init/update | Build/update KB (recommended) | `cc-spec kb init` / `cc-spec kb update` | `.cc-spec/vectordb/`, workflow records |
+| 1. init | Project setup & config | `cc-spec init` | `.cc-spec/`, `config.yaml`, AI tool commands |
+| 2. init-index/update-index | Build/update index (recommended) | `cc-spec init-index` / `cc-spec update-index` | `PROJECT_INDEX.md`, `FOLDER_INDEX.md`, `.cc-spec/index/status.json` |
 | 3. specify | Define scope & success criteria | `cc-spec specify <change>` | `.cc-spec/changes/<change>/proposal.md` |
-| 4. clarify | Resolve ambiguity or mark rework | `cc-spec clarify [task-id]` | Clarifications / rework markers |
+| 4. clarify | Resolve ambiguity or mark rework | `cc-spec clarify [task-id]` | Rework markers / detect output |
 | 5. plan | Generate executable plan | `cc-spec plan` | `.cc-spec/changes/<change>/tasks.yaml` |
 | 6. apply | Run tasks concurrently | `cc-spec apply` | Task status updates & execution records |
-| 7. checklist | Acceptance scoring (default ≥80) | `cc-spec checklist` | KB checklist record (optional checklist-result.md with --write-report) |
-| 8. archive | Merge Delta specs & archive | `cc-spec archive` | `.cc-spec/changes/archive/...` |
+| 7. accept | End-to-end validation | `cc-spec accept` | `acceptance.md`, `acceptance-report.md` |
+| 8. archive | Archive the change | `cc-spec archive` | `.cc-spec/archive/...` |
 
-### Step Notes
-
-- **init**: Prepares local structure only (no KB write).
-- **kb init/update**: Use `kb preview` before indexing if needed.
-- **specify**: Capture Why / What Changes / Impact / Success Criteria (avoid implementation details).
-- **clarify**: Ask high-impact questions and write back to proposal; or mark tasks for rework.
-- **plan**: Outputs `tasks.yaml` (Gate-0 + Wave, deps, checklist).
-- **apply**: Runs Wave-by-Wave; retry failures with `--resume`.
-- **checklist**: Weighted scoring across Functionality/Quality/Tests/Docs; default writes to KB, use `--write-report` for `checklist-result.md`.
-- **archive**: Merges Delta specs into main specs and archives the change.
-
-### Human vs System KB Flow
-
-| Human Step | System KB Action (must run) |
-|---|---|
-| init | Create project structure; mark KB pending if not built |
-| kb init/update | Build/update code chunks and workflow records |
-| specify | `kb record`: Why/What/Impact/Success Criteria |
-| clarify | `kb record`: rework reasons, ambiguity findings, requirement clarifications |
-| plan | `kb record`: task breakdown summary, dependencies, acceptance points |
-| apply | `kb record`: execution context + change summary; `kb update` to ingest changes |
-| checklist | `kb record`: score, failed items, recommendations |
-| archive | `kb update/compact`: ensure KB is current before archive |
-
-> Review baseline is **KB records**; proposal/tasks are for human reading only.
+---
 
 ## Testing
 
@@ -194,7 +145,6 @@ Layered runs (integration is opt-in):
 ```bash
 pytest -m unit
 pytest -m cli
-pytest -m rag
 pytest -m codex
 ```
 
@@ -203,6 +153,8 @@ Integration tests (explicit only):
 ```bash
 pytest -m integration
 ```
+
+---
 
 ## Using in AI Tools
 
@@ -219,45 +171,8 @@ cc-spec init generates command files for selected AI tools, allowing users to in
 
 ---
 
-## Workflow Design Origins
-
-cc-spec integrates design elements from the following projects:
-
-| Source | Contribution |
-|--------|--------------|
-| **[OpenSpec](https://github.com/hannesrudolph/openspec)** | Delta change tracking, archive workflow, multi-AI tool configuration, AGENTS.md standard |
-| **[Spec-Kit](https://github.com/github/spec-kit)** | CLI tech stack (uv + typer + rich), template system, clarify workflow, scoring mechanism |
-| **auto-dev** | SubAgent concurrent execution, Wave task planning format |
-
-### Template Sources
-
-Templates used in cc-spec are based on OpenSpec and Spec-Kit template designs:
-
-- **Spec Template (spec-template.md)**: Based on Spec-Kit's User Story + Given/When/Then format
-- **Plan Template (plan-template.md)**: Based on Spec-Kit's Phase-based design
-- **Tasks Template (tasks-template.md)**: Based on auto-dev's Wave/Task-ID format
-- **Delta Format**: Based on OpenSpec's ADDED/MODIFIED/REMOVED/RENAMED specification
-- **Command Files**: Based on OpenSpec's multi-tool adapter pattern
-
----
-
 ## Documentation
 
-For detailed design documentation, see [docs/plan/cc-spec/](./plan/cc-spec/README.md).
-
----
-
-## Acknowledgements
-
-This project is heavily influenced by and based on the work and research of **[John Lam](https://github.com/jflam)**.
-
-Special thanks to:
-
-- **[OpenSpec](https://github.com/hannesrudolph/openspec)** - A spec-driven development framework created by Hannes Rudolph, providing excellent Delta change tracking and multi-tool support design
-- **[Spec-Kit](https://github.com/github/spec-kit)** - A spec-driven development toolkit created by the GitHub team (Den Delimarsky, John Lam, and others), providing a mature CLI framework and template system
-
----
-
-## License
-
-MIT License
+- CLI docs: `docs/cc-spec/README.md`
+- Commands: `docs/cc-spec/commands.md`
+- Workflow: `docs/cc-spec/workflow.md`

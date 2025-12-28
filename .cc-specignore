@@ -1,7 +1,7 @@
-# cc-spec KB scanning ignore rules
+# cc-spec scanning ignore rules
 #
 # 说明：
-# - 该文件用于控制 v0.1.5 知识库扫描范围
+# - 该文件用于控制 cc-spec 的项目扫描范围（例如多级索引 / 其它扫描任务）
 # - 语法为简化版 gitignore：支持注释、空行、目录（以 / 结尾）、以及 ! 反选
 #
 # 默认情况下 cc-spec 内置了一组常见忽略规则（.git/.venv/node_modules 等）。
@@ -27,13 +27,9 @@ __pycache__/
 .mypy_cache/
 .ruff_cache/
 
-# cc-spec runtime & derived artifacts (KB will manage these explicitly)
+# cc-spec runtime & derived artifacts
 .cc-spec/runtime/
-.cc-spec/vectordb/
-.cc-spec/kb.events.jsonl
-.cc-spec/kb.snapshot.jsonl
-.cc-spec/kb.manifest.json
-.cc-spec/kb.attribution.json
+.cc-spec/index/
 
 # Reference materials (external projects, skip for now)
 reference/

@@ -21,10 +21,10 @@ from cc_spec.utils.files import ensure_dir, get_cc_spec_dir, get_config_path
 
 console = Console()
 
-DEFAULT_CC_SPECIGNORE = """# cc-spec KB scanning ignore rules
+DEFAULT_CC_SPECIGNORE = """# cc-spec scanning ignore rules
 #
 # 说明：
-# - 该文件用于控制 v0.1.5 知识库扫描范围
+# - 该文件用于控制 cc-spec 的项目扫描范围（例如多级索引 / 其它扫描任务）
 # - 语法为简化版 gitignore：支持注释、空行、目录（以 / 结尾）、以及 ! 反选
 #
 # 默认情况下 cc-spec 内置了一组常见忽略规则（.git/.venv/node_modules 等）。
@@ -50,13 +50,9 @@ __pycache__/
 .mypy_cache/
 .ruff_cache/
 
-# cc-spec runtime & derived artifacts (KB will manage these explicitly)
+# cc-spec runtime & derived artifacts
 .cc-spec/runtime/
-.cc-spec/vectordb/
-.cc-spec/kb.events.jsonl
-.cc-spec/kb.snapshot.jsonl
-.cc-spec/kb.manifest.json
-.cc-spec/kb.attribution.json
+.cc-spec/index/
 """
 
 
@@ -187,13 +183,13 @@ def init_command(
 
     console.print()
 
-    # 步骤2.6: 生成 .cc-specignore（KB 扫描规则）
+    # 步骤2.6: 生成 .cc-specignore（扫描忽略规则）
     ignore_path = project_root / ".cc-specignore"
     if not ignore_path.exists():
         console.print("[cyan]正在生成 .cc-specignore...[/cyan]")
         try:
             ignore_path.write_text(DEFAULT_CC_SPECIGNORE.strip() + "\n", encoding="utf-8")
-            console.print("[green]✓[/green] 已生成 .cc-specignore（KB 扫描规则）")
+            console.print("[green]✓[/green] 已生成 .cc-specignore（扫描忽略规则）")
         except Exception as e:
             console.print(f"[yellow]⚠[/yellow] 警告: 生成 .cc-specignore 失败: {e}")
     else:
@@ -285,7 +281,7 @@ def init_command(
             f"[cyan]执行工具:[/cyan] Codex CLI（由 cc-spec 调用）\n\n"
             f"[bold]下一步操作:[/bold]\n"
             f"  1. （已完成）终端执行 [cyan]cc-spec init[/cyan]\n"
-            f"  2. 在 Claude Code 中执行 [cyan]/cc-spec:init[/cyan] 构建/更新 KB（先 scan 再入库）\n"
+            f"  2. 在 Claude Code 中执行 [cyan]/cc-spec:init[/cyan] 初始化/检查项目索引（IndexPrompt）\n"
             f"  3. 在 Claude Code 中执行 [cyan]/cc-spec:specify <变更名称>[/cyan] 创建变更规格\n"
             f"  4. 继续执行 [cyan]/cc-spec:clarify --detail[/cyan] CC↔CX 讨论\n"
             f"  5. 继续执行 [cyan]/cc-spec:clarify --review[/cyan] 用户审查\n"

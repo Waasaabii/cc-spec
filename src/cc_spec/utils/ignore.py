@@ -1,6 +1,6 @@
 """cc-spec 的忽略规则（类似 .gitignore 的简化版）。
 
-v0.1.5：用于 KB 扫描时的 include/exclude 控制。
+用于 cc-spec 的项目扫描（例如多级索引生成等）时的 include/exclude 控制。
 
 设计目标：
 - 简单可控：支持注释、空行、目录规则（以 / 结尾）、以及 ! 反选。
@@ -13,7 +13,7 @@ from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 
 
-DEFAULT_KB_IGNORE_PATTERNS: list[str] = [
+DEFAULT_SCAN_IGNORE_PATTERNS: list[str] = [
     # VCS / IDE / caches
     ".git/",
     ".idea/",
@@ -35,11 +35,7 @@ DEFAULT_KB_IGNORE_PATTERNS: list[str] = [
     "build/",
     # cc-spec runtime / derived artifacts
     ".cc-spec/runtime/",
-    ".cc-spec/vectordb/",
-    ".cc-spec/kb.events.jsonl",
-    ".cc-spec/kb.snapshot.jsonl",
-    ".cc-spec/kb.manifest.json",
-    ".cc-spec/kb.attribution.json",
+    ".cc-spec/index/",
 ]
 
 

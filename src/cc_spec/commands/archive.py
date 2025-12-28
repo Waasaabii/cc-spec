@@ -35,8 +35,6 @@ from cc_spec.core.state import (
     load_state,
     update_state,
 )
-from cc_spec.rag.models import WorkflowStep
-from cc_spec.rag.workflow import try_compact_kb, try_post_task_sync_kb, try_write_record
 from cc_spec.ui.banner import show_banner
 from cc_spec.utils.files import (
     ensure_dir,
@@ -137,15 +135,6 @@ def archive_command(
         raise typer.Exit(1)
 
     console.print(f"[cyan]正在归档变更：[/cyan] [bold]{change}[/bold]\n")
-
-    # v0.1.5：写入 workflow record（尽力而为）
-    try_write_record(
-        project_root,
-        step=WorkflowStep.ARCHIVE,
-        change_name=change,
-        inputs={"mode": "start", "force": force, "started_at": archive_started_at},
-        notes="archive.start",
-    )
 
     # 加载并校验状态
     status_path = change_dir / "status.yaml"
@@ -255,13 +244,6 @@ def archive_command(
 
         if not Confirm.ask("[bold]是否继续？[/bold]", default=False):
             console.print("[yellow]已取消归档。[/yellow]")
-            try_write_record(
-                project_root,
-                step=WorkflowStep.ARCHIVE,
-                change_name=change,
-                outputs={"cancelled": True},
-                notes="archive.cancelled",
-            )
             raise typer.Exit(0)
 
     # 执行合并操作
@@ -367,41 +349,6 @@ def archive_command(
         )
     console.print(
         f"[dim]已归档到 {archive_path.relative_to(project_root)}[/dim]"
-    )
-
-    # v0.1.5：归档后刷新 KB + compact（失败不阻断）
-    change_id: str | None = None
-    try:
-        cc_spec_root = get_cc_spec_dir(project_root)
-        id_manager = IDManager(cc_spec_root)
-        found = id_manager.get_change_by_name(change)
-        if found:
-            change_id = found[0]
-    except Exception:
-        change_id = None
-
-    kb_updated = try_post_task_sync_kb(
-        project_root,
-        config=config,
-        reference_mode="index",
-        attribution={
-            "step": "archive",
-            "by": f"archive:{change_id or change}",
-            "change_id": change_id,
-            "change_name": change,
-        },
-    )
-    compact_ok = try_compact_kb(project_root)
-    try_write_record(
-        project_root,
-        step=WorkflowStep.ARCHIVE,
-        change_name=change,
-        outputs={
-            "archive_path": str(archive_path.relative_to(project_root)),
-            "kb_updated": kb_updated is not None,
-            "kb_compact": compact_ok,
-        },
-        notes="archive.end",
     )
 
 

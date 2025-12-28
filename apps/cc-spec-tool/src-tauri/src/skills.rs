@@ -699,7 +699,7 @@ fn get_auxiliary_commands() -> Vec<Command> {
             name: "cc-spec:init".to_string(),
             version: "1.0.0".to_string(),
             stage: None,
-            description: "初始化/更新知识库（RAG）".to_string(),
+            description: "初始化项目（Bootstrap + 索引）".to_string(),
             icon: Some("🔧".to_string()),
             source: None,
             imported_from: None,

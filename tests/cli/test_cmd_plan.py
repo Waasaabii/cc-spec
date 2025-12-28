@@ -67,10 +67,11 @@ We need this feature to improve user experience.
                     started_at=datetime.now().isoformat(),
                     completed_at=datetime.now().isoformat(),
                 ),
-                Stage.CLARIFY: StageInfo(status=TaskStatus.PENDING),
+                Stage.DETAIL: StageInfo(status=TaskStatus.PENDING),
+                Stage.REVIEW: StageInfo(status=TaskStatus.PENDING),
                 Stage.PLAN: StageInfo(status=TaskStatus.PENDING),
                 Stage.APPLY: StageInfo(status=TaskStatus.PENDING),
-                Stage.CHECKLIST: StageInfo(status=TaskStatus.PENDING),
+                Stage.ACCEPT: StageInfo(status=TaskStatus.PENDING),
                 Stage.ARCHIVE: StageInfo(status=TaskStatus.PENDING),
             },
         )

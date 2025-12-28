@@ -368,307 +368,6 @@ class AcceptanceConfig:
         )
 
 
-# ---------------------------------------------------------------------------
-# KB 配置
-# ---------------------------------------------------------------------------
-
-DEFAULT_AST_EXTENSIONS = [
-    ".py",
-    ".ts",
-    ".tsx",
-    ".js",
-    ".jsx",
-    ".go",
-    ".rs",
-    ".java",
-    ".kt",
-    ".cs",
-    ".c",
-    ".cpp",
-    ".h",
-    ".hpp",
-    ".rb",
-    ".php",
-    ".swift",
-    ".scala",
-]
-
-DEFAULT_LLM_PRIORITY_FILES = [
-    "readme.md",
-    "readme",
-    "main.py",
-    "app.py",
-    "index.ts",
-    "index.js",
-    "__init__.py",
-    "setup.py",
-    "pyproject.toml",
-    "package.json",
-]
-
-DEFAULT_KB_INCREMENTAL_TRIGGERS = [
-    "file_modified",
-    "file_added",
-    "file_deleted",
-    "file_renamed",
-]
-
-DEFAULT_KB_EXCLUDE_PATTERNS = [
-    "*.pyc",
-    "__pycache__/**",
-    ".git/**",
-    "node_modules/**",
-    ".cc-spec/**",
-]
-
-
-@dataclass
-class KBChunkingAstConfig:
-    enabled: bool = True
-    max_chunk_chars: int = 2000
-    chunk_overlap_nodes: int = 1
-    supported_extensions: list[str] = field(default_factory=lambda: list(DEFAULT_AST_EXTENSIONS))
-
-    def to_dict(self) -> dict[str, Any]:
-        return {
-            "enabled": self.enabled,
-            "max_chunk_chars": self.max_chunk_chars,
-            "chunk_overlap_nodes": self.chunk_overlap_nodes,
-            "supported_extensions": list(self.supported_extensions),
-        }
-
-    @classmethod
-    def from_dict(cls, data: dict[str, Any]) -> "KBChunkingAstConfig":
-        return cls(
-            enabled=bool(data.get("enabled", True)),
-            max_chunk_chars=int(data.get("max_chunk_chars", 2000)),
-            chunk_overlap_nodes=int(data.get("chunk_overlap_nodes", 1)),
-            supported_extensions=list(data.get("supported_extensions", list(DEFAULT_AST_EXTENSIONS))),
-        )
-
-
-@dataclass
-class KBChunkingLineConfig:
-    lines_per_chunk: int = 100
-    overlap_lines: int = 10
-
-    def to_dict(self) -> dict[str, Any]:
-        return {
-            "lines_per_chunk": self.lines_per_chunk,
-            "overlap_lines": self.overlap_lines,
-        }
-
-    @classmethod
-    def from_dict(cls, data: dict[str, Any]) -> "KBChunkingLineConfig":
-        return cls(
-            lines_per_chunk=int(data.get("lines_per_chunk", 100)),
-            overlap_lines=int(data.get("overlap_lines", 10)),
-        )
-
-
-@dataclass
-class KBChunkingLLMConfig:
-    enabled: bool = True
-    priority_files: list[str] = field(default_factory=lambda: list(DEFAULT_LLM_PRIORITY_FILES))
-    max_content_chars: int = 120_000
-
-    def to_dict(self) -> dict[str, Any]:
-        return {
-            "enabled": self.enabled,
-            "priority_files": list(self.priority_files),
-            "max_content_chars": self.max_content_chars,
-        }
-
-    @classmethod
-    def from_dict(cls, data: dict[str, Any]) -> "KBChunkingLLMConfig":
-        return cls(
-            enabled=bool(data.get("enabled", True)),
-            priority_files=list(data.get("priority_files", list(DEFAULT_LLM_PRIORITY_FILES))),
-            max_content_chars=int(data.get("max_content_chars", 120_000)),
-        )
-
-
-@dataclass
-class KBChunkingConfig:
-    strategy: str = "ast-only"
-    ast: KBChunkingAstConfig = field(default_factory=KBChunkingAstConfig)
-    line: KBChunkingLineConfig = field(default_factory=KBChunkingLineConfig)
-    llm: KBChunkingLLMConfig = field(default_factory=KBChunkingLLMConfig)
-
-    def to_dict(self) -> dict[str, Any]:
-        return {
-            "strategy": self.strategy,
-            "ast": self.ast.to_dict(),
-            "line": self.line.to_dict(),
-            "llm": self.llm.to_dict(),
-        }
-
-    @classmethod
-    def from_dict(cls, data: dict[str, Any]) -> "KBChunkingConfig":
-        return cls(
-            strategy=str(data.get("strategy", "ast-only")),
-            ast=KBChunkingAstConfig.from_dict(data.get("ast", {})),
-            line=KBChunkingLineConfig.from_dict(data.get("line", {})),
-            llm=KBChunkingLLMConfig.from_dict(data.get("llm", {})),
-        )
-
-
-@dataclass
-class KBPostTaskSyncConfig:
-    enabled: bool = True
-    strategy: str = "smart"
-
-    def to_dict(self) -> dict[str, Any]:
-        return {"enabled": self.enabled, "strategy": self.strategy}
-
-    @classmethod
-    def from_dict(cls, data: dict[str, Any]) -> "KBPostTaskSyncConfig":
-        return cls(
-            enabled=bool(data.get("enabled", True)),
-            strategy=str(data.get("strategy", "smart")),
-        )
-
-
-@dataclass
-class KBUpdateConfig:
-    post_task_sync: KBPostTaskSyncConfig = field(default_factory=KBPostTaskSyncConfig)
-    incremental_triggers: list[str] = field(default_factory=lambda: list(DEFAULT_KB_INCREMENTAL_TRIGGERS))
-    exclude_patterns: list[str] = field(default_factory=lambda: list(DEFAULT_KB_EXCLUDE_PATTERNS))
-
-    def to_dict(self) -> dict[str, Any]:
-        return {
-            "post_task_sync": self.post_task_sync.to_dict(),
-            "incremental_triggers": list(self.incremental_triggers),
-            "exclude_patterns": list(self.exclude_patterns),
-        }
-
-    @classmethod
-    def from_dict(cls, data: dict[str, Any]) -> "KBUpdateConfig":
-        return cls(
-            post_task_sync=KBPostTaskSyncConfig.from_dict(data.get("post_task_sync", {})),
-            incremental_triggers=list(data.get("incremental_triggers", list(DEFAULT_KB_INCREMENTAL_TRIGGERS))),
-            exclude_patterns=list(data.get("exclude_patterns", list(DEFAULT_KB_EXCLUDE_PATTERNS))),
-        )
-
-
-@dataclass
-class KBRetrievalPreExecutionConfig:
-    enabled: bool = True
-    sources: list[str] = field(default_factory=lambda: ["workflow_records", "code_chunks"])
-    max_chunks: int = 10
-    max_tokens: int = 8000
-
-    def to_dict(self) -> dict[str, Any]:
-        return {
-            "enabled": self.enabled,
-            "sources": list(self.sources),
-            "max_chunks": self.max_chunks,
-            "max_tokens": self.max_tokens,
-        }
-
-    @classmethod
-    def from_dict(cls, data: dict[str, Any]) -> "KBRetrievalPreExecutionConfig":
-        return cls(
-            enabled=bool(data.get("enabled", True)),
-            sources=list(data.get("sources", ["workflow_records", "code_chunks"])),
-            max_chunks=int(data.get("max_chunks", 10)),
-            max_tokens=int(data.get("max_tokens", 8000)),
-        )
-
-
-@dataclass
-class KBRetrievalStrategyConfig:
-    type: str = "hybrid"
-
-    def to_dict(self) -> dict[str, Any]:
-        return {"type": self.type}
-
-    @classmethod
-    def from_dict(cls, data: dict[str, Any]) -> "KBRetrievalStrategyConfig":
-        return cls(type=str(data.get("type", "hybrid")))
-
-
-@dataclass
-class KBRetrievalRelevanceConfig:
-    min_score: float = 0.5
-    boost_same_file: float = 1.5
-    boost_recent_workflow: float = 2.0
-
-    def to_dict(self) -> dict[str, Any]:
-        return {
-            "min_score": self.min_score,
-            "boost_same_file": self.boost_same_file,
-            "boost_recent_workflow": self.boost_recent_workflow,
-        }
-
-    @classmethod
-    def from_dict(cls, data: dict[str, Any]) -> "KBRetrievalRelevanceConfig":
-        return cls(
-            min_score=float(data.get("min_score", 0.5)),
-            boost_same_file=float(data.get("boost_same_file", 1.5)),
-            boost_recent_workflow=float(data.get("boost_recent_workflow", 2.0)),
-        )
-
-
-@dataclass
-class KBRetrievalConfig:
-    pre_execution: KBRetrievalPreExecutionConfig = field(default_factory=KBRetrievalPreExecutionConfig)
-    strategy: KBRetrievalStrategyConfig = field(default_factory=KBRetrievalStrategyConfig)
-    relevance: KBRetrievalRelevanceConfig = field(default_factory=KBRetrievalRelevanceConfig)
-
-    def to_dict(self) -> dict[str, Any]:
-        return {
-            "pre_execution": self.pre_execution.to_dict(),
-            "strategy": self.strategy.to_dict(),
-            "relevance": self.relevance.to_dict(),
-        }
-
-    @classmethod
-    def from_dict(cls, data: dict[str, Any]) -> "KBRetrievalConfig":
-        if "pre_execution" not in data and (
-            "max_chunks" in data or "max_tokens" in data or "strategy" in data
-        ):
-            pre_exec = {
-                "enabled": True,
-                "sources": ["workflow_records", "code_chunks"],
-                "max_chunks": data.get("max_chunks", 10),
-                "max_tokens": data.get("max_tokens", 8000),
-            }
-            strategy = {"type": data.get("strategy", "hybrid")}
-            return cls(
-                pre_execution=KBRetrievalPreExecutionConfig.from_dict(pre_exec),
-                strategy=KBRetrievalStrategyConfig.from_dict(strategy),
-                relevance=KBRetrievalRelevanceConfig(),
-            )
-        return cls(
-            pre_execution=KBRetrievalPreExecutionConfig.from_dict(data.get("pre_execution", {})),
-            strategy=KBRetrievalStrategyConfig.from_dict(data.get("strategy", {})),
-            relevance=KBRetrievalRelevanceConfig.from_dict(data.get("relevance", {})),
-        )
-
-
-@dataclass
-class KBConfig:
-    chunking: KBChunkingConfig = field(default_factory=KBChunkingConfig)
-    update: KBUpdateConfig = field(default_factory=KBUpdateConfig)
-    retrieval: KBRetrievalConfig = field(default_factory=KBRetrievalConfig)
-
-    def to_dict(self) -> dict[str, Any]:
-        return {
-            "chunking": self.chunking.to_dict(),
-            "update": self.update.to_dict(),
-            "retrieval": self.retrieval.to_dict(),
-        }
-
-    @classmethod
-    def from_dict(cls, data: dict[str, Any]) -> "KBConfig":
-        return cls(
-            chunking=KBChunkingConfig.from_dict(data.get("chunking", {})),
-            update=KBUpdateConfig.from_dict(data.get("update", {})),
-            retrieval=KBRetrievalConfig.from_dict(data.get("retrieval", {})),
-        )
-
-
 @dataclass
 class Config:
     """cc-spec 的主配置。
@@ -699,7 +398,6 @@ class Config:
     checklist: ChecklistConfig = field(default_factory=ChecklistConfig)
     scoring: ScoringConfig = field(default_factory=ScoringConfig)
     lock: LockConfig = field(default_factory=LockConfig)
-    kb: KBConfig = field(default_factory=KBConfig)
     acceptance: AcceptanceConfig = field(default_factory=AcceptanceConfig)
 
     def get_active_agent(self) -> str:
@@ -757,9 +455,6 @@ class Config:
                 "auto_retry": self.checklist.auto_retry,
             }
 
-        if is_version_gte(self.version, "1.4"):
-            result["kb"] = self.kb.to_dict()
-
         # acceptance 配置
         result["acceptance"] = self.acceptance.to_dict()
 
@@ -781,7 +476,6 @@ class Config:
         checklist_data = data.get("checklist", {})
         scoring_data = data.get("scoring", {})
         lock_data = data.get("lock", {})
-        kb_data = data.get("kb", {})
 
         agents_data = data.get("agents")
         agent = data.get("agent", "claude")
@@ -807,7 +501,6 @@ class Config:
             )
 
         lock = LockConfig.from_dict(lock_data) if lock_data else LockConfig()
-        kb = KBConfig.from_dict(kb_data) if kb_data else KBConfig()
         acceptance_data = data.get("acceptance", {})
         acceptance = AcceptanceConfig.from_dict(acceptance_data) if acceptance_data else AcceptanceConfig()
 
@@ -829,7 +522,6 @@ class Config:
             ),
             scoring=scoring,
             lock=lock,
-            kb=kb,
             acceptance=acceptance,
         )
 

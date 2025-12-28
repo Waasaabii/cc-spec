@@ -9,7 +9,7 @@ cc-spec 是一个帮助开发者管理 AI 辅助开发工作流的命令行工�
 - 🚀 **结构化工作流** - 从 specify 到 archive 的完整开发流程
 - 🤖 **SubAgent 并发执行** - 支持多任务并行处理，显著提升效率
 - 📋 **任务管理** - Wave 分组、依赖管理、进度追踪
-- ✅ **质量保障** - 内置 checklist 验证机制
+- ✅ **质量保障** - accept 阶段自动化检查（lint/test/build/type-check）
 - 📦 **变更归档** - 自动归档已完成的变更
 
 ## 快速开始
@@ -30,8 +30,8 @@ pip install cc-spec
 # 1. 初始化项目
 cc-spec init
 
-# 2. （推荐）构建/更新知识库
-cc-spec kb init
+# 2. 初始化项目索引（推荐 L1 + L2）
+cc-spec init-index
 
 # 3. 创建变更规范
 cc-spec specify add-user-auth
@@ -45,8 +45,8 @@ cc-spec plan add-user-auth
 # 6. 执行任务 (SubAgent 并发)
 cc-spec apply add-user-auth
 
-# 7. 验证 checklist
-cc-spec checklist add-user-auth
+# 7. 端到端验收
+cc-spec accept add-user-auth
 
 # 8. 归档变更
 cc-spec archive add-user-auth
@@ -67,7 +67,6 @@ cc-spec quick-delta "Fix typo in README"
 ```bash
 pytest -m unit
 pytest -m cli
-pytest -m rag
 pytest -m codex
 ```
 
@@ -100,11 +99,14 @@ pytest -m integration
 | 命令 | 说明 |
 |------|------|
 | `init` | 初始化 cc-spec 项目 |
+| `init-index` | 初始化项目多级索引（PROJECT_INDEX/FOLDER_INDEX） |
+| `update-index` | 增量更新项目多级索引 |
+| `check-index` | 检查项目索引是否齐全/一致 |
 | `specify` | 创建新的变更规范 |
 | `clarify` | 查看任务列表或标记任务返工 |
 | `plan` | 生成任务计划 |
 | `apply` | 执行任务 (SubAgent 并发) |
-| `checklist` | 验证任务完成情况 |
+| `accept` | 端到端验收（自动化检查 + 报告） |
 | `archive` | 归档已完成的变更 |
 | `quick-delta` | 快速创建并归档小型变更 |
 

@@ -32,9 +32,13 @@ def temp_state_file(tmp_path: Path) -> Path:
                 "status": "completed",
                 "completed_at": "2024-01-15T10:05:00Z",
             },
-            "clarify": {
+            "detail": {
                 "status": "completed",
                 "completed_at": "2024-01-15T10:15:00Z",
+            },
+            "review": {
+                "status": "completed",
+                "completed_at": "2024-01-15T10:20:00Z",
             },
             "plan": {
                 "status": "completed",
@@ -46,7 +50,7 @@ def temp_state_file(tmp_path: Path) -> Path:
                 "waves_completed": 1,
                 "waves_total": 3,
             },
-            "checklist": {
+            "accept": {
                 "status": "pending",
             },
             "archive": {
@@ -118,10 +122,11 @@ class TestStageEnum:
     def test_stage_values(self) -> None:
         """Test that all stages have correct values."""
         assert Stage.SPECIFY.value == "specify"
-        assert Stage.CLARIFY.value == "clarify"
+        assert Stage.DETAIL.value == "detail"
+        assert Stage.REVIEW.value == "review"
         assert Stage.PLAN.value == "plan"
         assert Stage.APPLY.value == "apply"
-        assert Stage.CHECKLIST.value == "checklist"
+        assert Stage.ACCEPT.value == "accept"
         assert Stage.ARCHIVE.value == "archive"
 
 
@@ -151,7 +156,7 @@ class TestChangeState:
         assert state.change_name == "test-change"
         assert state.created_at == "2024-01-15T10:00:00Z"
         assert state.current_stage == Stage.SPECIFY
-        assert len(state.stages) == 6
+        assert len(state.stages) == 7
         assert len(state.tasks) == 0
 
     def test_change_state_with_stages(self) -> None:
@@ -309,11 +314,12 @@ class TestValidateStageTransition:
 
     def test_validate_transition_next_stage(self) -> None:
         """Test transition to next stage."""
-        assert validate_stage_transition(Stage.SPECIFY, Stage.CLARIFY) is True
-        assert validate_stage_transition(Stage.CLARIFY, Stage.PLAN) is True
+        assert validate_stage_transition(Stage.SPECIFY, Stage.DETAIL) is True
+        assert validate_stage_transition(Stage.DETAIL, Stage.REVIEW) is True
+        assert validate_stage_transition(Stage.REVIEW, Stage.PLAN) is True
         assert validate_stage_transition(Stage.PLAN, Stage.APPLY) is True
-        assert validate_stage_transition(Stage.APPLY, Stage.CHECKLIST) is True
-        assert validate_stage_transition(Stage.CHECKLIST, Stage.ARCHIVE) is True
+        assert validate_stage_transition(Stage.APPLY, Stage.ACCEPT) is True
+        assert validate_stage_transition(Stage.ACCEPT, Stage.ARCHIVE) is True
 
     def test_validate_transition_same_stage(self) -> None:
         """Test staying in the same stage."""
@@ -323,11 +329,11 @@ class TestValidateStageTransition:
     def test_validate_transition_backward(self) -> None:
         """Test backward transitions (rework)."""
         assert validate_stage_transition(Stage.APPLY, Stage.PLAN) is True
-        assert validate_stage_transition(Stage.CHECKLIST, Stage.APPLY) is True
+        assert validate_stage_transition(Stage.ACCEPT, Stage.APPLY) is True
         assert validate_stage_transition(Stage.ARCHIVE, Stage.SPECIFY) is True
 
     def test_validate_transition_skip_forward(self) -> None:
         """Test that skipping stages forward is not allowed."""
         assert validate_stage_transition(Stage.SPECIFY, Stage.PLAN) is False
         assert validate_stage_transition(Stage.SPECIFY, Stage.APPLY) is False
-        assert validate_stage_transition(Stage.CLARIFY, Stage.CHECKLIST) is False
+        assert validate_stage_transition(Stage.DETAIL, Stage.APPLY) is False

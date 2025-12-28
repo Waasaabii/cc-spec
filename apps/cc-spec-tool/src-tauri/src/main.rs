@@ -987,18 +987,18 @@ fn launch_claude_terminal(
         .join("index")
         .join("status.json");
     if !index_status.exists() {
-        return Err("项目未初始化：请先在 tool 中完成 Bootstrap + KB 初始化（IndexPrompt）".to_string());
+        return Err("项目未初始化：请先在 tool 中完成 Bootstrap + 索引初始化（IndexPrompt）".to_string());
     }
     let raw = std::fs::read_to_string(&index_status)
-        .map_err(|_| "项目初始化状态不可读：请先在 tool 中完成 Bootstrap + KB 初始化（IndexPrompt）".to_string())?;
+        .map_err(|_| "项目初始化状态不可读：请先在 tool 中完成 Bootstrap + 索引初始化（IndexPrompt）".to_string())?;
     let value = serde_json::from_str::<serde_json::Value>(&raw)
-        .map_err(|_| "项目初始化状态损坏：请重新执行 Bootstrap + KB 初始化（IndexPrompt）".to_string())?;
+        .map_err(|_| "项目初始化状态损坏：请重新执行 Bootstrap + 索引初始化（IndexPrompt）".to_string())?;
     if !value
         .get("initialized")
         .and_then(|v| v.as_bool())
         .unwrap_or(false)
     {
-        return Err("项目未初始化完成：请先在 tool 中完成 Bootstrap + KB 初始化（IndexPrompt）".to_string());
+        return Err("项目未初始化完成：请先在 tool 中完成 Bootstrap + 索引初始化（IndexPrompt）".to_string());
     }
 
     let port = state

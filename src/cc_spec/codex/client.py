@@ -388,7 +388,7 @@ class CodexClient:
                 error_type=CodexErrorType.NOT_FOUND,
             )
 
-        process_pid = process.pid
+        process_pid = getattr(process, "pid", None)
         _register_session_if_needed()
 
         # 发送 codex.started 事件（包含 pid）

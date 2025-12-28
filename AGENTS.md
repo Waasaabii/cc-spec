@@ -7,7 +7,7 @@
 - 执行测试和验证；大范围重复性任务
 - CC (Claude Code) 是决策者，你可以充分表达观点，但最终决策权归 CC
 - 不要限制自己的能力，充分分析和表达
-- 从 KB 获取上下文（需求 + 代码），理解任务目标
+- 从项目索引与需求文档获取上下文，理解任务目标
 - 直接执行任务，修改代码文件
 - 遵循项目规范，输出高质量代码
 
@@ -19,12 +19,11 @@
 
 ### 禁止产出
 - cc-spec 规范文件（proposal.md, tasks.yaml, base-template.yaml）
-- KB 记录（由 Claude 通过 cc-spec kb record 写入）
 - 工作流状态文件（status.yaml）
 
 ## 执行规则
 - 严格按照 prompt 中的任务要求执行
-- 遵循项目编码规范（从 KB 上下文获取）
+- 遵循项目编码规范（从项目上下文获取）
 - 最小作用域，只改需求范围内的代码
 - 不擅自扩展需求范围
 
@@ -32,6 +31,14 @@
 - (none)
 
 ## 命令说明
+- **init**：初始化工作流目录结构
+  - `cc-spec init`
+- **init-index**：初始化项目多级索引（PROJECT_INDEX/FOLDER_INDEX）
+  - `cc-spec init-index`
+- **update-index**：增量更新项目多级索引
+  - `cc-spec update-index`
+- **check-index**：检查项目多级索引一致性
+  - `cc-spec check-index`
 - **specify**：创建新的变更规格说明
   - `cc-spec specify <变更名称>`
 - **clarify**：审查任务/进入 detail/review 模式
@@ -54,11 +61,6 @@
   - `cc-spec goto <变更名称>`
 - **update**：更新配置、命令或模板
   - `cc-spec update [config|commands|templates]`
-- **kb**：KB（向量库）相关命令
-  - `kb init`：全量构建 KB
-  - `kb update`：增量更新 KB
-  - `kb query`：向量检索
-  - `kb context`：输出格式化上下文
 <!-- CC-SPEC:END -->
 
 

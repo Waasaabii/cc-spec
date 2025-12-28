@@ -101,10 +101,11 @@ tasks:
             current_stage=current_stage,
             stages={
                 Stage.SPECIFY: StageInfo(status=TaskStatus.COMPLETED, started_at=now, completed_at=now),
-                Stage.CLARIFY: StageInfo(status=TaskStatus.PENDING),
+                Stage.DETAIL: StageInfo(status=TaskStatus.PENDING),
+                Stage.REVIEW: StageInfo(status=TaskStatus.PENDING),
                 Stage.PLAN: StageInfo(status=TaskStatus.PENDING),
                 Stage.APPLY: StageInfo(status=TaskStatus.PENDING),
-                Stage.CHECKLIST: StageInfo(status=TaskStatus.PENDING),
+                Stage.ACCEPT: StageInfo(status=TaskStatus.PENDING),
                 Stage.ARCHIVE: StageInfo(status=TaskStatus.PENDING),
             },
             tasks=[],

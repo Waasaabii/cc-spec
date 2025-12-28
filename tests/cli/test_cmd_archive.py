@@ -39,23 +39,28 @@ class TestArchiveCommand:
         self.change_dir.mkdir(parents=True, exist_ok=True)
         monkeypatch.chdir(self.project_root)
 
-    def _create_status(self, checklist_completed: bool = True) -> Path:
+    def _create_status(self, accept_completed: bool = True) -> Path:
         """Helper to create status.yaml.
 
         Args:
-            checklist_completed: Whether checklist stage is completed
+            accept_completed: Whether accept stage is completed
         """
         state = ChangeState(
             change_name=self.change_name,
             created_at=datetime.now().isoformat(),
-            current_stage=Stage.CHECKLIST,
+            current_stage=Stage.ACCEPT,
             stages={
                 Stage.SPECIFY: StageInfo(
                     status=TaskStatus.COMPLETED,
                     started_at=datetime.now().isoformat(),
                     completed_at=datetime.now().isoformat(),
                 ),
-                Stage.CLARIFY: StageInfo(
+                Stage.DETAIL: StageInfo(
+                    status=TaskStatus.COMPLETED,
+                    started_at=datetime.now().isoformat(),
+                    completed_at=datetime.now().isoformat(),
+                ),
+                Stage.REVIEW: StageInfo(
                     status=TaskStatus.COMPLETED,
                     started_at=datetime.now().isoformat(),
                     completed_at=datetime.now().isoformat(),
@@ -70,10 +75,10 @@ class TestArchiveCommand:
                     started_at=datetime.now().isoformat(),
                     completed_at=datetime.now().isoformat(),
                 ),
-                Stage.CHECKLIST: StageInfo(
-                    status=TaskStatus.COMPLETED if checklist_completed else TaskStatus.IN_PROGRESS,
+                Stage.ACCEPT: StageInfo(
+                    status=TaskStatus.COMPLETED if accept_completed else TaskStatus.IN_PROGRESS,
                     started_at=datetime.now().isoformat(),
-                    completed_at=datetime.now().isoformat() if checklist_completed else None,
+                    completed_at=datetime.now().isoformat() if accept_completed else None,
                 ),
                 Stage.ARCHIVE: StageInfo(status=TaskStatus.PENDING),
             },
@@ -153,18 +158,18 @@ The system SHALL manage user sessions with the following rules:
         assert result.exit_code == 1
         assert_contains_any(result.stdout, ["未找到", "not found"])
 
-    def test_archive_without_checklist_completed(self) -> None:
-        """Test archive command fails when checklist not completed."""
-        self._create_status(checklist_completed=False)
+    def test_archive_without_accept_completed(self) -> None:
+        """Test archive command fails when accept not completed."""
+        self._create_status(accept_completed=False)
 
         os.chdir(str(self.project_root))
         result = runner.invoke(app, ["archive", self.change_name, "--force"])
         assert result.exit_code == 1
-        assert_contains_any(result.stdout.lower(), ["checklist", "完成"])
+        assert_contains_any(result.stdout.lower(), ["accept", "完成"])
 
     def test_archive_with_no_specs(self) -> None:
         """Test archive command succeeds even without specs directory."""
-        self._create_status(checklist_completed=True)
+        self._create_status(accept_completed=True)
 
         os.chdir(str(self.project_root))
         result = runner.invoke(app, ["archive", self.change_name, "--force"])
@@ -187,7 +192,7 @@ The system SHALL manage user sessions with the following rules:
 
     def test_archive_merges_delta_specs(self) -> None:
         """Test archive command merges Delta specs into main specs."""
-        self._create_status(checklist_completed=True)
+        self._create_status(accept_completed=True)
         self._create_base_spec("auth")
         self._create_delta_spec("auth")
 
@@ -212,7 +217,7 @@ The system SHALL manage user sessions with the following rules:
 
     def test_archive_creates_new_spec_file(self) -> None:
         """Test archive command creates new spec file for ADDED capability."""
-        self._create_status(checklist_completed=True)
+        self._create_status(accept_completed=True)
         # Create delta spec with only ADDED requirements (no MODIFIED)
         delta_content = """# Delta: oauth
 
@@ -245,7 +250,7 @@ The system SHALL support OAuth2 authentication flow.
 
     def test_archive_moves_to_archive_directory(self) -> None:
         """Test archive command moves change to archive with timestamp."""
-        self._create_status(checklist_completed=True)
+        self._create_status(accept_completed=True)
         # Create delta spec with only ADDED requirements (no MODIFIED)
         delta_content = """# Delta: auth
 
@@ -295,7 +300,7 @@ The system SHALL support OAuth2 authentication flow.
 
     def test_archive_without_explicit_change_name(self) -> None:
         """Test archive command uses current active change when name not provided."""
-        self._create_status(checklist_completed=True)
+        self._create_status(accept_completed=True)
 
         os.chdir(str(self.project_root))
         result = runner.invoke(app, ["archive", "--force"])
@@ -308,7 +313,7 @@ The system SHALL support OAuth2 authentication flow.
 
     def test_archive_with_invalid_delta_spec(self) -> None:
         """Test archive command fails when Delta spec is invalid."""
-        self._create_status(checklist_completed=True)
+        self._create_status(accept_completed=True)
 
         # Create invalid Delta spec (missing required fields)
         invalid_content = """# Delta: auth
@@ -329,7 +334,7 @@ The system SHALL support OAuth2 authentication flow.
 
     def test_archive_shows_merge_preview(self) -> None:
         """Test archive command shows merge preview before confirmation."""
-        self._create_status(checklist_completed=True)
+        self._create_status(accept_completed=True)
         self._create_base_spec("auth")
         self._create_delta_spec("auth")
 
@@ -345,7 +350,7 @@ The system SHALL support OAuth2 authentication flow.
 
     def test_archive_handles_duplicate_archive_name(self) -> None:
         """Test archive command handles collision when archive already exists."""
-        self._create_status(checklist_completed=True)
+        self._create_status(accept_completed=True)
 
         # Create first archive
         os.chdir(str(self.project_root))
@@ -354,7 +359,7 @@ The system SHALL support OAuth2 authentication flow.
 
         # Recreate change directory
         self.change_dir.mkdir(parents=True, exist_ok=True)
-        self._create_status(checklist_completed=True)
+        self._create_status(accept_completed=True)
 
         # Try to archive again (should add time suffix)
         result = runner.invoke(app, ["archive", self.change_name, "--force"])
@@ -388,12 +393,12 @@ class TestArchiveIntegration:
         changes_dir = self.cc_spec_dir / "changes"
         change_dir = changes_dir / "add-oauth"
 
-        # Step 2: Manually mark checklist as completed
+        # Step 2: Manually mark accept as completed
         status_path = change_dir / "status.yaml"
         state = load_state(status_path)
 
-        state.current_stage = Stage.CHECKLIST
-        state.stages[Stage.CHECKLIST] = StageInfo(
+        state.current_stage = Stage.ACCEPT
+        state.stages[Stage.ACCEPT] = StageInfo(
             status=TaskStatus.COMPLETED,
             started_at=datetime.now().isoformat(),
             completed_at=datetime.now().isoformat(),

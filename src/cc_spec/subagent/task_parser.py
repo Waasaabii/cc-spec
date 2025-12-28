@@ -41,7 +41,7 @@ STATUS_MAP = {
 
 @dataclass(frozen=True)
 class TaskContext:
-    """v0.1.6: 任务上下文配置（用于自动注入 KB 上下文）。"""
+    """v0.1.6: 任务上下文配置（用于自动注入上下文）。"""
 
     queries: list[str] = field(default_factory=list)
     related_files: list[str] = field(default_factory=list)

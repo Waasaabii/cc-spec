@@ -14,7 +14,6 @@ class SpecifyTemplate(CommandTemplate):
 **分工**：
 - Claude Code：只编排（Bash/Read/Glob/Grep/AskUserQuestion/TodoWrite）
 - Codex：产出文件（proposal.md）
-- KB：作为后续上下文来源（RAG），并记录 workflow records
 
 **产物**：
 - `.cc-spec/changes/<change>/proposal.md`（给人看的规格）
@@ -56,12 +55,6 @@ EOF
 - Read proposal.md，确认章节齐全且非空
 - 如不合格：再次用 Codex 只修 proposal.md（不要让 Claude 直接 Edit）
 """,
-            """**写入可追溯记录（推荐）**
-
-```bash
-cc-spec kb record --step specify --change "<change>" --notes "proposal generated"
-```
-""",
         ]
 
     def get_validation_checklist(self, ctx: CommandTemplateContext) -> list[str]:
@@ -69,12 +62,10 @@ cc-spec kb record --step specify --change "<change>" --notes "proposal generated
             "proposal.md 已生成且包含 Why/What Changes/Impact",
             "Success Criteria 可验证（可量化或明确验收方式）",
             "未使用 Claude 的 Write/Edit 直接产出文件",
-            "（可选）已写入 `kb record --step specify`",
         ]
 
     def get_guidelines(self, ctx: CommandTemplateContext) -> str:
         return """- Claude 只编排：Bash 调 cc-spec/codex；不要直接 Write/Edit
 - 规格面向“人读”，描述 WHAT/WHY，避免 HOW
-- 若需要上下文：优先依赖 KB（/cc-spec init 建库）而非读大量文档
+- 若需要上下文：优先依赖多级索引（PROJECT_INDEX/FOLDER_INDEX）与相关文件引用
 """.strip()
-

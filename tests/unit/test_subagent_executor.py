@@ -8,9 +8,28 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from cc_spec.core.scoring import CheckItem, CheckStatus
+from cc_spec.codex.models import CodexResult
 from cc_spec.subagent.executor import ExecutionResult, SubAgentExecutor
 from cc_spec.subagent.result_collector import ResultCollector, WaveResult
 from cc_spec.subagent.task_parser import Task, TaskStatus
+
+
+@pytest.fixture(autouse=True)
+def _fast_codex(monkeypatch: pytest.MonkeyPatch) -> None:
+    """避免单测真实调用 Codex CLI（加速 & 去不稳定因素）。"""
+
+    def _fake_run_codex_for_task(self, task: Task, prompt: str, timeout_ms: int) -> CodexResult:
+        _ = (task, prompt, timeout_ms)
+        return CodexResult(
+            success=True,
+            exit_code=0,
+            message="ok",
+            session_id=None,
+            stderr="",
+            duration_seconds=0.01,
+        )
+
+    monkeypatch.setattr(SubAgentExecutor, "_run_codex_for_task", _fake_run_codex_for_task)
 
 
 class TestExecutionResult:

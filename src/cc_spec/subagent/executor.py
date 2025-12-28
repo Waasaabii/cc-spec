@@ -76,42 +76,6 @@ def _infer_project_root(tasks_path: Path) -> Path:
     return resolved.parent
 
 
-def _format_kb_query_result(query: str, res: dict[str, Any]) -> str:
-    """将 KB.query 结果格式化为可直接塞进 prompt 的 Markdown。"""
-    ids = (res.get("ids") or [[]])[0]
-    docs = (res.get("documents") or [[]])[0]
-    metas = (res.get("metadatas") or [[]])[0]
-
-    if not isinstance(ids, list) or not isinstance(docs, list) or not isinstance(metas, list):
-        return ""
-
-    max_items = 6
-    max_chars = 800
-
-    lines: list[str] = []
-    lines.append(f"Query: {query}\n")
-
-    for i in range(min(len(ids), max_items)):
-        meta = metas[i] if i < len(metas) and isinstance(metas[i], dict) else {}
-        source = str(meta.get("source_path", ""))
-        typ = str(meta.get("type", ""))
-        summary = str(meta.get("summary", ""))
-
-        lines.append(f"### {i + 1}) {source} ({typ})")
-        if summary and summary != "None":
-            lines.append(f"Summary: {summary}")
-
-        content = docs[i] if i < len(docs) else ""
-        snippet = str(content)[:max_chars].rstrip()
-        if snippet:
-            lines.append("```text")
-            lines.append(snippet)
-            lines.append("```")
-        lines.append("")
-
-    return "\n".join(lines).strip()
-
-
 @dataclass
 class ChangeSummary:
     """
@@ -367,7 +331,7 @@ class SubAgentExecutor:
 
         self._retry_counts: dict[str, int] = {}
 
-        # v0.1.5: 懒加载 KB（用于为 Codex prompt 提供 RAG 上下文）
+        # 懒加载智能上下文提供者（用于为 Codex prompt 注入项目/文件上下文）
         self._context_provider: ContextProvider | None = None
 
     def get_task_profile(self, task: Task) -> SubAgentProfile:
@@ -407,7 +371,7 @@ class SubAgentExecutor:
         """
         self._task_executor = executor
 
-    def build_task_prompt(self, task: Task, *, kb_context: str | None = None) -> str:
+    def build_task_prompt(self, task: Task, *, smart_context: str | None = None) -> str:
         """
 
         使用预处理的变更摘要 + 任务定义 + 检查清单，
@@ -448,10 +412,10 @@ class SubAgentExecutor:
 
         prompt_lines.append("")
 
-        # 3. KB 上下文（RAG，尽量精简）
-        if kb_context:
-            prompt_lines.append("## KB Context")
-            prompt_lines.append(kb_context.strip())
+        # 3. 智能上下文（由 cc-spec 注入，尽量精简）
+        if smart_context:
+            prompt_lines.append("## Smart Context")
+            prompt_lines.append(smart_context.strip())
             prompt_lines.append("")
 
         # 4. 检查清单（~100 tokens）
@@ -500,7 +464,6 @@ class SubAgentExecutor:
         """v0.1.6: 为任务构建智能上下文（失败则降级为 None）。"""
         try:
             if self._context_provider is None:
-                # embedding_model 由 KB 自行从 manifest/默认值推断；这里不强制绑定配置
                 self._context_provider = ContextProvider(self.project_root)
             provider = self._context_provider
         except Exception:
@@ -579,8 +542,8 @@ class SubAgentExecutor:
 
         try:
             async with self._semaphore:
-                kb_context, context_tokens, context_sources = self._get_smart_context_for_task(task)
-                prompt = self.build_task_prompt(task, kb_context=kb_context)
+                smart_context, context_tokens, context_sources = self._get_smart_context_for_task(task)
+                prompt = self.build_task_prompt(task, smart_context=smart_context)
 
                 codex_result: CodexResult = await asyncio.to_thread(
                     self._run_codex_for_task,
@@ -829,99 +792,6 @@ class SubAgentExecutor:
 
         # 写入最终状态
         self.tasks_md_path.write_text(self.tasks_md_content, encoding="utf-8")
-
-        return results
-
-    async def execute_wave_strict(
-        self,
-        wave_num: int,
-        *,
-        use_lock: bool = True,
-        skip_locked: bool = False,
-        resume: bool = False,
-        on_task_complete: Callable[[ExecutionResult], Awaitable[None]] | None = None,
-    ) -> list[ExecutionResult]:
-        """严格模式：串行执行 Wave 内任务，并允许在每个任务结束后执行回调。
-
-        设计目标：
-        - 便于在 apply 中实现“任务级 KB 更新/归属追踪”
-        - 保证回调在同一 Wave 内按任务顺序执行（callback awaited）
-
-        行为：
-        - 仅对 runnable_tasks（默认 IDLE；resume 时包含 FAILED/IN_PROGRESS）串行执行
-        - 每个任务：IN_PROGRESS → 执行 → COMPLETED/FAILED
-        - 若任务失败：停止后续任务（与 apply 的停止策略一致）
-        """
-        tasks = get_tasks_by_wave(self.doc, wave_num)
-        if not tasks:
-            raise ValueError(f"未找到波次 {wave_num} 的任务")
-
-        runnable_statuses = (
-            (TaskStatus.IDLE, TaskStatus.FAILED, TaskStatus.IN_PROGRESS)
-            if resume
-            else (TaskStatus.IDLE,)
-        )
-        runnable_tasks = [t for t in tasks if t.status in runnable_statuses]
-        if not runnable_tasks:
-            return []
-
-        results: list[ExecutionResult] = []
-
-        for task in runnable_tasks:
-            # 标记 IN_PROGRESS
-            task.status = TaskStatus.IN_PROGRESS
-            self.tasks_md_content = update_task_status_yaml(
-                self.tasks_md_content,
-                task.task_id,
-                TaskStatus.IN_PROGRESS,
-            )
-            self.tasks_md_path.write_text(self.tasks_md_content, encoding="utf-8")
-
-            # 执行（串行）
-            if use_lock and self.lock_manager is not None:
-                result = await self._execute_task_with_lock(task, wave_num, skip_locked)
-            else:
-                result = await self.execute_task(task, wave_num)
-            result.wave = wave_num
-            results.append(result)
-
-            # 更新状态
-            task_obj = self.doc.all_tasks.get(result.task_id)
-            if task_obj:
-                if result.success:
-                    new_status = TaskStatus.COMPLETED
-                    task_obj.status = TaskStatus.COMPLETED
-                else:
-                    new_status = TaskStatus.FAILED
-                    task_obj.status = TaskStatus.FAILED
-                    self._retry_counts[result.task_id] = self._retry_counts.get(result.task_id, 0) + 1
-
-                log = {
-                    "completed_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
-                    "subagent_id": result.agent_id or f"agent_{result.task_id}",
-                }
-                if result.session_id:
-                    log["session_id"] = result.session_id
-                if result.exit_code is not None:
-                    log["exit_code"] = result.exit_code
-                if result.error:
-                    log["notes"] = str(result.error)[:200]
-
-                self.tasks_md_content = update_task_status_yaml(
-                    self.tasks_md_content,
-                    result.task_id,
-                    new_status,
-                    log=log,
-                )
-                self.tasks_md_path.write_text(self.tasks_md_content, encoding="utf-8")
-
-            # 回调（严格等待）
-            if on_task_complete is not None:
-                await on_task_complete(result)
-
-            # 失败则停止
-            if not result.success:
-                break
 
         return results
 

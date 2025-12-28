@@ -171,8 +171,8 @@ export const translations = {
         projectCodexLastResult: "最后一次结果",
         // IndexPrompt
         indexPromptTitle: "初始化项目（必需）",
-        indexPromptSubtitle: "生成 Commands/Standards 并构建 KB",
-        indexPromptDesc: "将执行：1) Bootstrap（生成 .claude/commands 与 standards）；2) KB（扫描/切片/入库）。请选择索引级别（推荐 L1 + L2）：",
+        indexPromptSubtitle: "生成 Commands/Standards 并初始化索引",
+        indexPromptDesc: "将执行：1) Bootstrap（生成 .claude/commands 与 standards）；2) Index（生成 PROJECT_INDEX/FOLDER_INDEX）。请选择索引级别（推荐 L1 + L2）：",
         indexL1Name: "L1 - 摘要",
         indexL1Desc: "项目结构概览",
         indexL2Name: "L2 - 符号",
@@ -470,8 +470,8 @@ export const translations = {
         stopping: "Stopping...",
         // IndexPrompt
         indexPromptTitle: "Project Initialization (Required)",
-        indexPromptSubtitle: "Generate Commands/Standards and build KB",
-        indexPromptDesc: "This will run: (1) Bootstrap (generate .claude/commands and standards); (2) KB (scan/chunk/ingest). Select index levels (recommended: L1 + L2):",
+        indexPromptSubtitle: "Generate Commands/Standards and initialize index",
+        indexPromptDesc: "This will run: (1) Bootstrap (generate .claude/commands and standards); (2) Index (generate PROJECT_INDEX/FOLDER_INDEX). Select index levels (recommended: L1 + L2):",
         indexL1Name: "L1 - Summary",
         indexL1Desc: "Project structure overview",
         indexL2Name: "L2 - Symbols",
