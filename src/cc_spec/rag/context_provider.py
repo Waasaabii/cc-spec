@@ -1,26 +1,21 @@
-"""v0.1.6：智能上下文提供者（Smart Context）。
+"""v0.2.x：智能上下文提供者（Smart Context）。
 
 目标：
-- 自动从 KB 检索并注入最相关的上下文片段
-- 支持多 query 合并去重、来源统计、token 估算
-- 为 apply/plan 等工作流提供统一的上下文构建入口
+- 不依赖额外索引服务：基于多级文本索引（PROJECT_INDEX / FOLDER_INDEX）与手动文件引用构建上下文
+- 支持 tasks.yaml 的 context 配置：queries / related_files / mode / max_chunks
+- 输出可直接注入 prompt 的 Markdown（尽量短）
 """
 
 from __future__ import annotations
 
-import json
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Literal
 
-import yaml
 
-from cc_spec.utils.files import get_cc_spec_dir
-
-from .knowledge_base import KnowledgeBase
-
-DEFAULT_EMBEDDING_MODEL = "intfloat/multilingual-e5-small"
+PROJECT_INDEX_NAME = "PROJECT_INDEX.md"
+FOLDER_INDEX_NAME = "FOLDER_INDEX.md"
 
 
 def _estimate_tokens(text: str) -> int:
@@ -88,26 +83,22 @@ class InjectedContext:
 class ContextProvider:
     """智能上下文提供者。
 
-    说明：
-    - 当前实现只依赖 KB（向量库）；related_files 走少量本地读取（可控范围）。
-    - 对于 query 结果，优先按距离排序并在全局层面去重（按 chunk_id）。
-    """
+说明：
+- v0.2.x 起不再依赖向量检索；默认注入 PROJECT_INDEX.md。
+- manual/hybrid 模式下支持按 `path[:start-end]` 读取少量文件片段。
+"""
 
     def __init__(
         self,
         project_root: Path,
         *,
-        kb: KnowledgeBase | None = None,
-        embedding_model: str | None = None,
         cache_ttl_s: int = 300,
         cache_enabled: bool = True,
     ) -> None:
         self.project_root = project_root
-        self._kb = kb
-        self._embedding_model = embedding_model
         self._cache_ttl_s = cache_ttl_s
         self._cache_enabled = cache_enabled
-        self._cache: dict[str, tuple[float, dict[str, Any]]] = {}
+        self._cache: dict[str, tuple[float, str]] = {}
 
     def get_context_for_task(
         self,
@@ -116,43 +107,31 @@ class ContextProvider:
     ) -> InjectedContext:
         """为指定任务构建上下文。
 
-        task_id 仅用于追溯/展示；检索行为由 config 控制。
-        """
+task_id 仅用于追溯/展示；上下文内容由 config 控制。
+"""
+        _ = task_id
         cfg = config or ContextConfig()
 
-        # 1) 相关文件（manual/hybrid）
-        manual_chunks: list[ContextChunk] = []
+        chunks: list[ContextChunk] = []
+
+        if cfg.mode in ("auto", "hybrid"):
+            chunks.extend(self._read_project_index())
+
         if cfg.mode in ("manual", "hybrid") and cfg.related_files:
-            manual_chunks = self._read_related_files(cfg.related_files)
+            chunks.extend(self._read_related_files(cfg.related_files))
+            chunks.extend(self._read_folder_indexes_for_refs(cfg.related_files))
 
-        # 2) KB 向量检索（auto/hybrid）
-        query_results: dict[str, list[ContextChunk]] = {}
-        kb_chunks: list[ContextChunk] = []
-        if cfg.mode in ("auto", "hybrid") and cfg.queries:
-            for q in cfg.queries:
-                res = self._kb_query(q, n=max(cfg.max_chunks, 1), where=cfg.where)
-                chunks = self._convert_query_result(res)
-                query_results[q] = chunks
-                kb_chunks.extend(chunks)
-
-        # 3) 合并去重 + 排序
+        # 合并去重（保留首次出现）
         merged: dict[str, ContextChunk] = {}
-        for c in manual_chunks + kb_chunks:
-            existing = merged.get(c.chunk_id)
-            if existing is None:
-                merged[c.chunk_id] = c
+        for c in chunks:
+            if c.chunk_id in merged:
                 continue
-            # 对同一 id，保留距离更小（更相关）的那个
-            if existing.distance is None:
-                merged[c.chunk_id] = c
-            elif c.distance is not None and c.distance < existing.distance:
-                merged[c.chunk_id] = c
+            merged[c.chunk_id] = c
 
         items = list(merged.values())
-        items.sort(key=lambda c: (c.distance is None, c.distance if c.distance is not None else 1e9))
         items = items[: max(cfg.max_chunks, 1)]
 
-        md = InjectedContext(chunks=items, total_tokens=0, sources=[], query_results=query_results).to_markdown()
+        md = InjectedContext(chunks=items, total_tokens=0, sources=[], query_results={}).to_markdown()
         total_tokens = _estimate_tokens(md)
         sources = sorted({c.source_path for c in items if c.source_path})
 
@@ -160,72 +139,99 @@ class ContextProvider:
             chunks=items,
             total_tokens=total_tokens,
             sources=sources,
-            query_results=query_results,
+            query_results={},
         )
 
     # ------------------------------------------------------------------
     # internal helpers
     # ------------------------------------------------------------------
 
-    def _get_kb(self) -> KnowledgeBase:
-        if self._kb is not None:
-            return self._kb
-        # 允许注入 embedding_model；否则从 manifest/config 读取，回退默认值
-        model = _resolve_embedding_model(self.project_root, override=self._embedding_model)
-        self._kb = KnowledgeBase(self.project_root, embedding_model=model)
-        return self._kb
-
-    def _cache_key(self, *, query: str, n: int, where: dict[str, Any] | None) -> str:
-        return f"q={query}\nn={n}\nwhere={where!r}"
-
-    def _kb_query(self, query: str, *, n: int, where: dict[str, Any] | None) -> dict[str, Any]:
-        key = self._cache_key(query=query, n=n, where=where)
+    def _read_text_file(self, path: Path, *, max_lines: int) -> str:
+        key = path.as_posix()
         if self._cache_enabled:
             cached = self._cache.get(key)
             if cached:
-                ts, payload = cached
+                ts, text = cached
                 if time.time() - ts <= self._cache_ttl_s:
-                    return payload
+                    return text
 
-        kb = self._get_kb()
-        payload = kb.query(query, n=n, where=where, collection="chunks")
+        if not path.exists() or not path.is_file():
+            return ""
+        try:
+            lines = path.read_text(encoding="utf-8", errors="replace").splitlines()
+        except Exception:
+            return ""
+
+        text = "\n".join(lines[:max_lines]).strip()
         if self._cache_enabled:
-            self._cache[key] = (time.time(), payload)
-        return payload
+            self._cache[key] = (time.time(), text)
+        return text
 
-    def _convert_query_result(self, res: dict[str, Any]) -> list[ContextChunk]:
-        ids = (res.get("ids") or [[]])[0]
-        docs = (res.get("documents") or [[]])[0]
-        metas = (res.get("metadatas") or [[]])[0]
-        dists = (res.get("distances") or [[]])[0]
-
-        if not isinstance(ids, list) or not isinstance(docs, list) or not isinstance(metas, list):
+    def _read_project_index(self) -> list[ContextChunk]:
+        path = self.project_root / PROJECT_INDEX_NAME
+        content = self._read_text_file(path, max_lines=260)
+        if not content:
             return []
+        return [
+            ContextChunk(
+                chunk_id=f"index:{PROJECT_INDEX_NAME}",
+                distance=None,
+                source_path=PROJECT_INDEX_NAME,
+                chunk_type="index.project",
+                summary="Project structure overview (auto-generated index)",
+                content=content,
+            )
+        ]
 
-        items: list[ContextChunk] = []
-        for i in range(min(len(ids), len(docs), len(metas))):
-            meta = metas[i] if isinstance(metas[i], dict) else {}
-            source_path = str(meta.get("source_path", ""))
-            chunk_type = str(meta.get("type", ""))
-            summary = str(meta.get("summary", "")) if meta.get("summary") is not None else ""
-            content = str(docs[i]) if docs[i] is not None else ""
-            dist_val: float | None = None
-            if isinstance(dists, list) and i < len(dists):
-                try:
-                    dist_val = float(dists[i])
-                except Exception:
-                    dist_val = None
-            items.append(
+    def _read_folder_indexes_for_refs(self, refs: list[str]) -> list[ContextChunk]:
+        root = self.project_root.resolve()
+        folders: list[Path] = []
+        seen: set[str] = set()
+
+        for raw in refs:
+            path_str, _, _ = _parse_file_ref(raw)
+            if not path_str:
+                continue
+            rel_candidate = Path(path_str)
+            if rel_candidate.is_absolute():
+                continue
+            if any(part == ".." for part in rel_candidate.parts):
+                continue
+
+            abs_path = (root / rel_candidate).resolve()
+            try:
+                abs_path.relative_to(root)
+            except Exception:
+                continue
+
+            folder = abs_path.parent
+            key = folder.as_posix().lower()
+            if key in seen:
+                continue
+            seen.add(key)
+            folders.append(folder)
+
+        chunks: list[ContextChunk] = []
+        for folder in folders:
+            idx = folder / FOLDER_INDEX_NAME
+            content = self._read_text_file(idx, max_lines=220)
+            if not content:
+                continue
+            try:
+                rel = idx.relative_to(root).as_posix()
+            except Exception:
+                rel = idx.as_posix()
+            chunks.append(
                 ContextChunk(
-                    chunk_id=str(ids[i]),
-                    distance=dist_val,
-                    source_path=source_path,
-                    chunk_type=chunk_type,
-                    summary=summary,
+                    chunk_id=f"index:{rel}",
+                    distance=None,
+                    source_path=rel,
+                    chunk_type="index.folder",
+                    summary="Folder file list (auto-generated index)",
                     content=content,
                 )
             )
-        return items
+        return chunks
 
     def _read_related_files(self, refs: list[str]) -> list[ContextChunk]:
         """将 related_files 引用转成少量可注入片段。"""
@@ -278,7 +284,7 @@ def _parse_file_ref(raw: str) -> tuple[str, int | None, int | None]:
     if not s:
         return ("", None, None)
 
-    # windows path 可能包含 `C:\...`，只解析最后一个 `:` 右侧是否为数字范围
+    # windows path 可能包含 `C:\\...`，只解析最后一个 `:` 右侧是否为数字范围
     if ":" not in s:
         return (s, None, None)
 
@@ -322,61 +328,3 @@ def _slice_lines(lines: list[str], *, start: int | None, end: int | None, max_li
     if len(sliced) > max_lines:
         sliced = sliced[:max_lines]
     return "\n".join(sliced)
-
-
-def _resolve_embedding_model(project_root: Path, *, override: str | None) -> str:
-    if isinstance(override, str) and override.strip():
-        return override.strip()
-    model = _read_embedding_model_from_manifest(project_root)
-    if model:
-        return model
-    model = _read_embedding_model_from_config(project_root)
-    if model:
-        return model
-    return DEFAULT_EMBEDDING_MODEL
-
-
-def _read_embedding_model_from_manifest(project_root: Path) -> str | None:
-    cc_spec_root = get_cc_spec_dir(project_root)
-    manifest = cc_spec_root / "kb.manifest.json"
-    if not manifest.exists():
-        return None
-    try:
-        data = json.loads(manifest.read_text(encoding="utf-8"))
-    except Exception:
-        return None
-    if not isinstance(data, dict):
-        return None
-    embedding = data.get("embedding")
-    if isinstance(embedding, dict):
-        model = embedding.get("model")
-        if isinstance(model, str) and model.strip():
-            return model.strip()
-    return None
-
-
-def _read_embedding_model_from_config(project_root: Path) -> str | None:
-    cc_spec_root = get_cc_spec_dir(project_root)
-    config_path = cc_spec_root / "config.yaml"
-    if not config_path.exists():
-        return None
-    try:
-        data = yaml.safe_load(config_path.read_text(encoding="utf-8"))
-    except Exception:
-        return None
-    if not isinstance(data, dict):
-        return None
-    kb = data.get("kb")
-    if isinstance(kb, dict):
-        model = kb.get("embedding_model")
-        if isinstance(model, str) and model.strip():
-            return model.strip()
-        embedding = kb.get("embedding")
-        if isinstance(embedding, dict):
-            model = embedding.get("model") or embedding.get("embedding_model")
-            if isinstance(model, str) and model.strip():
-                return model.strip()
-    model = data.get("embedding_model")
-    if isinstance(model, str) and model.strip():
-        return model.strip()
-    return None

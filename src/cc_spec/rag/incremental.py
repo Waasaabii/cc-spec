@@ -160,8 +160,8 @@ def get_git_head(project_root: Path) -> str | None:
 def diff_git_commits(project_root: Path, old: str, new: str) -> GitChangeSet | None:
     """比较两个 commit 之间的文件变更（不包含 untracked）。
 
-    用途：当工作区是 clean（相对 HEAD 没有 diff），但 KB manifest 索引的是旧 HEAD 时，
-    用 commit diff 得到“需要增量更新”的文件列表，避免全量扫描。
+    用途：当工作区是 clean（相对 HEAD 没有 diff），但仍需要对比两个快照（commit）时，
+    用 commit diff 得到“需要增量处理”的文件列表，避免全量扫描。
     """
     if not old or not new:
         return None
