@@ -729,6 +729,7 @@ export default function App() {
                                         sessions={sessions}
                                         layoutMode={layoutMode}
                                         onLaunchClaudeTerminal={handleLaunchClaudeTerminal}
+                                        onReinitIndex={() => setShowIndexPrompt(true)}
                                         onBack={() => setActiveView("projects")}
                                     />
                                 ) : (

@@ -615,6 +615,387 @@ fn handle_not_found(mut stream: TcpStream) {
     write_response(&mut stream, "HTTP/1.1 404 Not Found", &headers, "not found");
 }
 
+// ============================================================================
+// Codex HTTP API (新增)
+// ============================================================================
+
+/// POST /api/codex/run 请求体
+#[derive(Debug, Clone, Deserialize)]
+struct CodexRunApiRequest {
+    project_path: String,
+    prompt: String,
+    session_id: Option<String>,
+    timeout_ms: Option<u64>,
+    request_id: Option<String>,
+}
+
+/// API 响应结构
+#[derive(Debug, Clone, Serialize)]
+struct CodexApiResponse {
+    ok: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    request_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    message: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    error: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    data: Option<Value>,
+}
+
+fn write_json_response(stream: &mut TcpStream, status: &str, body: &impl Serialize) {
+    let json_body = serde_json::to_string(body).unwrap_or_else(|_| "{}".to_string());
+    let headers = [
+        ("Content-Type", "application/json"),
+        ("Access-Control-Allow-Origin", "*"),
+        ("Connection", "close"),
+    ];
+    write_response(stream, status, &headers, &json_body);
+}
+
+fn handle_cors_preflight(mut stream: TcpStream) {
+    let headers = [
+        ("Access-Control-Allow-Origin", "*"),
+        ("Access-Control-Allow-Methods", "GET, POST, OPTIONS"),
+        ("Access-Control-Allow-Headers", "Content-Type"),
+        ("Access-Control-Max-Age", "86400"),
+        ("Connection", "close"),
+    ];
+    write_response(&mut stream, "HTTP/1.1 204 No Content", &headers, "");
+}
+
+fn generate_request_id() -> String {
+    let ts = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_millis();
+    let rand: u32 = rand::random();
+    format!("req_{}_{:08x}", ts, rand)
+}
+
+/// POST /api/codex/run - 异步提交 Codex 任务
+fn handle_codex_run(
+    mut stream: TcpStream,
+    broadcaster: Arc<Broadcaster>,
+    body: String,
+) {
+    let parsed: Result<CodexRunApiRequest, _> = serde_json::from_str(&body);
+    let req = match parsed {
+        Ok(r) => r,
+        Err(e) => {
+            let resp = CodexApiResponse {
+                ok: false,
+                request_id: None,
+                message: None,
+                error: Some(format!("Invalid request: {}", e)),
+                data: None,
+            };
+            write_json_response(&mut stream, "HTTP/1.1 400 Bad Request", &resp);
+            return;
+        }
+    };
+
+    if req.project_path.trim().is_empty() {
+        let resp = CodexApiResponse {
+            ok: false,
+            request_id: None,
+            message: None,
+            error: Some("project_path is required".to_string()),
+            data: None,
+        };
+        write_json_response(&mut stream, "HTTP/1.1 400 Bad Request", &resp);
+        return;
+    }
+
+    if req.prompt.trim().is_empty() {
+        let resp = CodexApiResponse {
+            ok: false,
+            request_id: None,
+            message: None,
+            error: Some("prompt is required".to_string()),
+            data: None,
+        };
+        write_json_response(&mut stream, "HTTP/1.1 400 Bad Request", &resp);
+        return;
+    }
+
+    let request_id = req.request_id.unwrap_or_else(generate_request_id);
+    let project_path = req.project_path.clone();
+    let prompt = req.prompt.clone();
+    let session_id = req.session_id.clone();
+    let timeout_ms = req.timeout_ms;
+    let request_id_for_task = request_id.clone();
+    let broadcaster_for_task = Arc::clone(&broadcaster);
+
+    // 异步执行 Codex 任务
+    thread::spawn(move || {
+        let codex_req = codex_runner::CodexRunRequest {
+            project_path: project_path.clone(),
+            prompt,
+            session_id,
+            timeout_ms,
+            request_id: Some(request_id_for_task.clone()),
+        };
+
+        let result = codex_runner::run_codex(codex_req);
+
+        // 通过 SSE 广播结果
+        let event = match result {
+            Ok(r) => serde_json::json!({
+                "type": "codex.completed",
+                "request_id": request_id_for_task,
+                "session_id": r.session_id,
+                "success": r.success,
+                "exit_code": r.exit_code,
+                "duration_s": r.duration_s,
+                "message": if r.success { "任务完成" } else { "任务失败" },
+            }),
+            Err(e) => serde_json::json!({
+                "type": "codex.completed",
+                "request_id": request_id_for_task,
+                "session_id": null,
+                "success": false,
+                "exit_code": -1,
+                "duration_s": 0.0,
+                "message": format!("执行失败: {}", e),
+            }),
+        };
+
+        let payload = format!("event: codex.completed\ndata: {}\n\n", event);
+        broadcaster_for_task.publish(payload);
+    });
+
+    // 立即返回 202 Accepted
+    let resp = CodexApiResponse {
+        ok: true,
+        request_id: Some(request_id),
+        message: Some("任务已提交".to_string()),
+        error: None,
+        data: None,
+    };
+    write_json_response(&mut stream, "HTTP/1.1 202 Accepted", &resp);
+}
+
+/// GET /api/codex/sessions - 获取会话列表
+fn handle_codex_sessions(mut stream: TcpStream, path: &str) {
+    // 从 query string 解析 project_path
+    let project_path = path
+        .split('?')
+        .nth(1)
+        .and_then(|qs| {
+            qs.split('&')
+                .find(|p| p.starts_with("project_path="))
+                .map(|p| p.trim_start_matches("project_path="))
+        })
+        .map(|s| urlencoding::decode(s).unwrap_or_default().to_string());
+
+    let project_path = match project_path {
+        Some(p) if !p.trim().is_empty() => p,
+        _ => {
+            let resp = CodexApiResponse {
+                ok: false,
+                request_id: None,
+                message: None,
+                error: Some("project_path query parameter is required".to_string()),
+                data: None,
+            };
+            write_json_response(&mut stream, "HTTP/1.1 400 Bad Request", &resp);
+            return;
+        }
+    };
+
+    let sessions_file = sessions_path(&project_path);
+    if !sessions_file.exists() {
+        let resp = CodexApiResponse {
+            ok: true,
+            request_id: None,
+            message: None,
+            error: None,
+            data: Some(serde_json::json!({
+                "sessions": {}
+            })),
+        };
+        write_json_response(&mut stream, "HTTP/1.1 200 OK", &resp);
+        return;
+    }
+
+    match fs::read_to_string(&sessions_file) {
+        Ok(raw) => {
+            let sessions: Value = serde_json::from_str(&raw).unwrap_or(serde_json::json!({"sessions": {}}));
+            let resp = CodexApiResponse {
+                ok: true,
+                request_id: None,
+                message: None,
+                error: None,
+                data: Some(sessions),
+            };
+            write_json_response(&mut stream, "HTTP/1.1 200 OK", &resp);
+        }
+        Err(e) => {
+            let resp = CodexApiResponse {
+                ok: false,
+                request_id: None,
+                message: None,
+                error: Some(format!("Failed to read sessions: {}", e)),
+                data: None,
+            };
+            write_json_response(&mut stream, "HTTP/1.1 500 Internal Server Error", &resp);
+        }
+    }
+}
+
+/// POST /api/codex/pause - 暂停会话
+fn handle_codex_pause(mut stream: TcpStream, body: String) {
+    #[derive(Deserialize)]
+    struct PauseRequest {
+        project_path: String,
+        session_id: String,
+    }
+
+    let req: PauseRequest = match serde_json::from_str(&body) {
+        Ok(r) => r,
+        Err(e) => {
+            let resp = CodexApiResponse {
+                ok: false,
+                request_id: None,
+                message: None,
+                error: Some(format!("Invalid request: {}", e)),
+                data: None,
+            };
+            write_json_response(&mut stream, "HTTP/1.1 400 Bad Request", &resp);
+            return;
+        }
+    };
+
+    match codex_runner::pause_session(req.project_path, req.session_id, None) {
+        Ok(()) => {
+            let resp = CodexApiResponse {
+                ok: true,
+                request_id: None,
+                message: Some("会话已暂停".to_string()),
+                error: None,
+                data: None,
+            };
+            write_json_response(&mut stream, "HTTP/1.1 200 OK", &resp);
+        }
+        Err(e) => {
+            let resp = CodexApiResponse {
+                ok: false,
+                request_id: None,
+                message: None,
+                error: Some(e),
+                data: None,
+            };
+            write_json_response(&mut stream, "HTTP/1.1 500 Internal Server Error", &resp);
+        }
+    }
+}
+
+/// POST /api/codex/kill - 终止会话
+fn handle_codex_kill(mut stream: TcpStream, body: String) {
+    #[derive(Deserialize)]
+    struct KillRequest {
+        project_path: String,
+        session_id: String,
+    }
+
+    let req: KillRequest = match serde_json::from_str(&body) {
+        Ok(r) => r,
+        Err(e) => {
+            let resp = CodexApiResponse {
+                ok: false,
+                request_id: None,
+                message: None,
+                error: Some(format!("Invalid request: {}", e)),
+                data: None,
+            };
+            write_json_response(&mut stream, "HTTP/1.1 400 Bad Request", &resp);
+            return;
+        }
+    };
+
+    let sessions_file = sessions_path(&req.project_path);
+    if !sessions_file.exists() {
+        let resp = CodexApiResponse {
+            ok: false,
+            request_id: None,
+            message: None,
+            error: Some("Session file not found".to_string()),
+            data: None,
+        };
+        write_json_response(&mut stream, "HTTP/1.1 404 Not Found", &resp);
+        return;
+    }
+
+    let raw = match fs::read_to_string(&sessions_file) {
+        Ok(r) => r,
+        Err(e) => {
+            let resp = CodexApiResponse {
+                ok: false,
+                request_id: None,
+                message: None,
+                error: Some(format!("Failed to read sessions: {}", e)),
+                data: None,
+            };
+            write_json_response(&mut stream, "HTTP/1.1 500 Internal Server Error", &resp);
+            return;
+        }
+    };
+
+    let sessions_json: Value = match serde_json::from_str(&raw) {
+        Ok(v) => v,
+        Err(e) => {
+            let resp = CodexApiResponse {
+                ok: false,
+                request_id: None,
+                message: None,
+                error: Some(format!("Failed to parse sessions: {}", e)),
+                data: None,
+            };
+            write_json_response(&mut stream, "HTTP/1.1 500 Internal Server Error", &resp);
+            return;
+        }
+    };
+
+    let pid = find_session_pid(&sessions_json, &req.session_id);
+    match pid {
+        Some(p) if p > 0 => {
+            match codex_runner::force_kill(p) {
+                Ok(()) => {
+                    let resp = CodexApiResponse {
+                        ok: true,
+                        request_id: None,
+                        message: Some("会话已终止".to_string()),
+                        error: None,
+                        data: None,
+                    };
+                    write_json_response(&mut stream, "HTTP/1.1 200 OK", &resp);
+                }
+                Err(e) => {
+                    let resp = CodexApiResponse {
+                        ok: false,
+                        request_id: None,
+                        message: None,
+                        error: Some(e),
+                        data: None,
+                    };
+                    write_json_response(&mut stream, "HTTP/1.1 500 Internal Server Error", &resp);
+                }
+            }
+        }
+        _ => {
+            let resp = CodexApiResponse {
+                ok: false,
+                request_id: None,
+                message: None,
+                error: Some("Session not found or no pid".to_string()),
+                data: None,
+            };
+            write_json_response(&mut stream, "HTTP/1.1 404 Not Found", &resp);
+        }
+    }
+}
+
 fn home_dir() -> PathBuf {
     env::var_os("USERPROFILE")
         .map(PathBuf::from)
@@ -1177,6 +1558,7 @@ fn codex_resume(
         prompt,
         session_id: Some(session_id),
         timeout_ms,
+        request_id: None,
     };
     codex_runner::run_codex(request)
 }
@@ -1355,9 +1737,26 @@ fn start_server(listener: TcpListener) {
                 thread::spawn(move || {
                     let mut stream = stream;
                     if let Some((method, path, body)) = parse_request(&mut stream) {
-                        match (method.as_str(), path.as_str()) {
+                        // 处理 CORS 预检请求
+                        if method == "OPTIONS" {
+                            handle_cors_preflight(stream);
+                            return;
+                        }
+
+                        // 路径匹配（支持 query string）
+                        let path_base = path.split('?').next().unwrap_or(&path);
+
+                        match (method.as_str(), path_base) {
+                            // 现有路由
                             ("GET", "/events") => handle_events(stream, broadcaster),
                             ("POST", "/ingest") => handle_ingest(stream, broadcaster, dispatcher, body),
+
+                            // 新增 Codex API 路由
+                            ("POST", "/api/codex/run") => handle_codex_run(stream, broadcaster, body),
+                            ("GET", "/api/codex/sessions") => handle_codex_sessions(stream, &path),
+                            ("POST", "/api/codex/pause") => handle_codex_pause(stream, body),
+                            ("POST", "/api/codex/kill") => handle_codex_kill(stream, body),
+
                             _ => handle_not_found(stream),
                         }
                     }

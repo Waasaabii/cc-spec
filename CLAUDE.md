@@ -206,7 +206,7 @@ uv run mypy src/cc_spec/
 - **`core/`** - 核心业务逻辑（config, state, delta, scoring）
 - **`subagent/`** - SubAgent 并行执行系统
 - **`rag/`** - 智能上下文与增量变更检测（索引/文件片段）
-- **`codex/`** - Codex CLI 客户端
+- **`codex/`** - Codex 客户端（通过 cc-spec-tool HTTP API 调用）
 
 ### 项目多级索引（v0.2.x）
 
@@ -219,6 +219,66 @@ uv run cc-spec update-index --level l1 --level l2
 
 # 检查索引是否齐全
 uv run cc-spec check-index
+```
+
+### Codex 调用架构（v0.2.x）
+
+所有 Codex 调用必须通过 cc-spec-tool 的 HTTP API，不再支持直接调用：
+
+```
+┌─────────────────────────────────────────────────────┐
+│  cc-spec-tool (Tauri)                               │
+│  HTTP Server @ 127.0.0.1:38888                      │
+│                                                     │
+│  POST /api/codex/run       异步提交任务             │
+│  GET  /api/codex/sessions  获取会话列表             │
+│  POST /api/codex/pause     暂停会话                 │
+│  POST /api/codex/kill      终止会话                 │
+│  GET  /events              SSE 订阅（接收结果）     │
+└─────────────────────────────────────────────────────┘
+         ▲
+         │ HTTP
+┌────────┴────────────────────────────────────────────┐
+│  Python CLI (cc-spec)                               │
+│                                                     │
+│  ToolClient      统一的 Codex 调用入口              │
+│  cc-spec cx      CLI 命令封装                       │
+│  cc-spec chat    多轮对话模式                       │
+│  SubAgentExecutor 并行任务执行                      │
+└─────────────────────────────────────────────────────┘
+```
+
+**关键模块**：
+
+| 模块 | 位置 | 说明 |
+|------|------|------|
+| `ToolClient` | `src/cc_spec/codex/tool_client.py` | Python 客户端，调用 tool HTTP API |
+| `CodexResult` | `src/cc_spec/codex/models.py` | 执行结果数据类 |
+| HTTP API | `apps/cc-spec-tool/src-tauri/src/main.rs` | Rust HTTP 服务 |
+
+**重要约束**：
+
+- ❌ 不再支持直接调用 Codex CLI
+- ✅ 必须通过 `get_tool_client()` 获取客户端
+- ❌ tool 未运行时直接报错退出，无 fallback
+
+**CLI 命令**：
+
+```bash
+# 直接执行任务
+cc-spec cx "任务描述"
+
+# 使用子命令
+cc-spec cx run "任务描述" --timeout 600
+
+# 管理会话
+cc-spec cx list
+cc-spec cx pause <session_id>
+cc-spec cx kill <session_id>
+
+# 多轮对话
+cc-spec chat -m "你好"
+cc-spec chat -m "继续" -r <session_id>
 ```
 
 ---

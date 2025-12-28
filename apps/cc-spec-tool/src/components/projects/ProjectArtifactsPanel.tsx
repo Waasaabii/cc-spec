@@ -12,6 +12,49 @@ type ProjectArtifactsPanelProps = {
 
 const DEFAULT_MAX_LINES = 400;
 
+// ========== 文件类型图标 ==========
+const FILE_ICONS: Record<string, string> = {
+  ".md": "📝",
+  ".yaml": "📋",
+  ".yml": "📋",
+  ".json": "📊",
+  ".ts": "🔷",
+  ".tsx": "🔷",
+  ".js": "🟨",
+  ".jsx": "🟨",
+  ".py": "🐍",
+  ".rs": "🦀",
+  ".toml": "⚙️",
+  ".txt": "📄",
+};
+
+function getFileIcon(name: string): string {
+  const ext = name.lastIndexOf(".") >= 0 ? name.slice(name.lastIndexOf(".")) : "";
+  return FILE_ICONS[ext.toLowerCase()] || "📄";
+}
+
+// ========== Root 分组配置 ==========
+type RootGroupConfig = {
+  icon: string;
+  label: { zh: string; en: string };
+};
+
+const ROOT_GROUPS: Record<string, RootGroupConfig> = {
+  cc_spec: { icon: "📁", label: { zh: "配置", en: "Config" } },
+  changes: { icon: "📝", label: { zh: "活跃变更", en: "Changes" } },
+  specs: { icon: "📄", label: { zh: "规格文档", en: "Specs" } },
+  archive: { icon: "📦", label: { zh: "归档", en: "Archive" } },
+};
+
+function getRootDisplayName(rootId: string, lang: "zh" | "en"): string {
+  const config = ROOT_GROUPS[rootId];
+  if (config) {
+    return `${config.icon} ${config.label[lang]}`;
+  }
+  return rootId;
+}
+
+// ========== 工具函数 ==========
 function splitPath(relPath: string): string[] {
   return relPath.split("/").filter(Boolean);
 }
@@ -42,26 +85,94 @@ function formatBytes(size: number): string {
   return `${value.toFixed(digits)} ${units[unitIndex]}`;
 }
 
+function isRecentlyModified(modifiedAt: string | null): boolean {
+  if (!modifiedAt) return false;
+  try {
+    const modified = new Date(modifiedAt);
+    const now = new Date();
+    const diffMs = now.getTime() - modified.getTime();
+    const diffHours = diffMs / (1000 * 60 * 60);
+    return diffHours < 24;
+  } catch {
+    return false;
+  }
+}
+
+function formatRelativeTime(modifiedAt: string | null, lang: "zh" | "en"): string {
+  if (!modifiedAt) return "-";
+  try {
+    const modified = new Date(modifiedAt);
+    const now = new Date();
+    const diffMs = now.getTime() - modified.getTime();
+    const diffMins = Math.floor(diffMs / (1000 * 60));
+    const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
+    const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+
+    if (diffMins < 1) return lang === "zh" ? "刚刚" : "Just now";
+    if (diffMins < 60) return lang === "zh" ? `${diffMins}分钟前` : `${diffMins}m ago`;
+    if (diffHours < 24) return lang === "zh" ? `${diffHours}小时前` : `${diffHours}h ago`;
+    if (diffDays < 7) return lang === "zh" ? `${diffDays}天前` : `${diffDays}d ago`;
+    return modified.toLocaleDateString(lang === "zh" ? "zh-CN" : "en-US", { month: "short", day: "numeric" });
+  } catch {
+    return modifiedAt;
+  }
+}
+
+type SortMode = "name" | "modified" | "size";
+
+function sortEntries(entries: ArtifactEntry[], mode: SortMode): ArtifactEntry[] {
+  const sorted = [...entries];
+  sorted.sort((a, b) => {
+    // 目录始终在前
+    if (a.kind !== b.kind) {
+      return a.kind === "dir" ? -1 : 1;
+    }
+    switch (mode) {
+      case "modified":
+        if (!a.modifiedAt && !b.modifiedAt) return a.name.localeCompare(b.name);
+        if (!a.modifiedAt) return 1;
+        if (!b.modifiedAt) return -1;
+        return new Date(b.modifiedAt).getTime() - new Date(a.modifiedAt).getTime();
+      case "size":
+        return b.size - a.size;
+      case "name":
+      default:
+        return a.name.localeCompare(b.name);
+    }
+  });
+  return sorted;
+}
+
+// ========== 主组件 ==========
 export function ProjectArtifactsPanel({ theme, t, projectPath }: ProjectArtifactsPanelProps) {
   const isDark = theme === "dark";
+  const lang = (t.projectTabArtifacts === "产物" ? "zh" : "en") as "zh" | "en";
 
+  // Roots 状态
   const [roots, setRoots] = useState<ArtifactRoot[]>([]);
   const [rootsLoading, setRootsLoading] = useState(false);
   const [rootsError, setRootsError] = useState<string | null>(null);
 
+  // 当前选中的 root 和目录
   const [rootId, setRootId] = useState<string>("cc_spec");
   const [dirPath, setDirPath] = useState<string>("");
   const [entries, setEntries] = useState<ArtifactEntry[]>([]);
   const [dirLoading, setDirLoading] = useState(false);
   const [dirError, setDirError] = useState<string | null>(null);
 
+  // 搜索和排序
+  const [searchQuery, setSearchQuery] = useState<string>("");
+  const [sortMode, setSortMode] = useState<SortMode>("modified");
+
+  // 预览状态
   const [selectedFileRel, setSelectedFileRel] = useState<string | null>(null);
   const [preview, setPreview] = useState<TextPreview | null>(null);
   const [previewLoading, setPreviewLoading] = useState(false);
   const [previewError, setPreviewError] = useState<string | null>(null);
-  const [previewStartLine, setPreviewStartLine] = useState<number>(1);
-  const [lineInput, setLineInput] = useState<string>("");
   const [copied, setCopied] = useState(false);
+
+  // 侧边栏折叠状态
+  const [expandedRoots, setExpandedRoots] = useState<Set<string>>(new Set(["cc_spec", "changes"]));
 
   const copyTimerRef = useRef<number | null>(null);
   const lastAutoSelectedRootIdRef = useRef<string | null>(null);
@@ -83,6 +194,16 @@ export function ProjectArtifactsPanel({ theme, t, projectPath }: ProjectArtifact
     if (!rel) return "";
     return joinAbsAndRel(selectedRoot.absPath, rel);
   }, [selectedFileRel, selectedRoot]);
+
+  // 过滤和排序后的条目
+  const filteredEntries = useMemo(() => {
+    let result = entries;
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase();
+      result = entries.filter((e) => e.name.toLowerCase().includes(q));
+    }
+    return sortEntries(result, sortMode);
+  }, [entries, searchQuery, sortMode]);
 
   const clearCopyTimer = () => {
     if (copyTimerRef.current) {
@@ -163,8 +284,7 @@ export function ProjectArtifactsPanel({ theme, t, projectPath }: ProjectArtifact
     setSelectedFileRel(null);
     setPreview(null);
     setPreviewError(null);
-    setPreviewStartLine(1);
-    setLineInput("");
+    setSearchQuery("");
 
     const root = roots.find((r) => r.id === nextRootId);
     if (!root) return;
@@ -191,8 +311,7 @@ export function ProjectArtifactsPanel({ theme, t, projectPath }: ProjectArtifact
     setSelectedFileRel(null);
     setPreview(null);
     setPreviewError(null);
-    setPreviewStartLine(1);
-    setLineInput("");
+    setSearchQuery("");
     await loadDir(rootId, nextDir);
   }, [loadDir, rootId]);
 
@@ -245,8 +364,6 @@ export function ProjectArtifactsPanel({ theme, t, projectPath }: ProjectArtifact
     setSelectedFileRel(relFile);
     setPreview(null);
     setPreviewError(null);
-    setPreviewStartLine(1);
-    setLineInput("");
     await loadPreview(rootId, relFile, 1);
   }, [loadPreview, rootId]);
 
@@ -258,290 +375,469 @@ export function ProjectArtifactsPanel({ theme, t, projectPath }: ProjectArtifact
 
   const canPreview = Boolean(selectedRoot && selectedRoot.exists && (selectedRoot.kind === "file" || selectedFileRel));
 
-  const currentPathLabel = useMemo(() => {
-    if (!selectedRoot) return "";
-    const base = selectedRoot.relPath;
-    if (selectedRoot.kind === "file") return base;
-    if (!dirPath) return base;
-    return `${base}/${dirPath}`;
-  }, [dirPath, selectedRoot]);
+  const toggleRootExpanded = (id: string) => {
+    setExpandedRoots((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return next;
+    });
+  };
 
-  const renderEntryRow = (entry: ArtifactEntry) => {
-    const icon = entry.kind === "dir" ? <Icons.Folder /> : <Icons.FileText />;
-    const meta = entry.kind === "dir"
-      ? (t.artifactFolder || "文件夹")
-      : `${formatBytes(entry.size)}${entry.modifiedAt ? ` · ${entry.modifiedAt}` : ""}`;
-
+  // ========== 渲染侧边栏树节点 ==========
+  const renderSidebarTree = () => {
     return (
-      <button
-        key={entry.relPath}
-        onClick={() => {
-          if (entry.kind === "dir") {
-            void navigateToDir(entry.relPath);
-          } else {
-            void selectFile(entry.relPath);
-          }
-        }}
-        className={`w-full text-left px-3 py-2 rounded-xl border transition-colors ${isDark
-          ? "border-slate-800 bg-slate-900/60 hover:bg-slate-800/60"
-          : "border-slate-100 bg-white hover:bg-slate-50"
-          }`}
-      >
-        <div className="flex items-start gap-2">
-          <div className={`mt-0.5 ${isDark ? "text-slate-400" : "text-slate-500"}`}>{icon}</div>
-          <div className="min-w-0 flex-1">
-            <div className={`text-sm font-semibold truncate ${isDark ? "text-slate-100" : "text-slate-800"}`}>{entry.name}</div>
-            <div className={`text-[10px] font-mono truncate mt-1 ${isDark ? "text-slate-500" : "text-slate-400"}`}>{meta}</div>
-          </div>
-        </div>
-      </button>
+      <div className="flex flex-col gap-1">
+        {roots.map((root) => {
+          const isExpanded = expandedRoots.has(root.id);
+          const isSelected = rootId === root.id;
+          const displayName = getRootDisplayName(root.id, lang);
+
+          return (
+            <div key={root.id}>
+              <button
+                onClick={() => {
+                  if (root.exists && root.kind === "dir") {
+                    toggleRootExpanded(root.id);
+                  }
+                  void selectRoot(root.id);
+                }}
+                className={`w-full text-left px-3 py-2 rounded-lg flex items-center gap-2 text-sm transition-colors ${
+                  isSelected
+                    ? isDark
+                      ? "bg-slate-700 text-white"
+                      : "bg-slate-200 text-slate-900"
+                    : isDark
+                      ? "hover:bg-slate-800 text-slate-300"
+                      : "hover:bg-slate-100 text-slate-600"
+                }`}
+              >
+                {root.kind === "dir" && (
+                  <span className={`text-xs transition-transform ${isExpanded ? "rotate-90" : ""}`}>
+                    ▶
+                  </span>
+                )}
+                <span className="flex-1 truncate">{displayName}</span>
+                {!root.exists && (
+                  <span className={`text-[10px] px-1.5 py-0.5 rounded ${
+                    isDark ? "bg-slate-800 text-slate-500" : "bg-slate-100 text-slate-400"
+                  }`}>
+                    {t.notGenerated || "未生成"}
+                  </span>
+                )}
+              </button>
+
+              {/* 子目录预览 */}
+              {isExpanded && root.exists && root.kind === "dir" && isSelected && entries.length > 0 && (
+                <div className="ml-6 mt-1 flex flex-col gap-0.5">
+                  {entries.slice(0, 8).map((entry) => (
+                    <button
+                      key={entry.relPath}
+                      onClick={() => {
+                        if (entry.kind === "dir") {
+                          void navigateToDir(entry.relPath);
+                        } else {
+                          void selectFile(entry.relPath);
+                        }
+                      }}
+                      className={`text-left px-2 py-1 rounded text-xs truncate transition-colors ${
+                        selectedFileRel === entry.relPath
+                          ? isDark
+                            ? "bg-slate-700 text-white"
+                            : "bg-slate-200 text-slate-900"
+                          : isDark
+                            ? "hover:bg-slate-800/50 text-slate-400"
+                            : "hover:bg-slate-50 text-slate-500"
+                      }`}
+                    >
+                      {entry.kind === "dir" ? "📁" : getFileIcon(entry.name)} {entry.name}
+                    </button>
+                  ))}
+                  {entries.length > 8 && (
+                    <span className={`px-2 py-1 text-[10px] ${isDark ? "text-slate-500" : "text-slate-400"}`}>
+                      +{entries.length - 8} {lang === "zh" ? "更多" : "more"}
+                    </span>
+                  )}
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
     );
   };
 
-  return (
-    <section className={`rounded-3xl border shadow-sm p-5 ${isDark ? "bg-slate-900/70 border-slate-700/60" : "bg-white/80 border-white/70"}`}>
-      <div className="flex flex-col gap-4">
-        <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
-          <div>
-            <h2 className={`text-base font-semibold tracking-tight ${isDark ? "text-slate-100" : "text-slate-900"}`}>{t.artifactsTitle || "cc-spec 产物"}</h2>
-            <p className={`text-xs mt-1 ${isDark ? "text-slate-400" : "text-slate-500"}`}>{t.artifactsHint || "浏览项目内 cc-spec 生成的文件，默认在 VS Code 中编辑"}</p>
+  // ========== 渲染文件列表 ==========
+  const renderFileList = () => {
+    if (!selectedRoot) {
+      return (
+        <div className={`text-center py-12 ${isDark ? "text-slate-500" : "text-slate-400"}`}>
+          {t.selectArtifactHint || "请选择一个产物目录"}
+        </div>
+      );
+    }
+
+    if (!selectedRoot.exists) {
+      return (
+        <div className={`text-center py-12 ${isDark ? "text-slate-500" : "text-slate-400"}`}>
+          {t.notGeneratedHint || "该项尚未生成或已被清理"}
+        </div>
+      );
+    }
+
+    if (selectedRoot.kind === "file") {
+      return (
+        <div className={`px-3 py-2 rounded-lg ${isDark ? "bg-slate-800/50" : "bg-slate-50"}`}>
+          <div className="flex items-center gap-2">
+            <span>{getFileIcon(selectedRoot.relPath)}</span>
+            <span className={`text-sm font-medium ${isDark ? "text-slate-200" : "text-slate-700"}`}>
+              {selectedRoot.relPath}
+            </span>
           </div>
-          <div className="flex flex-wrap gap-2">
+        </div>
+      );
+    }
+
+    if (dirLoading) {
+      return (
+        <div className={`text-center py-12 ${isDark ? "text-slate-500" : "text-slate-400"}`}>
+          {t.loading || "加载中..."}
+        </div>
+      );
+    }
+
+    if (filteredEntries.length === 0) {
+      return (
+        <div className={`text-center py-12 ${isDark ? "text-slate-500" : "text-slate-400"}`}>
+          {searchQuery ? (lang === "zh" ? "未找到匹配的文件" : "No matching files") : (t.emptyFolder || "空文件夹")}
+        </div>
+      );
+    }
+
+    return (
+      <div className="flex flex-col">
+        {filteredEntries.map((entry) => {
+          const isRecent = isRecentlyModified(entry.modifiedAt);
+          const isFileSelected = selectedFileRel === entry.relPath;
+
+          return (
             <button
-              onClick={() => loadRoots()}
-              disabled={rootsLoading}
-              className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold transition-colors ${isDark ? "bg-slate-800 text-slate-300 hover:bg-slate-700 disabled:opacity-60" : "bg-slate-100 text-slate-600 hover:bg-slate-200 disabled:opacity-60"}`}
+              key={entry.relPath}
+              onClick={() => {
+                if (entry.kind === "dir") {
+                  void navigateToDir(entry.relPath);
+                } else {
+                  void selectFile(entry.relPath);
+                }
+              }}
+              className={`w-full text-left px-3 py-2 flex items-center gap-3 border-b transition-colors ${
+                isFileSelected
+                  ? isDark
+                    ? "bg-slate-700/50 border-slate-700"
+                    : "bg-blue-50 border-blue-100"
+                  : isDark
+                    ? "border-slate-800 hover:bg-slate-800/50"
+                    : "border-slate-100 hover:bg-slate-50"
+              }`}
             >
-              <Icons.Refresh />
-              {rootsLoading ? (t.loading || "加载中") : (t.refresh || "刷新")}
+              <span className="text-base flex-shrink-0">
+                {entry.kind === "dir" ? "📁" : getFileIcon(entry.name)}
+              </span>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2">
+                  <span className={`text-sm font-medium truncate ${isDark ? "text-slate-200" : "text-slate-700"}`}>
+                    {entry.name}
+                  </span>
+                  {isRecent && (
+                    <span className={`text-[10px] px-1.5 py-0.5 rounded-full flex-shrink-0 ${
+                      isDark ? "bg-emerald-900/50 text-emerald-300" : "bg-emerald-100 text-emerald-600"
+                    }`}>
+                      ✨ {lang === "zh" ? "最近" : "Recent"}
+                    </span>
+                  )}
+                </div>
+              </div>
+              <div className={`text-xs flex-shrink-0 text-right ${isDark ? "text-slate-500" : "text-slate-400"}`}>
+                {entry.kind === "file" && (
+                  <div>{formatBytes(entry.size)}</div>
+                )}
+                <div>{formatRelativeTime(entry.modifiedAt, lang)}</div>
+              </div>
+            </button>
+          );
+        })}
+      </div>
+    );
+  };
+
+  // ========== 渲染预览区 ==========
+  const renderPreview = () => {
+    const fileName = selectedRoot?.kind === "file"
+      ? selectedRoot.relPath
+      : selectedFileRel
+        ? selectedFileRel.split("/").pop() || ""
+        : "";
+
+    if (!canPreview) {
+      return (
+        <div className={`flex items-center justify-center h-full ${isDark ? "text-slate-500" : "text-slate-400"}`}>
+          <div className="text-center">
+            <div className="text-4xl mb-3">📄</div>
+            <div className="text-sm">{t.selectFileHint || "选择文件以预览"}</div>
+          </div>
+        </div>
+      );
+    }
+
+    if (previewLoading) {
+      return (
+        <div className={`flex items-center justify-center h-full ${isDark ? "text-slate-500" : "text-slate-400"}`}>
+          {t.loading || "加载中..."}
+        </div>
+      );
+    }
+
+    if (previewError) {
+      return (
+        <div className={`p-4 ${isDark ? "text-rose-300" : "text-rose-600"}`}>
+          {previewError}
+        </div>
+      );
+    }
+
+    if (!preview) {
+      return (
+        <div className={`flex items-center justify-center h-full ${isDark ? "text-slate-500" : "text-slate-400"}`}>
+          {t.noPreview || "暂无可预览内容"}
+        </div>
+      );
+    }
+
+    return (
+      <div className="flex flex-col h-full">
+        {/* 预览头部 */}
+        <div className={`flex items-center justify-between px-4 py-2 border-b flex-shrink-0 ${
+          isDark ? "border-slate-700 bg-slate-800/50" : "border-slate-200 bg-slate-50"
+        }`}>
+          <div className="flex items-center gap-2 min-w-0">
+            <span>{getFileIcon(fileName)}</span>
+            <span className={`text-sm font-medium truncate ${isDark ? "text-slate-200" : "text-slate-700"}`}>
+              {fileName}
+            </span>
+            <span className={`text-xs ${isDark ? "text-slate-500" : "text-slate-400"}`}>
+              L{preview.startLine}-{preview.endLine}
+              {preview.truncated && ` (${t.truncated || "截断"})`}
+            </span>
+          </div>
+          <div className="flex items-center gap-2 flex-shrink-0">
+            <button
+              onClick={() => revealInExplorer()}
+              className={`p-1.5 rounded-lg transition-colors ${
+                isDark ? "hover:bg-slate-700 text-slate-400" : "hover:bg-slate-200 text-slate-500"
+              }`}
+              title={t.reveal || "在资源管理器中显示"}
+            >
+              <Icons.Folder />
+            </button>
+            <button
+              onClick={() => copyPath()}
+              className={`p-1.5 rounded-lg transition-colors ${
+                isDark ? "hover:bg-slate-700 text-slate-400" : "hover:bg-slate-200 text-slate-500"
+              }`}
+              title={copied ? (t.copied || "已复制") : (t.copyPath || "复制路径")}
+            >
+              <Icons.Copy />
+            </button>
+            <button
+              onClick={() => openInVSCode()}
+              className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+                isDark
+                  ? "bg-slate-700 text-slate-200 hover:bg-slate-600"
+                  : "bg-slate-800 text-white hover:bg-slate-700"
+              }`}
+            >
+              {t.openInVSCode || "VS Code"}
             </button>
           </div>
         </div>
 
-        {rootsError && (
-          <div className={`text-xs px-3 py-2 rounded-xl border ${isDark ? "bg-rose-900/30 border-rose-800 text-rose-200" : "bg-rose-50 border-rose-100 text-rose-600"}`}>
-            {rootsError}
+        {/* 预览内容 */}
+        <div className="flex-1 overflow-auto">
+          <div className="min-w-[500px]">
+            {previewLines.map((line, idx) => {
+              const lineNo = preview.startLine + idx;
+              return (
+                <button
+                  key={lineNo}
+                  onClick={() => void openInVSCode(lineNo)}
+                  className={`w-full text-left font-mono text-xs px-2 py-0.5 flex hover:underline ${
+                    isDark ? "hover:bg-slate-800" : "hover:bg-slate-100"
+                  }`}
+                  title={`${t.openAtLine || "打开到行"} ${lineNo}`}
+                >
+                  <span className={`w-12 text-right pr-3 flex-shrink-0 select-none ${
+                    isDark ? "text-slate-600" : "text-slate-300"
+                  }`}>
+                    {lineNo}
+                  </span>
+                  <span className={`whitespace-pre ${isDark ? "text-slate-300" : "text-slate-700"}`}>
+                    {line}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* 加载更多 */}
+        {preview.truncated && (
+          <div className={`px-4 py-2 border-t flex-shrink-0 ${
+            isDark ? "border-slate-700" : "border-slate-200"
+          }`}>
+            <button
+              onClick={() => {
+                const relFile = selectedRoot?.kind === "file" ? "" : (selectedFileRel ?? "");
+                const nextStart = preview.endLine + 1;
+                void loadPreview(rootId, relFile, nextStart);
+              }}
+              className={`text-xs font-medium ${
+                isDark ? "text-blue-400 hover:text-blue-300" : "text-blue-600 hover:text-blue-500"
+              }`}
+            >
+              {t.loadMore || "加载更多"} →
+            </button>
           </div>
         )}
+      </div>
+    );
+  };
 
-        <div className="flex flex-wrap gap-2">
-          {roots.map((r) => (
-              <button
-                key={r.id}
-                onClick={() => void selectRoot(r.id)}
-                className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition-colors border ${rootId === r.id
-                  ? (isDark ? "bg-slate-800 text-slate-100 border-slate-700" : "bg-slate-900 text-white border-slate-900")
-                  : (isDark ? "bg-slate-900/60 text-slate-300 border-slate-800 hover:bg-slate-800/60" : "bg-white text-slate-600 border-slate-100 hover:bg-slate-50")
-                  }`}
-              title={r.absPath}
-            >
-              <span className="font-mono">{r.label}</span>
-              {!r.exists && (
-                <span className={`ml-2 text-[10px] px-2 py-0.5 rounded-full ${isDark ? "bg-slate-800 text-slate-400" : "bg-slate-100 text-slate-500"}`}>
-                  {t.notGenerated || "未生成"}
-                </span>
-              )}
-            </button>
-          ))}
+  // ========== 主渲染 ==========
+  return (
+    <section className={`rounded-2xl border shadow-sm overflow-hidden ${
+      isDark ? "bg-slate-900/70 border-slate-700/60" : "bg-white/80 border-slate-200"
+    }`}>
+      {/* 顶部工具栏 */}
+      <div className={`px-4 py-3 border-b flex items-center gap-3 ${
+        isDark ? "border-slate-700 bg-slate-800/50" : "border-slate-200 bg-slate-50"
+      }`}>
+        <h2 className={`text-base font-semibold ${isDark ? "text-slate-100" : "text-slate-900"}`}>
+          🗂️ {t.artifactsTitle || "产物浏览器"}
+        </h2>
+        <div className="flex-1" />
+
+        {/* 搜索框 */}
+        <div className={`flex items-center gap-2 px-3 py-1.5 rounded-lg border ${
+          isDark ? "bg-slate-800 border-slate-700" : "bg-white border-slate-200"
+        }`}>
+          <Icons.Search />
+          <input
+            type="text"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder={lang === "zh" ? "搜索文件..." : "Search files..."}
+            className={`bg-transparent text-sm outline-none w-40 ${
+              isDark ? "text-slate-200 placeholder-slate-500" : "text-slate-700 placeholder-slate-400"
+            }`}
+          />
         </div>
 
-        <div className="grid gap-4 lg:grid-cols-[1.2fr,1.8fr]">
-          <div className={`rounded-2xl border p-4 ${isDark ? "bg-slate-900/60 border-slate-800" : "bg-white border-slate-100"}`}>
-            <div className="flex items-center justify-between gap-3">
-              <div className="min-w-0">
-                <div className={`text-xs uppercase tracking-[0.2em] font-semibold ${isDark ? "text-slate-500" : "text-slate-400"}`}>{t.artifactsBrowser || "浏览"}</div>
-                <div className={`mt-2 text-[10px] font-mono truncate ${isDark ? "text-slate-400" : "text-slate-500"}`}>{currentPathLabel}</div>
-              </div>
-              {selectedRoot?.kind === "dir" && (
-                <button
-                  onClick={() => {
-                    const parts = splitPath(dirPath);
-                    parts.pop();
-                    void navigateToDir(joinPath(parts));
-                  }}
-                  disabled={!dirPath || dirLoading}
-                  className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold transition-colors ${isDark ? "bg-slate-800 text-slate-300 hover:bg-slate-700 disabled:opacity-60" : "bg-slate-100 text-slate-600 hover:bg-slate-200 disabled:opacity-60"}`}
-                >
-                  <span aria-hidden>↑</span>
-                  {t.up || "上一级"}
-                </button>
-              )}
-            </div>
+        {/* 排序下拉 */}
+        <select
+          value={sortMode}
+          onChange={(e) => setSortMode(e.target.value as SortMode)}
+          className={`px-3 py-1.5 rounded-lg border text-sm ${
+            isDark
+              ? "bg-slate-800 border-slate-700 text-slate-200"
+              : "bg-white border-slate-200 text-slate-700"
+          }`}
+        >
+          <option value="modified">{lang === "zh" ? "最近修改" : "Recent"}</option>
+          <option value="name">{lang === "zh" ? "名称" : "Name"}</option>
+          <option value="size">{lang === "zh" ? "大小" : "Size"}</option>
+        </select>
 
-            {selectedRoot?.kind === "dir" && breadcrumbParts.length > 0 && (
-              <div className="mt-3 flex flex-wrap gap-1 text-xs">
-                <button
-                  onClick={() => void navigateToDir("")}
-                  className={`px-2 py-1 rounded-lg border ${isDark ? "border-slate-800 bg-slate-900/60 text-slate-300 hover:bg-slate-800/60" : "border-slate-100 bg-white text-slate-600 hover:bg-slate-50"}`}
-                >
-                  {selectedRoot.relPath}
-                </button>
-                {breadcrumbParts.map((part, idx) => {
-                  const next = joinPath(breadcrumbParts.slice(0, idx + 1));
-                  return (
+        {/* 刷新按钮 */}
+        <button
+          onClick={() => loadRoots()}
+          disabled={rootsLoading}
+          className={`p-2 rounded-lg transition-colors ${
+            isDark
+              ? "hover:bg-slate-700 text-slate-400 disabled:opacity-50"
+              : "hover:bg-slate-200 text-slate-500 disabled:opacity-50"
+          }`}
+          title={t.refresh || "刷新"}
+        >
+          <Icons.Refresh />
+        </button>
+      </div>
+
+      {rootsError && (
+        <div className={`px-4 py-2 text-sm ${isDark ? "bg-rose-900/30 text-rose-300" : "bg-rose-50 text-rose-600"}`}>
+          {rootsError}
+        </div>
+      )}
+
+      {/* 主体三栏布局 */}
+      <div className="flex" style={{ height: "calc(100vh - 280px)", minHeight: "400px" }}>
+        {/* 左侧边栏 - 树形导航 */}
+        <div className={`w-52 flex-shrink-0 border-r overflow-y-auto p-3 ${
+          isDark ? "border-slate-700 bg-slate-900/50" : "border-slate-200 bg-slate-50/50"
+        }`}>
+          {renderSidebarTree()}
+        </div>
+
+        {/* 中间 - 文件列表 */}
+        <div className={`w-80 flex-shrink-0 border-r overflow-y-auto ${
+          isDark ? "border-slate-700" : "border-slate-200"
+        }`}>
+          {/* 面包屑 */}
+          {selectedRoot?.kind === "dir" && (
+            <div className={`px-3 py-2 border-b flex items-center gap-1 text-xs ${
+              isDark ? "border-slate-700 bg-slate-800/30" : "border-slate-100 bg-slate-50"
+            }`}>
+              <button
+                onClick={() => void navigateToDir("")}
+                className={`px-1.5 py-0.5 rounded hover:underline ${
+                  isDark ? "text-slate-400 hover:text-slate-200" : "text-slate-500 hover:text-slate-700"
+                }`}
+              >
+                {selectedRoot.relPath}
+              </button>
+              {breadcrumbParts.map((part, idx) => {
+                const next = joinPath(breadcrumbParts.slice(0, idx + 1));
+                return (
+                  <span key={next} className="flex items-center gap-1">
+                    <span className={isDark ? "text-slate-600" : "text-slate-300"}>/</span>
                     <button
-                      key={next}
                       onClick={() => void navigateToDir(next)}
-                      className={`px-2 py-1 rounded-lg border ${isDark ? "border-slate-800 bg-slate-900/60 text-slate-300 hover:bg-slate-800/60" : "border-slate-100 bg-white text-slate-600 hover:bg-slate-50"}`}
+                      className={`px-1.5 py-0.5 rounded hover:underline ${
+                        isDark ? "text-slate-400 hover:text-slate-200" : "text-slate-500 hover:text-slate-700"
+                      }`}
                     >
-                      / {part}
+                      {part}
                     </button>
-                  );
-                })}
-              </div>
-            )}
-
-            <div className="mt-4 flex flex-col gap-2">
-              {selectedRoot && !selectedRoot.exists ? (
-                <div className={`text-sm ${isDark ? "text-slate-500" : "text-slate-400"}`}>{t.notGeneratedHint || "该项尚未生成或已被清理"}</div>
-              ) : selectedRoot?.kind === "file" ? (
-                <div className={`text-xs font-mono break-all ${isDark ? "text-slate-300" : "text-slate-700"}`}>{selectedRoot.absPath}</div>
-              ) : dirLoading ? (
-                <div className={`text-sm ${isDark ? "text-slate-500" : "text-slate-400"}`}>{t.loading || "加载中"}</div>
-              ) : entries.length === 0 ? (
-                <div className={`text-sm ${isDark ? "text-slate-500" : "text-slate-400"}`}>{t.emptyFolder || "空文件夹"}</div>
-              ) : (
-                <div className="flex flex-col gap-2">
-                  {entries.map(renderEntryRow)}
-                </div>
-              )}
+                  </span>
+                );
+              })}
             </div>
+          )}
 
-            {dirError && (
-              <div className={`mt-4 text-xs px-3 py-2 rounded-xl border ${isDark ? "bg-rose-900/30 border-rose-800 text-rose-200" : "bg-rose-50 border-rose-100 text-rose-600"}`}>
-                {dirError}
-              </div>
-            )}
-          </div>
-
-          <div className={`rounded-2xl border p-4 ${isDark ? "bg-slate-900/60 border-slate-800" : "bg-white border-slate-100"}`}>
-            <div className="flex flex-col gap-2">
-              <div className="flex items-center justify-between gap-3">
-                <div className="min-w-0">
-                  <div className={`text-xs uppercase tracking-[0.2em] font-semibold ${isDark ? "text-slate-500" : "text-slate-400"}`}>{t.preview || "预览"}</div>
-                  <div className={`mt-2 text-[10px] font-mono truncate ${isDark ? "text-slate-400" : "text-slate-500"}`}>{selectedRoot?.kind === "file" ? selectedRoot.relPath : (selectedFileRel ? `${selectedRoot?.relPath}/${selectedFileRel}` : "")}</div>
-                </div>
-                <div className="flex flex-wrap gap-2 justify-end">
-                  <button
-                    onClick={() => revealInExplorer()}
-                    className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold transition-colors ${isDark ? "bg-slate-800 text-slate-300 hover:bg-slate-700" : "bg-slate-100 text-slate-600 hover:bg-slate-200"}`}
-                  >
-                    {t.reveal || "在资源管理器中显示"}
-                  </button>
-                  <button
-                    onClick={() => copyPath()}
-                    className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold transition-colors ${isDark ? "bg-slate-800 text-slate-300 hover:bg-slate-700" : "bg-slate-100 text-slate-600 hover:bg-slate-200"}`}
-                    disabled={!currentDirAbsPath && !selectedFileAbsPath}
-                  >
-                    <Icons.Copy />
-                    {copied ? (t.copied || "已复制") : (t.copyPath || "复制路径")}
-                  </button>
-                  <button
-                    onClick={() => openInVSCode()}
-                    className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold transition-colors ${isDark ? "bg-slate-700 text-slate-100 hover:bg-slate-600" : "bg-slate-900 text-white hover:bg-slate-800"}`}
-                    disabled={!canPreview}
-                  >
-                    <Icons.FileText />
-                    {t.openInVSCode || "VS Code 打开"}
-                  </button>
-                </div>
-              </div>
-
-              <div className="flex flex-wrap items-center gap-2">
-                <div className={`text-xs ${isDark ? "text-slate-400" : "text-slate-500"}`}>{t.jumpToLine || "跳转到行"}:</div>
-                <input
-                  value={lineInput}
-                  onChange={(e) => setLineInput(e.target.value)}
-                  placeholder="1"
-                  className={`w-24 px-2 py-1 rounded-lg text-xs font-mono border outline-none ${isDark ? "bg-slate-900/60 border-slate-700 text-slate-200" : "bg-white border-slate-200 text-slate-800"}`}
-                />
-                <button
-                  onClick={() => {
-                    const parsed = Number.parseInt(lineInput, 10);
-                    if (!Number.isFinite(parsed) || parsed <= 0) return;
-                    void openInVSCode(parsed);
-                  }}
-                  className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold transition-colors ${isDark ? "bg-slate-800 text-slate-300 hover:bg-slate-700" : "bg-slate-100 text-slate-600 hover:bg-slate-200"}`}
-                  disabled={!canPreview}
-                >
-                  {t.openAtLine || "打开到行"}
-                </button>
-                <button
-                  onClick={() => {
-                    const parsed = Number.parseInt(lineInput || String(previewStartLine), 10);
-                    const next = Number.isFinite(parsed) && parsed > 0 ? parsed : 1;
-                    setPreviewStartLine(next);
-                    const relFile = selectedRoot?.kind === "file" ? "" : (selectedFileRel ?? "");
-                    if (!selectedRoot || !selectedRoot.exists) return;
-                    if (selectedRoot.kind === "dir" && !relFile) return;
-                    void loadPreview(rootId, relFile, next);
-                  }}
-                  className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold transition-colors ${isDark ? "bg-slate-800 text-slate-300 hover:bg-slate-700" : "bg-slate-100 text-slate-600 hover:bg-slate-200"}`}
-                  disabled={!canPreview}
-                >
-                  {t.previewFromLine || "从该行预览"}
-                </button>
-              </div>
+          {dirError && (
+            <div className={`px-3 py-2 text-xs ${isDark ? "text-rose-300" : "text-rose-600"}`}>
+              {dirError}
             </div>
+          )}
 
-            <div className="mt-4">
-              {!selectedRoot ? (
-                <div className={`text-sm ${isDark ? "text-slate-500" : "text-slate-400"}`}>{t.selectArtifactHint || "请选择一个产物目录/文件"}</div>
-              ) : !selectedRoot.exists ? (
-                <div className={`text-sm ${isDark ? "text-slate-500" : "text-slate-400"}`}>{t.notGeneratedHint || "该项尚未生成或已被清理"}</div>
-              ) : selectedRoot.kind === "dir" && !selectedFileRel ? (
-                <div className={`text-sm ${isDark ? "text-slate-500" : "text-slate-400"}`}>{t.selectFileHint || "选择一个文件以预览（目录仅用于浏览）"}</div>
-              ) : previewLoading ? (
-                <div className={`text-sm ${isDark ? "text-slate-500" : "text-slate-400"}`}>{t.loading || "加载中"}</div>
-              ) : previewError ? (
-                <div className={`text-xs px-3 py-2 rounded-xl border whitespace-pre-wrap break-all ${isDark ? "bg-rose-900/30 border-rose-800 text-rose-200" : "bg-rose-50 border-rose-100 text-rose-600"}`}>
-                  {previewError}
-                </div>
-              ) : preview ? (
-                <div className={`rounded-2xl border overflow-hidden ${isDark ? "border-slate-800 bg-slate-950/40" : "border-slate-100 bg-slate-50"}`}>
-                  <div className={`px-3 py-2 text-[10px] flex items-center justify-between gap-3 ${isDark ? "border-b border-slate-800 text-slate-400" : "border-b border-slate-100 text-slate-500"}`}>
-                    <div className="font-mono">
-                      {t.lines || "Lines"}: {preview.startLine} - {preview.endLine}
-                      {preview.truncated ? ` · ${t.truncated || "已截断"}` : ""}
-                    </div>
-                    {preview.truncated && (
-                      <button
-                        onClick={() => {
-                          const relFile = selectedRoot.kind === "file" ? "" : (selectedFileRel ?? "");
-                          const nextStart = preview.endLine + 1;
-                          setPreviewStartLine(nextStart);
-                          void loadPreview(rootId, relFile, nextStart);
-                        }}
-                        className={`px-2 py-1 rounded-lg border text-[10px] font-semibold ${isDark ? "border-slate-800 bg-slate-900/60 text-slate-300 hover:bg-slate-800/60" : "border-slate-100 bg-white text-slate-600 hover:bg-slate-50"}`}
-                      >
-                        {t.loadMore || "继续"}
-                      </button>
-                    )}
-                  </div>
-                  <div className="max-h-[520px] overflow-auto custom-scrollbar">
-                    <div className="min-w-[640px]">
-                      {previewLines.map((line, idx) => {
-                        const lineNo = preview.startLine + idx;
-                        return (
-                          <button
-                            key={lineNo}
-                            onClick={() => void openInVSCode(lineNo)}
-                            className={`w-full text-left font-mono text-[11px] px-3 py-1 grid grid-cols-[80px,1fr] gap-3 hover:underline ${isDark ? "text-slate-200 hover:bg-slate-900/60" : "text-slate-800 hover:bg-white"}`}
-                            title={(t.openAtLine || "打开到行") + ` ${lineNo}`}
-                          >
-                            <span className={`text-right ${isDark ? "text-slate-500" : "text-slate-400"}`}>{lineNo}</span>
-                            <span className="whitespace-pre">{line}</span>
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </div>
-                </div>
-              ) : (
-                <div className={`text-sm ${isDark ? "text-slate-500" : "text-slate-400"}`}>{t.noPreview || "暂无可预览内容"}</div>
-              )}
-            </div>
-          </div>
+          {renderFileList()}
+        </div>
+
+        {/* 右侧 - 预览区 */}
+        <div className="flex-1 min-w-0 overflow-hidden">
+          {renderPreview()}
         </div>
       </div>
     </section>

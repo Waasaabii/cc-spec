@@ -36,8 +36,28 @@ type ProjectPageProps = {
   sessions: Record<string, any>;
   layoutMode: LayoutMode;
   onLaunchClaudeTerminal: () => Promise<void> | void;
+  onReinitIndex: () => void;
   onBack: () => void;
 };
+
+// Format ISO timestamp to locale-friendly string
+function formatDateTime(isoString: string | null | undefined, locale: string): string {
+  if (!isoString) return "-";
+  try {
+    const date = new Date(isoString);
+    if (isNaN(date.getTime())) return isoString;
+    return date.toLocaleString(locale === "zh" ? "zh-CN" : "en-US", {
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
+    });
+  } catch {
+    return isoString;
+  }
+}
 
 export function ProjectPage({
   theme,
@@ -50,6 +70,7 @@ export function ProjectPage({
   sessions,
   layoutMode,
   onLaunchClaudeTerminal,
+  onReinitIndex,
   onBack,
 }: ProjectPageProps) {
   const [indexStatus, setIndexStatus] = useState<IndexStatus | null>(null);
@@ -169,7 +190,17 @@ export function ProjectPage({
         <div className="flex flex-col gap-6">
           <section className={`rounded-3xl border shadow-sm p-5 ${isDark ? "bg-slate-900/70 border-slate-700/60" : "bg-white/80 border-white/70"}`}>
             <div className="flex flex-col gap-1.5">
-              <div className={`text-xs uppercase tracking-[0.2em] font-semibold ${isDark ? "text-slate-500" : "text-slate-400"}`}>{t.projectIndexTitle || "索引"}</div>
+              <div className="flex items-center justify-between gap-3">
+                <div className={`text-xs uppercase tracking-[0.2em] font-semibold ${isDark ? "text-slate-500" : "text-slate-400"}`}>{t.projectIndexTitle || "索引"}</div>
+                <button
+                  onClick={onReinitIndex}
+                  className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold transition-colors ${isDark ? "bg-slate-800 text-slate-300 hover:bg-slate-700" : "bg-slate-100 text-slate-600 hover:bg-slate-200"}`}
+                  title={t.reinitIndex || "重新初始化索引"}
+                >
+                  <Icons.Refresh />
+                  {t.reinitIndex || "重新初始化"}
+                </button>
+              </div>
               <div className="mt-1 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
                 <div className={`rounded-2xl border p-3 ${isDark ? "bg-slate-900/60 border-slate-800" : "bg-white border-slate-100"}`}>
                   <div className={`text-[10px] uppercase tracking-[0.2em] font-semibold ${isDark ? "text-slate-500" : "text-slate-400"}`}>{t.projectIndexInitialized || "是否初始化"}</div>
@@ -185,7 +216,7 @@ export function ProjectPage({
                 </div>
                 <div className={`rounded-2xl border p-3 ${isDark ? "bg-slate-900/60 border-slate-800" : "bg-white border-slate-100"}`}>
                   <div className={`text-[10px] uppercase tracking-[0.2em] font-semibold ${isDark ? "text-slate-500" : "text-slate-400"}`}>{t.projectIndexUpdatedAt || "更新时间"}</div>
-                  <div className={`mt-1 text-xs font-mono break-all ${isDark ? "text-slate-300" : "text-slate-700"}`}>{indexStatus?.last_updated ?? "-"}</div>
+                  <div className={`mt-1 text-xs font-mono break-all ${isDark ? "text-slate-300" : "text-slate-700"}`}>{formatDateTime(indexStatus?.last_updated, lang)}</div>
                 </div>
               </div>
             </div>

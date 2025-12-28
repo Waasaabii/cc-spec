@@ -7,6 +7,7 @@ use tokio::process::Command;
 use uuid::Uuid;
 
 use crate::sidecar::{prepare_ccspec_command, SidecarResult};
+use crate::skills::{scan_project_skills_dir, load_tools_config, save_tools_config, ProjectState};
 
 async fn run_ccspec_stage(
     args: Vec<String>,
@@ -378,6 +379,32 @@ pub async fn init_index(
             "state": "completed",
         }),
     );
+
+    // 4) 自动扫描并注册项目 Skills（cc-spec init 会生成 .claude/skills/cc-spec-standards/）
+    if let Ok(scan_result) = scan_project_skills_dir(&project_path) {
+        if !scan_result.skills.is_empty() {
+            let skill_names: Vec<String> = scan_result.skills.iter().map(|s| s.name.clone()).collect();
+
+            // 更新 tools.yaml 中的项目状态
+            if let Ok(mut config) = load_tools_config() {
+                let state = config.projects.entry(project_path.clone()).or_insert_with(|| ProjectState {
+                    initialized_at: chrono::Utc::now().to_rfc3339(),
+                    commands_version: "0.2.2".to_string(),
+                    skills_installed: Vec::new(),
+                    custom_overrides: Vec::new(),
+                });
+
+                // 合并已有的和新扫描到的 skills（去重）
+                for name in skill_names {
+                    if !state.skills_installed.contains(&name) {
+                        state.skills_installed.push(name);
+                    }
+                }
+
+                let _ = save_tools_config(&config);
+            }
+        }
+    }
 
     let _ = app_handle.emit(
         "index:init:completed",

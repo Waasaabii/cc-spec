@@ -21,6 +21,8 @@ zip = "0.6"
 chrono = { version = "0.4", features = ["serde"] }
 once_cell = "1"
 tauri-plugin-dialog = "2"
+rand = "0.8"
+urlencoding = "2"
 
 # Candle for local translation (with optional CUDA support)
 candle-core = "0.8"

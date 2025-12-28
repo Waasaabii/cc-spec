@@ -23,6 +23,9 @@ pub struct CodexRunRequest {
     pub prompt: String,
     pub session_id: Option<String>,
     pub timeout_ms: Option<u64>,
+    /// 用于异步调用的请求 ID（通过 HTTP API 传入）
+    #[serde(default)]
+    pub request_id: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -313,6 +316,8 @@ fn run_codex_once(request: CodexRunRequest) -> Result<CodexRunResult, String> {
         chrono::Utc::now().timestamp_millis(),
         &uuid[..8]
     );
+    // 保存 request_id 用于事件中携带
+    let request_id = request.request_id.clone();
     let project_path = PathBuf::from(&request.project_path);
     let sessions_file = sessions_path(&project_path);
     let task_summary = summarize_task(&request.prompt, 200);
@@ -370,6 +375,7 @@ fn run_codex_once(request: CodexRunRequest) -> Result<CodexRunResult, String> {
                     "type": "codex.completed",
                     "ts": now_iso(),
                     "run_id": run_id.clone(),
+                    "request_id": request_id,
                     "session_id": request.session_id,
                     "success": false,
                     "exit_code": 127,
@@ -640,6 +646,7 @@ fn run_codex_once(request: CodexRunRequest) -> Result<CodexRunResult, String> {
             "type": "codex.completed",
             "ts": now_iso(),
             "run_id": run_id.clone(),
+            "request_id": request_id,
             "session_id": session_id.clone(),
             "success": exit_code == 0 && !timed_out,
             "exit_code": exit_code,

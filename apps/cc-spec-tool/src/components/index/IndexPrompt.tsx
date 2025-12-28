@@ -183,13 +183,13 @@ export function IndexPrompt({ projectPath, theme, t, onClose }: IndexPromptProps
     };
 
     return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
             <div
-                className={`w-full max-w-md rounded-xl shadow-2xl ${theme === "dark" ? "bg-slate-800 text-slate-100" : "bg-white text-slate-800"
+                className={`w-full max-w-lg max-h-[90vh] flex flex-col rounded-xl shadow-2xl ${theme === "dark" ? "bg-slate-800 text-slate-100" : "bg-white text-slate-800"
                     }`}
             >
-                {/* Header */}
-                <div className={`px-6 py-4 border-b ${theme === "dark" ? "border-slate-700" : "border-slate-200"}`}>
+                {/* Header - fixed */}
+                <div className={`px-6 py-4 border-b flex-shrink-0 ${theme === "dark" ? "border-slate-700" : "border-slate-200"}`}>
                     <h2 className="text-lg font-semibold flex items-center gap-2">
                         <svg className="w-5 h-5 text-blue-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
@@ -201,8 +201,8 @@ export function IndexPrompt({ projectPath, theme, t, onClose }: IndexPromptProps
                     </p>
                 </div>
 
-                {/* Content */}
-                <div className="px-6 py-4">
+                {/* Content - scrollable area */}
+                <div className="px-6 py-4 flex-1 min-h-0 overflow-y-auto">
                     <p className={`text-sm mb-4 ${theme === "dark" ? "text-slate-300" : "text-slate-600"}`}>
                         {t.indexPromptDesc}
                     </p>
@@ -339,8 +339,8 @@ export function IndexPrompt({ projectPath, theme, t, onClose }: IndexPromptProps
                     )}
                 </div>
 
-                {/* Footer */}
-                <div className={`px-6 py-4 border-t flex items-center justify-end ${theme === "dark" ? "border-slate-700" : "border-slate-200"}`}>
+                {/* Footer - fixed */}
+                <div className={`px-6 py-4 border-t flex-shrink-0 flex items-center justify-end gap-3 ${theme === "dark" ? "border-slate-700" : "border-slate-200"}`}>
                     {initDone && initSuccess ? (
                         <button
                             onClick={onClose}
