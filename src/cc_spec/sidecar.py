@@ -2,18 +2,15 @@
 """
 cc-spec sidecar entry point for Tauri bundling.
 
-This module provides a minimal entry point that excludes heavy dependencies
-like chromadb and fastembed to keep the bundle size small (~50MB target).
+This module provides a minimal entry point for the desktop tool bundle.
 
 Included features:
 - Core CLI commands (init, specify, plan, apply, etc.)
 - SSE server for Codex streaming
-- Basic RAG without vector store (file-based index)
+- Index-based context injection (file-based)
 
 Excluded features:
-- ChromaDB vector store
-- FastEmbed embeddings
-- Heavy ML dependencies
+- Heavy ML / vector-store dependencies
 """
 
 import sys
