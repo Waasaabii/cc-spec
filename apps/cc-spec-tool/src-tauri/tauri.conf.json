@@ -7,7 +7,7 @@
     "frontendDist": "../dist",
     "devUrl": "http://localhost:5173",
     "beforeDevCommand": "node scripts/dev-frontend.mjs",
-    "beforeBuildCommand": "npm run build:tauri"
+    "beforeBuildCommand": ""
   },
   "bundle": {
     "active": true,
