@@ -20,8 +20,9 @@ function commandName(base) {
   if (process.platform !== "win32") {
     return base;
   }
-  if (base === "npm") {
-    return "npm.cmd";
+  // 对于 bun，Windows 下使用 bun.exe
+  if (base === "bun") {
+    return "bun.exe";
   }
   return base;
 }
@@ -128,7 +129,7 @@ function resolvePyInstallerOutput() {
 }
 
 function buildFrontend() {
-  run("npm", ["run", "build"], { cwd: viewerRoot });
+  run("bun", ["run", "build"], { cwd: viewerRoot });
 }
 
 function buildRustSidecars() {
