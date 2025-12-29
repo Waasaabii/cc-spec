@@ -78,3 +78,13 @@ reference/
 .gemini
 tmp/
 .ace-tool/
+
+# Tauri sidecar binaries (built by CI)
+apps/cc-spec-tool/src-tauri/sidecar/*.exe
+apps/cc-spec-tool/src-tauri/sidecar/*.dll
+
+# Tauri portable distribution
+apps/cc-spec-tool/dist-portable/
+
+# Tauri build output
+apps/cc-spec-tool/src-tauri/target/
